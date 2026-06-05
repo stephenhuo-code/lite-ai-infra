@@ -1,6 +1,8 @@
-# ADR-002: Keycloak v1 单副本部署 + 单 Realm 多 Group 多 Client
+# ADR-002: Keycloak 部署形态（v1 起 HA 双副本）+ 单 Realm
 
-- 状态：Accepted（身份拓扑于 2026-06-04 被 [ADR-010](./ADR-010-multi-enterprise-tenancy-model.md) 修订：单 realm 多 group → 单 realm + Keycloak **Organizations**，升级为对外多企业 SaaS，Keycloak 升 26.6.2。单 realm + 单副本部署的核心决策仍有效）
+> 文件名 `...single-replica...` 为历史 slug；部署形态已于 2026-06-06 改为 **HA 双副本**（见下），保留文件名以稳定既有链接。
+
+- 状态：Accepted（两次修订：① 2026-06-04 身份拓扑被 [ADR-010](./ADR-010-multi-enterprise-tenancy-model.md) 改为 单 realm + Keycloak **Organizations**、升 26.6.2；② **2026-06-06 部署形态由单副本升级为 HA 双副本**——转对外多企业 SaaS 后 Keycloak 是付费客户登录的关键路径，原"单副本"论证不再成立）
 - 日期：2026-05-10
 - 决策人：X-user team（P1/P2/P3）
 - 相关：design doc §0 / §1.2（⑩ Keycloak）/ §3 选型表 / §6.1 P0 风险 / ADR-001（V8 推 v2）
@@ -13,21 +15,23 @@ Keycloak 是 v1 多租户身份基座，承担：
 - 用户与组管理（用 group 表达租户归属）
 - token 签发，Tenant Service 中间件解析 `tenant_id` claim 实现多租户隔离
 
-原 design doc 倾向"v1 即上 HA（StatefulSet 2 副本 + RDS HA）"。复盘后发现：
+> **2026-06-06 修订**：原决策为 v1 单副本（理由：内部单租户、HA 收益有限）。转为**对外多公司 SaaS**（ADR-010）后，Keycloak 成为**付费客户登录的关键路径**——任一时刻宕机即所有客户无法登录，直接影响商业 SLA。故 **v1 起即上 HA**。
 
-- v1 仅服务 X-user team 一个真实租户 + 一个测试租户，约十余用户
-- HA 部署的代价（PG HA、副本演练、realm 配置同步漂移、故障转移演练）需要 P3 较多容量，但 v1 阶段产生的实际可用性收益有限
-- P3 在原分工下已扛 7 个子系统，是 critical path 瓶颈
-- 即使发生宕机，X-user team 通过本地缓存 token 在 token TTL 内仍可继续工作；最坏情况下重启 Keycloak Pod 的 RTO 可控制在小时级
+HA 决策依据：
+
+- 多企业 SaaS：Keycloak 宕机 = 全体客户登录中断，不可接受
+- 身份是所有服务（Portal/SDK/CLI/Grafana/MLflow/Workspace）的统一入口，单点风险面最大
+- token TTL 内缓存只能缓解、不覆盖新登录 / 新 client；对外客户的体验与合规 SLA 要求更高可用性
 
 ## Decision
 
 ### v1 部署形态
 
-- **Keycloak 24+，StatefulSet 单副本**
-- 后端 DB：阿里云 RDS PG **单实例 + 每日快照**（不上 HA）
-- **故障恢复 RTO 目标 = 4h**（v1 阶段可接受）
-- 副本演练 / DB HA / 跨 AZ：**v2 再做**（参见 v2 Roadmap）
+- **Keycloak 26.6.2，StatefulSet ≥2 副本**（无状态化：realm/签发密钥在 DB、会话走 Infinispan 分布式缓存，副本间一致）
+- 后端 DB：阿里云 RDS PG **主备高可用**（自动故障转移 + 每日快照）
+- **故障恢复 RTO 目标：分钟级**（单副本 / 单 AZ 故障自动接管）
+- **Sprint 5 杀副本演练**（验证第二副本接管 + 平台无中断，对应 design §6.1 O6）
+- 跨 region 容灾：v2 评估
 
 ### realm 拓扑
 
@@ -57,20 +61,18 @@ Keycloak 是 v1 多租户身份基座，承担：
 
 ### 正面
 
-- P3 容量节省约 1-2 周（HA 部署 + 副本演练工作量推 v2）
-- 降低运维复杂度，单 Pod 故障定位简单
-- 单 realm + group 表达租户是行业主流（GitLab、Argo、Backstage 同样选择），跨租户用户（同一人属多租户）天然支持
-- 后期若有"完全独立用户库"的强合规租户，v2 可在同一 Keycloak 加新 realm，主 realm 不受影响
+- **无单点故障**：HA 双副本 + RDS 主备，单副本 / 单 AZ 故障自动接管，满足对外 SaaS 可用性要求
+- 单 realm + Organizations 表达企业是多企业 SaaS 主流；跨企业用户、per-企业 SSO 天然支持（ADR-010）
+- 后期若有"完全独立用户库"的强合规客户，可在同一 Keycloak 加新 realm 作例外，主 realm 不受影响
 
 ### 负面
 
-- **单点故障**：Keycloak 宕机期间所有新登录失败；已有 token 在 TTL 内仍可用 → 风险表 P0 已登记
-- v1 多租户硬隔离是**软隔离**（group + claim mapper），管理员误操作可能跨租户授权 → realm IaC + code review 兜底，v2 评估是否拆 realm
-- 后端 DB 单实例：RDS 实例宕机 = Keycloak 不可用，依赖阿里云 RDS SLA + 每日快照恢复
+- HA 增加运维复杂度与成本：副本间一致性（Infinispan 分布式缓存 / token 签发密钥）+ RDS 主备 + 杀副本演练（Sprint 5 验证）
+- 企业隔离 v1 起在**资源层 + 授权层**（ADR-010/011），非身份层物理隔离 → 强合规客户走独立 realm 例外
 
 ### 中性
 
-- v2 升级到 HA 时需要：DB 改 HA、StatefulSet 加副本、realm 配置同步演练、token 签发密钥跨副本一致性验证 → 写进 v2 Roadmap
+- realm 配置变更仍走 IaC（ADR-003）；副本间配置由共享 DB 保证一致
 
 ## 附录 A：Realm 概念速查（团队入门）
 
