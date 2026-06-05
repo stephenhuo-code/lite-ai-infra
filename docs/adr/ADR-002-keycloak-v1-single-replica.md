@@ -1,6 +1,6 @@
 # ADR-002: Keycloak v1 单副本部署 + 单 Realm 多 Group 多 Client
 
-- 状态：Accepted
+- 状态：Accepted（身份拓扑于 2026-06-04 被 [ADR-010](./ADR-010-multi-enterprise-tenancy-model.md) 修订：单 realm 多 group → 单 realm + Keycloak **Organizations**，升级为对外多企业 SaaS，Keycloak 升 26.6.2。单 realm + 单副本部署的核心决策仍有效）
 - 日期：2026-05-10
 - 决策人：X-user team（P1/P2/P3）
 - 相关：design doc §0 / §1.2（⑩ Keycloak）/ §3 选型表 / §6.1 P0 风险 / ADR-001（V8 推 v2）
@@ -91,21 +91,6 @@ Keycloak 是 v1 多租户身份基座，承担：
 - 认证流程（密码 / MFA / SSO 等）
 
 **不同 realm 之间用户完全不互通**——是硬隔离单位。
-
-### Keycloak ↔ AWS 概念映射
-
-| Keycloak 概念 | AWS 对应 | 说明 |
-|---|---|---|
-| **Keycloak 实例**（部署本身） | AWS 这个公司的整套 IAM 服务 | 一套软件 |
-| **Realm** | **AWS Account**（不是 root user） | 独立的用户库 + 资源边界，跨 realm 不互通 |
-| **多个 Realm 在同一 Keycloak** | **AWS Organization 下挂多个 Account** | 共享底层服务，彼此隔离 |
-| **`master` realm 的 admin 用户** | **AWS Organization 管理账号 / root 账户** | 唯一能创建/删除其他 realm 的超级管理员；不日常使用 |
-| **Client** | IAM 里的某个应用集成 / SaaS 集成入口 | Portal / SDK / CLI 各算一个 client |
-| **User** | IAM User | 端用户或服务账号 |
-| **Group** | IAM Group | 我们用它表达"租户归属" |
-| **Role** | IAM Role | 权限单元 |
-| **JWT** | STS 临时凭证 | 登录后拿到的 token，带 claims |
-| **Realm 配置（IaC）** | CloudFormation / Terraform | 用 keycloak-config-cli 声明式管理（参见 ADR-003） |
 
 ### 常见误解纠正
 

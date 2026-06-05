@@ -1,6 +1,6 @@
 # ADR-007: 访问控制模型 — RBAC + 自研 ABAC PolicyEngine（v1），Cerbos（v2 候选）
 
-- 状态：Accepted
+- 状态：Superseded（v1 PDP 决策于 2026-06-04 被 [ADR-011](./ADR-011-authorization-pdp-cerbos.md) 取代：自研 PolicyEngine → **Cerbos 提前到 v1**。本 ADR 的 RBAC+ABAC 模型分析、PEP/PDP/PIP 分层、不用 Keycloak Authorization Services 的理由仍有效；`PolicyEngine.can()` 作为唯一出入口的纪律不变，仅内部实现改为调 Cerbos）
 - 日期：2026-05-10
 - 决策人：X-user team（P1/P2/P3）
 - 相关：design doc §3.2 多租户机制（资源全景 / 24 项资源 / 隔离矩阵 / 6 条硬纪律）/ ADR-002（Keycloak v1 单副本）

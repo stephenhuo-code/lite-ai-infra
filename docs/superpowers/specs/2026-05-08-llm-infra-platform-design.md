@@ -14,8 +14,12 @@
 
 ### 核心架构原则（写进 constitution）
 
-> **资源标识用不透明的 `tenant_id`，团队名只是 Keycloak 里的 `display_name`。**
-> 所有 OSS 路径、K8s namespace、Gravitino schema、模型 URI 一律使用 `tenant_id`；`display_name` 仅出现在 UI、日志、文档中。
+> ⚠️ **模型已升级为多企业 SaaS（2026-06-04，见 [ADR-010](../../adr/ADR-010-multi-enterprise-tenancy-model.md) / [ADR-011](../../adr/ADR-011-authorization-pdp-cerbos.md)）。** 原扁平 `tenant_id` 升级为 **`enterprise_id` + `group_id` 两级**；以下及全文残留的 `tenant_id` 表述为历史单层模型，映射关系见 ADR-010，术语全面替换为后续工作。
+
+> **资源标识用不透明的 `enterprise_id`（+ 私有资源 `group_id`），公司名/组名只是 Keycloak Organization/Group 里的 `display_name`。**
+> 所有 OSS 路径、K8s namespace、Gravitino schema、模型 URI 一律使用 `enterprise_id`/`group_id`；`display_name` 仅出现在 UI、日志、文档中。
+
+> **层级**：平台 → 企业 → 用户组 → 用户。**身份+组织+成员+角色** = Keycloak 单一 realm（企业=**Organization**；用户组+角色=**Group 子组** `/e-x/g-y/{admins|members}`，随 token 的 `groups` claim 带出）；**授权** = **Cerbos** PDP（principal 来自 token，resource 属性来自资源自身：OSS 路径/K8s label/MLflow tag/Gravitino schema）；**审计** = 只追加写 OSS（v1）；**预算 / 中央元数据(PG) v1 推迟，需要时引入**；**企业硬隔离**落在资源命名 + 授权层。
 
 ### 核心约束
 - **3 人** × **12 周**（2026-05-08 → 2026-08-01）
@@ -32,11 +36,13 @@
 ### 战略路线
 **路线 1（垂直优先）+ 路线 2（最大化用 OSS）+ 多租户架构从 v1 起**：
 - 范围：v1 实际只服务 X-user team（一个租户落地）
-- 实现：所有可用 OSS 都用，3 人聚焦"粘合 + 租户/身份层 + SDK + 内部门户"
-- 多租户：v1 单租户落地但架构完整；v2 仅扩展租户数量、不动资源命名
+- 实现：所有可用 OSS 都用，3 人聚焦"粘合 + 身份/组织层 + SDK + 内部门户"
+- 多租户：v1 单租户落地但架构完整；v2 仅扩展企业数量、不动资源命名
+
+> **交付优先级（2026-06-04 调整）**：① **数据管线 + 元数据 + 多模态数据处理**（最高）→ ② **微调（SFT/LoRA）** → ③ **1B 模型预训练**（最后）。身份/组织/授权/SDK/监控等基础设施贯穿、最先就位。
 
 ### v1 范围（一句话）
-**X-user team（首个租户）在 2026-08-01 能在平台上完成"10TB 数据准备 → 1B 预训练 → SFT → 推理部署 → Embedding 检索"全链路；3-4 天内完成预训练；节点故障 1h 内自动恢复；任意资源标识不含团队名。**
+**X-user team（首个租户）在 2026-08-01 能在平台上完成全链路，按交付顺序：先"10TB 多模态数据准备 → 清洗/处理 → Lance + Gravitino 元数据"，再"基于现成基座的 SFT/LoRA → 推理部署 → Embedding 检索"，最后"1B 多模态预训练（单节点 8 GPU，3-4 天）"；节点故障 1h 内自动恢复；任意资源标识不含企业/团队名。**
 
 ---
 
@@ -88,7 +94,7 @@
 
 | # | 子系统 | 职责 | v1 形态 |
 |---|---|---|---|
-| ① | Portal + SDK + CLI | 提交作业、查询、列表；自动注入 tenant_id | 自研，Portal 只读为主 |
+| ① | 前端 + API Gateway/BFF + SDK + CLI | 完整前端页面（数据域优先）；提交作业、查询、列表；自动注入 enterprise_id/group_id | 自研，**完整前端**（Next.js）+ API Gateway；SDK/CLI 由 OpenAPI 契约生成 |
 | ② | 配额 | 按 tenant_id 隔离 Kueue 配额 | LocalQueue per tenant |
 | ③ | 实验元数据 | 训练参数/指标/artifact tracking | MLflow 单实例（experiments 按 tenant_id 分组） |
 | ④ | 数据管线 | 10TB 图文清洗 → Lance | Ray Data + Data-Juicer + Argo |
@@ -97,11 +103,13 @@
 | ⑦ | Checkpoint + 容错 | 训练故障恢复 | OSS ckpt + Volcano gang restart |
 | ⑧ | 推理服务 | HTTP API 推理 + embedding | vLLM + TEI |
 | ⑨ | Dev Workspace | 浏览器 VSCode + Remote-SSH | code-server + sshd Pod |
-| **⑩** | **Keycloak** | **OIDC IdP + 租户/用户/角色注册中心** | **StatefulSet + RDS PG** |
-| **⑪** | **Tenant Service** | **租户 CRUD、tenant_id ↔ display_name 解析、token 校验中间件** | **Platform API 内置模块** |
+| **⑩** | **Keycloak** | **OIDC IdP + 身份/组织/成员/角色真相源（Organization=企业，Group 子组=用户组+角色，进 token）** | **StatefulSet 26.6.2 + RDS PG** |
+| **⑪** | **Org Service** | **薄层封装 Keycloak Admin API（开通企业/组、加移成员）+ token 校验中间件（解析 groups claim → enterprise_id/group_id/role）** | **Platform API 内置模块** |
 | Ⓐ | 监控 | GPU/作业/IO/平台健康 | Prometheus + Grafana + DCGM |
 | Ⓑ | CI | 平台代码 + 镜像构建 | GitHub Actions + ACR |
-| Ⓒ | 日志 | 集中日志查询 | OpenSearch（v1 单副本）+ Fluent Bit 采集 + Grafana 可视化（详见 ADR-005） |
+| Ⓒ | 日志 | 集中日志查询 | OpenSearch **3 节点 cluster（v1）+ security plugin + ILM**（见 §3.16.1）+ Fluent Bit 采集 + Grafana 可视化（详见 ADR-005） |
+| **⑫** | **Admission Pipeline** | **准入中间件链：① PolicyEngine（`can(ctx, action, resource)` → 调 **Cerbos**，ADR-011）→ ② ~~QuotaService~~（**v1 推迟**，无 PG 预算账本，仅 Kueue 静态配额）→ ③ Audit（**v1 追加写 OSS**）+ Outbox（外部副作用由 worker 按 workload_id 幂等执行；**禁止**把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步事务）；详见 §3.9/§3.11** | **Platform API 中间件链 + Cerbos sidecar + OSS audit + outbox worker；v1 无 PG（配额账本/同事务审计推迟）** |
+| **⑬** | **Enterprise Provisioner** | **开通/暂停/归档企业时 reconcile：Keycloak Organization + Group 子组骨架（含角色）/ Kueue LocalQueue+Cohort / OSS prefix + RAM/STS / Gravitino schema / MLflow experiment / Grafana org / OpenSearch index template（v1 推迟：PG 元数据/配额账本）** | **controller-runtime 风格 reconciler，幂等；经 Keycloak Admin API 建 Org/Group** |
 
 ### 1.3 三人分工
 
@@ -117,7 +125,9 @@
 
 ### 2.1 v1 验收标准（8 条 + 1 条架构标准）
 
-1. **数据**：10TB 原始图文 → Data-Juicer 清洗 → Lance 数据集 → Gravitino 注册（按 tenant_id schema）
+> 下列为 08-01 须全部满足的验收项（非交付顺序）。**交付顺序见 §2.2**：① 数据管线/元数据/多模态处理（含验收 1、6、8）→ ② 微调（验收 3、4、5）→ ③ 1B 预训练（验收 2）。
+
+1. **数据**：10TB 原始图文 → Data-Juicer 清洗 → Lance 数据集 → Gravitino 注册（按 enterprise_id/group_id schema）
 2. **预训练**：SDK 提交 1B 多模态预训练，单节点 8 GPU DDP，3-4 天完成
 3. **微调**：基于 pretrain artifact 提交 SFT/LoRA，新模型版本登记
 4. **推理**：微调模型部署成 HTTP 服务（vLLM），有 P95 延迟基准
@@ -129,31 +139,60 @@
 
 ### 2.2 v1 必做（按交付优先级）
 
-| 优先级 | 子系统 | 验收点 |
-|---|---|---|
-| **P0** | 训练运行时 | 8 卡 DDP 跑通 1B baseline |
-| **P0** | Checkpoint + 容错 | 杀 pod 自动恢复 |
-| **P0** | 数据管线 | 10TB 跑通 Lance |
-| **P0** | 监控 | GPU/作业/IO 看板 |
-| **P0** | 推理服务 | HTTP API 可调，有 P95 延迟数据 |
-| **P0** | **Keycloak + Tenant Service** | **OIDC token 校验中间件 + tenant_id 解析** |
-| **P1** | 微调工作流 | LoRA / SFT 跑通 |
-| **P1** | 元数据 catalog | Gravitino 按 tenant_id schema 注册 |
-| **P1** | 实验追踪 | MLflow experiment 按 tenant_id 分组 |
-| **P1** | SDK + CLI | submit_pretrain/sft/deploy/workspace（自动 tenant_id 注入） |
-| **P1** | Embedding 服务 + 向量 | TEI/vLLM + Lance + IVF_PQ |
-| **P1** | Dev Workspace | code-server + Remote-SSH（按 tenant 分配） |
-| **P2** | Kueue 配额 | LocalQueue per tenant，硬限 |
-| **P2** | Portal | 只读列表 + 跳转 |
-| **P2** | CI | 平台代码 + 镜像 |
+> 交付顺序（2026-06-04 调整）：**基础设施（贯穿）→ 阶段①数据域 → 阶段②微调 → 阶段③1B 预训练**。
+
+**基础设施（贯穿，最先就位）**
+
+| 子系统 | 验收点 |
+|---|---|
+| **Keycloak(26.6.2) + Org Service** | OIDC token 校验 + 从 groups claim 解析 enterprise_id/group_id/role；Organizations + Group 子组 |
+| **薄 can()（授权出入口）** | 认证 + **企业隔离硬检查**（`resource.enterprise_id == ctx.enterprise_id`）+ 基本角色门槛，in-code；`can()` 唯一出入口，无散落 `if enterprise_id == ...`（**细粒度授权阶段②上 Cerbos**） |
+| **Audit Layer** | mutation + `/admin/*` 全有 audit；v1 追加写 OSS（事后尽力） |
+| **Enterprise Provisioner** | `laictl --admin enterprise create` 建 Keycloak Organization + Group 骨架 + 资源前缀 |
+| **API Gateway/BFF + API 契约** | gateway 路由 + token 校验；OpenAPI/proto 契约**先行**、入 git、CI 校验 breaking-change |
+| **SDK + CLI** | 由 OpenAPI 契约生成 + 薄封装；submit_sft/deploy/workspace（自动注入 enterprise_id/group_id；submit_pretrain 阶段③接入） |
+| 监控 | GPU/作业/IO 看板 |
+| 数据存储 | OSS + Lance 就位 |
+| ~~Quota Service~~（推迟）| v1 无 PG 预算账本；仅 Kueue 静态配额（Cohort=企业 / LocalQueue=组） |
+
+**阶段 ① 数据管线 + 元数据 + 多模态数据处理（最高优先）**
+
+| 子系统 | 验收点 |
+|---|---|
+| 数据管线 | 10TB 图文 → Data-Juicer 清洗 → Lance |
+| 多模态数据处理 | 图文对齐 / 切分 / 过滤 / 去重，多模态特征落 Lance |
+| 元数据 catalog | Gravitino 按 `e_xxx_g_yyy` / `e_xxx_shared` schema 注册 |
+| 实验追踪 | MLflow experiment 按 enterprise_id/group_id tag 分组 |
+| Embedding 服务 + 向量 | TEI/vLLM + Lance + IVF_PQ，ANN 查询可用 |
+| Dev Workspace | code-server + Remote-SSH（按 enterprise/group 分配）；数据探索/处理用 |
+| **前端（数据域，完整 UI）** | 数据集管理（上传/浏览/血缘）+ 数据管线提交/监控 + 元数据浏览 + 实验对比，Next.js 完整页面 |
+
+**阶段 ② 微调（SFT / LoRA）**
+
+| 子系统 | 验收点 |
+|---|---|
+| **Cerbos PDP（授权升级）** | 细粒度 ABAC / derived role **替换薄 can()**，36 条 AC（AC-1~AC-36）全过；resource policy in git；handler 零改（seam，ADR-011） |
+| 微调工作流 | 基于现成基座 LoRA/SFT 跑通，新模型版本登记 |
+| Checkpoint + 容错 | 杀 pod 自动恢复，丢失进度 ≤ 1h |
+| 推理服务 | 微调模型部署 HTTP（vLLM），有 P95 延迟基准 |
+| **前端（作业/模型）** | 微调提交/监控页 + 模型管理/部署页（提交 + 监控） |
+
+**阶段 ③ 1B 模型预训练（最后）**
+
+| 子系统 | 验收点 |
+|---|---|
+| 训练运行时 | 8 卡 DDP 跑通 1B 多模态 baseline，3-4 天完成 |
+
+**P2（贯穿，靠后）**：前端其余域（企业/成员/角色 admin 管理页——v1 可暂用 CLI/后台）、监控看板深化、CI（平台代码 + 镜像）。
 
 ### 2.3 v1 明确不做
 
 - ❌ 多机分布式预训练（架构留口子）
 - ❌ 推理 HPA / 灰度 / A/B / 多模型路由网关
 - ❌ 自动 lineage 追踪（手工 Gravitino tag）
-- ❌ 跨租户审计 / 操作日志归档
 - ❌ 数据脱敏 / 隐私合规
+
+> 注：v1 **必做**审计（Audit Layer，子系统 ⑭）—— 所有 mutation API、`/admin/*`、`--force` 和 admin override 强制写 `tenant_audit_log`；v1 不做的是"跨租户审计聚合视图 / tamper-proof 归档 / SIEM 集成"，留 v2。
 - ❌ Web UI 提交作业（CLI/SDK 即可）
 - ❌ Megatron / NeMo（v1 用 DDP/DeepSpeed）
 - ❌ Ray Train（v1 训练不用 Ray，仅数据管线用 Ray Data）
@@ -185,6 +224,76 @@
 
 ## 3. 技术架构与选型
 
+### 3.0 语言栈、微服务架构与 API 优先契约
+
+> ⚠️ **2026-06-04 调整**：后端改为**微服务架构（按子系统全拆）** + **API 优先**；前端为**完整页面（数据域优先）**。原"控制面同事务单体"（依赖 audit/quota 同 PG 事务）的硬约束，已随 **PG/Quota/同事务审计推迟**（ADR-010）而**解除**——各服务独立部署、不共享 DB session。
+
+#### 3.0.1 微服务分解（按子系统全拆）
+
+| 服务 | 职责 | 语言/栈 |
+|---|---|---|
+| **api-gateway / BFF** | 前端/SDK/CLI 入口、路由、token 校验、聚合 | Python FastAPI（或 Envoy + 薄 BFF） |
+| **identity-org-service** | Keycloak-facing：Organization/Group/成员；解析 groups claim | Python FastAPI |
+| **authz (Cerbos)** | PDP，策略 in git（ADR-011） | Cerbos（Go，sidecar/服务） |
+| **data-pipeline-service** | 数据管线 + 多模态处理（Ray Data / Data-Juicer / Argo 编排） | Python |
+| **metadata-service** | Gravitino catalog + MLflow 实验 | Python |
+| **training-service** | 训练 / 微调作业（Volcano / Kueue） | Python |
+| **inference-service** | 部署 vLLM / TEI | Python |
+| **workspace-service** | code-server / SSH（K8s operator） | Go (controller-runtime) |
+| **provisioner** | 企业/组 reconcile（Keycloak Org/Group + 资源） | Go (controller-runtime) |
+| _(推迟)_ quota-service / billing | 预算账本（待 PG 回归） | — |
+
+各服务独立部署/扩缩，统一在 **api-gateway** 后；服务间与对外通信都走 **API 优先契约**。
+
+#### 3.0.2 API 优先（API-first）
+
+1. **契约先行**：每个服务先定 **OpenAPI 3.1**（对外 / BFF）或 **protobuf/gRPC**（内部高频）契约，再生成 server stub + client；**禁止手写客户端**。
+2. **契约入 git、版本化、CI 校验** breaking-change（如 `oasdiff` / `buf breaking`）。
+3. **前端、SDK、CLI、服务间 client 全部由契约生成**，杜绝漂移。
+4. **鉴权统一**在 gateway（token 校验）+ Cerbos（授权），各服务不重复实现。
+
+#### 3.0.3 语言分层
+
+| 类别 | 语言 | 理由 |
+|---|---|---|
+| 控制面 + 数据/训练/推理服务 | **Python 3.11**（FastAPI） | 团队主语言；ML 生态原生；OpenAPI 友好 |
+| K8s controller（provisioner / workspace） | **Go**（controller-runtime / kubebuilder） | K8s 生态标准 |
+| 授权 PDP | **Cerbos**（Go，不自写） | ADR-011 |
+| **前端** | **TypeScript + Next.js 14+** | 完整页面；OIDC 接 Keycloak |
+| SDK / CLI | **Python**（由 OpenAPI 生成 + 薄封装） | v1 用户全 Python |
+| 训练/推理/数据管线镜像 | Python + bash | PyTorch / Ray / Data-Juicer / vLLM / TEI 原生 |
+
+约束：新增语言走 ADR；跨语言 SDK 必须由 OpenAPI 生成。
+
+#### 3.0.4 仓库组织（monorepo，按服务分包）
+
+```
+lite-ai-infra/
+├── contracts/              # API 优先：OpenAPI / protobuf 契约（真相源，先于实现）
+├── services/
+│   ├── gateway/            # BFF
+│   ├── identity-org/
+│   ├── data-pipeline/
+│   ├── metadata/
+│   ├── training/
+│   ├── inference/
+│   ├── workspace/          # Go operator
+│   └── provisioner/        # Go controller
+├── authz/                  # Cerbos 策略（YAML, in git）
+├── frontend/               # Next.js 完整前端
+├── sdk/  cli/              # 由 contracts 生成 + 薄封装
+├── deploy/                 # Helm / ArgoCD / Crossplane
+└── docs/
+```
+
+**关键**：各服务**独立可部署**；服务间只通过 `contracts/`（生成的 client）调用，**不共享 DB session**（同事务约束已随 PG 推迟解除）。外部副作用仍走幂等模式（outbox 或 reconcile），禁止把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步链路阻塞主流程。
+
+#### 3.0.5 演进口径
+
+- **v1 无 PG**；预算/同事务审计回归时，新增 **quota-service** 为独立服务。
+- 服务粒度可随负载再调整；**契约稳定则内部重构对其他服务无影响**（API 优先的核心收益）。
+- 3 人团队下的纪律：服务虽全拆，但**共享统一的脚手架**（同一 FastAPI 模板 / 同一 CI / 同一可观测埋点），避免每个服务各搞一套。
+
 ### 3.1 完整组件清单
 
 | 类别 | 组件 | 版本 | 部署形态 |
@@ -209,12 +318,12 @@
 | | Data-Juicer | 1.0+ | Ray on demand |
 | | Lance（pylance） | 0.18+ | 嵌入式库（数据格式 + 向量） |
 | | VectorTable 抽象 | 自研 | 封装 Lance 向量 API |
-| **元数据** | Apache Gravitino | 0.6+ | StatefulSet（catalog 按 tenant_id schema） |
+| **元数据** | Apache Gravitino | 0.6+ | StatefulSet **2 副本（active-active，后端 RDS PG 提供一致性）+ Service VIP**；详见 §3.16.2 |
 | | MLflow | 2.16+ | Deployment（experiment 按 tenant_id tag） |
 | **观测** | Prometheus | 2.54+ | kube-prometheus-stack |
 | | Grafana | 11+ | 同上（OIDC 接 Keycloak） |
 | | DCGM Exporter | 3.3+ | DaemonSet |
-| | OpenSearch | 2.x | StatefulSet 单副本（v1）+ 本地 PV，14 天保留；冷归档 oss://logs/{tenant_id}/；v2 上 HA + ILM |
+| | OpenSearch | 2.x | StatefulSet **3 节点 cluster（master+data 合并，replica=1）** + 本地 PV，14 天保留；**v1 启用 security plugin（per-tenant role + index pattern ACL）+ ILM（per-tenant index 大小/天数上限）**；冷归档 oss://logs/{tenant_id}/；详见 §3.16.1 |
 | | Fluent Bit | 3.x | DaemonSet，按 K8s namespace 注入 `tenant_id` label |
 | **平台自身** | Platform API | 自研 | FastAPI（Python 3.11，Keycloak token 校验中间件） |
 | | SDK | 自研 | Python pkg（自动注入 token + tenant_id 解析） |
@@ -226,48 +335,73 @@
 
 ### 3.2 租户模型（核心）
 
+> ⚠️ **本节已由 [ADR-010](../../adr/ADR-010-multi-enterprise-tenancy-model.md)（多企业租户模型）与 [ADR-011](../../adr/ADR-011-authorization-pdp-cerbos.md)（Cerbos PDP）修订。** 当前权威模型：
+> - **层级**：平台 → 企业 → 用户组 → 用户；标识符 `enterprise_id`(e-XXXX, 全局唯一) + `group_id`(g-XXXX, 企业内唯一)。
+> - **身份+组织+成员+角色全在 Keycloak**（单一 realm，**26.6.2**）：企业=**Organization**；用户组+角色=**Group 子组** `/e-x/g-y/{admins|members}`，随 token 的 `groups` claim 带出（无歧义携带 企业/组/角色）；用户=**User**。**v1 一个用户只属一个企业**（不跨企业；模型不排斥未来扩展）。
+> - **授权**：**Cerbos** 做 PDP（ABAC/ReBAC，derived role = 带 scope 的角色），Platform API 做 PEP/PIP，`PolicyEngine.can()` 唯一出入口。**principal 来自 token 的 `groups` 解析**；**resource 属性来自资源自身**（OSS 路径 / K8s label / MLflow tag / Gravitino schema 名）。**OSS 等数据路径**由 Cerbos 决策 + 阿里云 RAM/STS 受限凭据执行。
+> - **审计（v1 必做）**：只追加写 OSS（`oss://audit/...`）+ Cerbos decision log（可选 OpenSearch 索引）；**事后尽力写，非同事务原子**（强保证待 PG 回归）。
+> - **v1 推迟（需要时引入 PG）**：两级预算/配额账本、中央资源元数据目录、同事务原子审计。**v1 无 PG。**
+> - 下文保留的单层 `tenant_id` / `/tenants/` / 单 group / PG `tenant_metadata` / Quota Service / Tenant Provisioner 等表述为**历史模型**，按上述读；其中预算/Provisioner/PG 相关在 v1 **推迟**，术语与细节全面替换为后续工作。
+
 #### 标识符规范
 
 ```
-tenant_id 格式：
-  • OSS / K8s / 大多数路径：t-XXXX           (如 t-0001)
-  • Gravitino schema：     t_XXXX           (下划线，SQL 兼容)
-  • MLflow tag：           tenant_id=t-0001
-  • Keycloak group：       /tenants/t-0001
-  • display_name：         "X-user"          (Keycloak attribute)
+enterprise_id：e-XXXX   (如 e-0001，全局唯一)
+group_id：      g-XXXX   (如 g-0001，企业内唯一)
 
-X-user team 在 v1 = tenant_id "t-0001"，display_name "X-user"
+  • OSS / K8s 路径：        .../e-0001/g-0001/...   (企业共享: .../e-0001/shared/...)
+  • Gravitino schema：      e_0001_g_0001  (私有) / e_0001_shared  (共享，下划线 SQL 兼容)
+  • MLflow tag：            enterprise_id=e-0001, group_id=g-0001
+  • Keycloak Organization： org = 企业 (e-0001)
+  • Keycloak Group 子组：   /e-0001/g-0001/admins | /e-0001/g-0001/members  (编码 组+角色，进 token)
+  • display_name：          "X-user"  (Keycloak Organization/Group attribute，绝不进资源名)
+
+首个客户 = enterprise_id "e-0001"，其下用户组 g-0001…；display_name "X-user"
 ```
 
-#### Tenant Service 核心 API
+#### 组织 / 成员 API（Platform API 薄层封装 Keycloak Admin API）
 
 ```python
-# Platform API 内部
-GET  /tenants/me               # 从 token 解析当前用户的 tenant_id 列表（一般 1 个）
-GET  /tenants/{tenant_id}      # 查 tenant 信息（display_name、配额、成员数）
-POST /admin/tenants            # 创建 tenant（管理员）
-POST /admin/tenants/{id}/members  # 加成员
+# 身份/组织/成员/角色的真相源 = Keycloak（Organizations + Group 子组）
+# Platform API 仅做封装 + 鉴权（Cerbos）；SDK 不传 enterprise_id/group_id，从 token 的 groups claim 解析
 
-# 用户调用 SDK 时不传 tenant_id；SDK 从 OIDC token 拿
+# routers/v1/  普通业务
+GET  /v1/me/orgs                              # 从 token groups 解析：我属于哪个企业/组/角色
+POST /v1/orgs/{eid}/groups/{gid}/members      # enterprise-admin 加/移成员（→ Keycloak Admin API）
+GET  /v1/datasets/{uri}/refs                  # 数据集引用列表（驱动 delete 决策 + --dry-run，§3.12）
+GET  /v1/audit                                # 本企业 audit（enterprise-admin；v1 读 OSS 审计）
+
+# routers/admin/  (X-Admin-Path: true header；仅 platform-admin role)
+POST   /admin/enterprises                     # 开通企业（建 Keycloak Organization + 用户组骨架，§3.14）
+PATCH  /admin/enterprises/{eid}               # suspend / archive 状态变更
+GET    /admin/audit?enterprise_id=*           # 跨企业 audit 查询
+POST   /admin/datasets/{uri}:gc               # 孤儿数据集 gc（强 audit + reason 必填）
+POST   /admin/pipelines/{id}:cancel           # 跨企业救火（reason 必填）
+
+# v1 推迟：/quota 配额相关 API（预算账本未做，见 §3.10）
 ```
 
-#### Keycloak Realm 设计（v1）
+#### Keycloak 设计（v1，26.6.2，单 realm + Organizations）
 
 ```
-Realm: lite-ai-infra
+Realm: lite-ai-infra        (单一 realm，只管认证)
+  Organizations:
+    • e-0001                (企业=客户；attr: display_name；可挂 per-企业 IdP/域名，SSO 用)
   Clients:
     • platform-api      (confidential, server-side token validation)
     • cli               (public, device-code flow)
     • portal            (public, authorization code + PKCE)
     • workspace-ingress (confidential, OIDC proxy)
     • grafana / mlflow  (confidential, OIDC integration)
-  Groups:
-    • /platform-admins  (跨 tenant 管理员)
-    • /tenants/t-0001/  (X-user team)
-        ├─ members
-        └─ admins
-  User Federation: 公司 LDAP/AD（如有）；否则本地用户
+  Groups (用户组 + 角色，子组路径编码，进 token 的 groups claim):
+    • /platform-admins              (平台超管，跨企业)
+    • /e-0001/g-0001/admins         (企业 e-0001 / 用户组 g-0001 / 角色 admin)
+    • /e-0001/g-0001/members
+    • /e-0001/g-0002/members
+  User Federation: 公司 LDAP/AD 或本地用户；各企业自带 IdP 经 Organization 挂（未来）
 ```
+
+> 角色**不用** Keycloak realm role（扁平无作用域），用**子组路径编码**，随 token 带出，PEP 解析 `(企业, 组, 角色)`；判权由 **Cerbos**（ADR-011）。**v1 一个用户只属一个企业。**
 
 #### 多租户资源全景图
 
@@ -355,60 +489,67 @@ Realm: lite-ai-infra
 | 存储（OSS） | **中-强** | RAM 子账号 + 路径 prefix + bucket policy（每 tenant 一个 RAM 子账号） | — |
 | 元数据（Gravitino） | **中** | per-tenant schema + schema 级 ACL | RBAC 加强 |
 | 实验（MLflow） | **弱** | tag 软隔离 + Tenant Service 中间件硬过滤 | 接 OSS 版 RBAC 或迁 commercial |
-| 日志（OpenSearch） | **弱** | label + Grafana datasource filter | OpenSearch RBAC plugin（详见 ADR-005） |
+| 日志（OpenSearch） | **强（v1 起）** | OpenSearch security plugin（per-tenant role + `logs-{tid}-*` / `audit-{tid}-*` index ACL）+ Grafana datasource filter | 跨集群联邦查询 |
 | 网络（Ingress） | **强** | per-tenant 子域 + OIDC 鉴权 | — |
 | 凭证 | **弱** | env var + OSS RAM 子账号（共享存储位置） | Vault per-tenant path（v2 落地） |
 | 监控指标 | **中** | Prometheus label `tenant_id` + Grafana org | — |
-| 审计日志 | **弱** | 业务侧自记录到 PG / OpenSearch | tamper-proof + 跨系统统一审计 |
+| 审计日志 | **强（PG 权威）** | PG `tenant_audit_log`（业务事务内同步写，真相源）；OpenSearch `audit-{tid}-*` 仅作 Grafana 可降级视图，挂了不影响查询 | tamper-proof（WORM / 区块链）+ SIEM 集成 |
 | 调度（Kueue） | **强** | per-tenant LocalQueue + ClusterQueue 配额借用规则 | — |
 
 #### 多租户机制硬纪律（写进 constitution）
 
-1. **`TenantId` 是独立类型**（Types 层），不与 string 互转；构造任何资源标识符的函数签名只接收 `TenantId`
-2. **资源命名必须含 `tenant_id`**；`display_name` 严禁出现在资源名 / 路径 / schema / index / label
-3. **JWT claim → `TenantContext` → 注入下游** 是唯一的 tenant 来源；handler 不允许从 query/body 直接读 `tenant_id`
-4. **每次访问决策必须经过 PolicyEngine.can(ctx, action, resource)**，禁止散落 `if tenant_id == ...` 判断
-5. **跨租户访问只能由 `platform-admin` 走显式特权 API**，普通业务路径必须 `resource.tenant_id == ctx.tenant_id`
-6. **CI 防线**：dependency-cruiser/import-linter 检查依赖方向 + grep 检查 `display_name` 是否泄漏到资源命名
+> 已由 [ADR-010 附录 A](../../adr/ADR-010-multi-enterprise-tenancy-model.md) 修订为多企业两级模型（`enterprise_id` + `group_id`，身份/角色全在 Keycloak、v1 无 PG）：
 
-### 3.3 命名空间规划（按 tenant_id）
+1. **`EnterpriseId` / `GroupId` 是独立类型**（Types 层），不与 string 互转；构造任何资源标识符的函数签名只接收对应类型
+2. **资源命名必须含 `enterprise_id`**（私有资源还须 `group_id`）；`display_name` 严禁出现在资源名 / 路径 / schema / index / label
+3. **JWT 仅作认证 + 携带组路径**；`(企业, 组, 角色)` 由 token 的 `groups` claim（`/e-x/g-y/{admins|members}`）解析；handler 不允许从 query/body 直接读 `enterprise_id`/`group_id`
+4. **每次访问决策必须经过 `PolicyEngine.can(ctx, action, resource)`**（内部调 Cerbos，ADR-011），禁止散落 `if enterprise_id == ...` 判断
+5. **硬隔离不变式**：非 admin 路径必须 `resource.enterprise_id == ctx.enterprise_id`；私有资源还须 `group_id` 匹配或 `enterprise-admin`；跨企业仅 `platform-admin` 走显式特权 API
+6. **资源归属编码在资源自身**（OSS 路径 / K8s label / MLflow tag / Gravitino schema），Cerbos 的 resource 属性据此读取（v1 无中央元数据 PG）
+7. **CI 防线**：import-linter 检查依赖方向 + grep 检查 `display_name` 泄漏到资源命名 + grep 散落的 `enterprise_id/group_id` 比较
+8. **数据路径系统（OSS）不靠 PDP 内联执行**：Cerbos 只决策"发不发受限凭据"，阿里云 RAM/STS 在数据路径做路径级执行
+
+### 3.3 命名空间规划（按 enterprise_id / group_id）
 
 ```
 ack-cluster/
-  ├─ platform-system/         # 平台组件（API、Portal、MLflow、Gravitino、Keycloak、监控）
+  ├─ platform-system/         # 平台组件（API、Portal、MLflow、Gravitino、Keycloak、监控、Cerbos）
   ├─ kueue-system/
   ├─ volcano-system/
   ├─ argo/
   ├─ ray-system/
-  ├─ tenant-t-0001/           # X-user team 作业、推理、Workspace
-  └─ tenant-t-XXXX/            # 未来其他 tenant
+  ├─ e-0001-g-0001/           # 企业 e-0001 / 用户组 g-0001 的作业、推理、Workspace
+  └─ e-XXXX-g-YYYY/           # 其他企业/组
 ```
+> namespace 命名 `{enterprise_id}-{group_id}`；workload 带 label `enterprise_id` / `group_id`（供 Cerbos 读 + 数据层过滤）。
 
-### 3.4 OSS 路径约定（按 tenant_id）
+### 3.4 OSS 路径约定（按 enterprise_id / group_id）
 
 ```
 oss://lite-ai-infra/
-  ├─ raw/<tenant_id>/<dataset>/...
-  ├─ processed/<tenant_id>/<dataset>.lance/
-  ├─ embeddings/<tenant_id>/<dataset>.lance/
-  ├─ checkpoints/<tenant_id>/<run_id>/
-  ├─ models/<tenant_id>/<model>/<version>/
-  └─ logs/<tenant_id>/<run_id>/
+  ├─ raw/<eid>/<gid>/<dataset>/...           # 用户组私有
+  ├─ processed/<eid>/<gid>/<dataset>.lance/
+  ├─ embeddings/<eid>/<gid>/<dataset>.lance/
+  ├─ checkpoints/<eid>/<gid>/<run_id>/
+  ├─ models/<eid>/<gid>/<model>/<version>/
+  ├─ shared/<eid>/...                         # 企业共享（公共数据集/基座模型）
+  ├─ logs/<eid>/<gid>/<run_id>/
+  └─ audit/<yyyy>/<mm>/<dd>/*.jsonl           # 平台审计（§3.11）
 ```
 
-**RAM 策略**：tenant-t-0001 ServiceAccount 仅能访问 `*/t-0001/*` 前缀。
+**访问控制**：客户端直连 OSS 不经 API，故由 **Cerbos 决策 + 阿里云 STS 短期凭据**（policy 限定到 `e-0001/g-0001/*` 或 `e-0001/shared/*` 前缀）执行；详见 §3.13 / ADR-011。
 
 ### 3.5 资产 URI（用户视角）
 
 ```
-统一 URI 协议：gravitino://<tenant_or_alias>.<name>[@<version>]
+统一 URI 协议：gravitino://<scope_or_alias>.<name>[@<version>]
 
 用户两种用法：
-  • 显式 tenant_id：  gravitino://t-0001.v1
-  • 别名 "my"：       gravitino://my/v1            ← SDK 自动替换为当前 tenant_id
+  • 别名 "my"：     gravitino://my/v1        ← SDK 自动替换为当前 enterprise_id/group_id（私有）
+  • 别名 "shared"： gravitino://shared/base  ← 企业共享资产
 
-底层 OSS 路径由 Platform API 通过 Gravitino + Tenant Service 联合解析。
-用户从不直接拼 OSS 路径或 tenant_id 字符串。
+底层 OSS 路径由 Platform API 通过 Gravitino 解析；归属（enterprise_id/group_id）来自 token 的 groups claim。
+用户从不直接拼 OSS 路径或 enterprise_id/group_id 字符串。
 ```
 
 ### 3.6 训练镜像契约
@@ -436,6 +577,25 @@ v1 官方镜像：
 - **MLflow**：单次训练的参数/指标/artifact，**experiment 按 tenant_id 分组**
 - **衔接**：MLflow 注册的 model artifact URI 反向登记到 Gravitino
 
+### 3.7.1 KubeRay 使用边界（防蔓延契约）
+
+KubeRay 在 v1 **只承载 Data-Juicer 工作负载**（10TB 数据清洗），不扩散到其它批处理：
+
+| 工作负载 | v1 调度方式 |
+|---|---|
+| Data-Juicer 数据清洗 | **KubeRay**（Argo Workflow 拉起 RayCluster → 跑完即销毁，autoscaler 关闭） |
+| Embedding 批量生成（TEI/vLLM 离线） | Argo + 普通 K8s Job |
+| Lance 重打包 / 索引重建 | Argo + 普通 K8s Job |
+| 通用 ETL / 统计 / 评估 | Argo + 普通 K8s Job |
+| 训练 / SFT | Volcano（见 ADR-009） |
+
+**理由**：
+- Data-Juicer 是 Ray-native，原生算子并行 + 分布式 dedup；用普通 K8s Job 替代要自己重写一遍调度（成本 > 维护一个 operator）。
+- 其它批处理用 Ray 不会带来不可替代收益，反而把 Ray object store / placement group / actor 故障语义负担引入运维。
+- 一旦扩散，KubeRay 就会从"按需拉起的临时 cluster"变成"常驻多租户共享集群"，运维成本指数级上升。
+
+**新增 Ray 用例必须走 ADR 评审流程**（写明"为什么 Argo + K8s Job 不够"）。这条契约由 PR review 把关——PR 引入新的 `RayCluster` / `RayJob` CRD 使用必须附 ADR 引用。
+
 ### 3.8 Workspace 形态
 
 ```
@@ -456,14 +616,620 @@ Workspace Pod = StatefulSet（保 PVC）
   • ssh -p <NodePort> user@<workspace-id>.lite-ai-infra.internal
 ```
 
+**v1 owner 限制**：Workspace 仅 `owner` 可进（含 SSH）；tenant-admin 不进队友 Workspace（user-stories §角色 2 决策）。platform-admin 经 `/admin/*` 可进任何 Workspace（救火，audit 必写）。
+
+### 3.9 PolicyEngine（访问决策）→ Cerbos PDP
+
+> **PDP 由 [ADR-011](../../adr/ADR-011-authorization-pdp-cerbos.md) 定为 Cerbos**（取代 ADR-007 自研）。`PolicyEngine.can()` 仍是唯一出入口（seam），内部调 Cerbos；本节列接口契约与调用链位置。
+
+```python
+# Platform API 内部接口（PEP）；内部调 Cerbos（PDP）
+PolicyEngine.can(
+    ctx: Context,        # PEP 从 token 的 groups claim 解析：user / enterprise_id / group_ids / role
+    action: str,         # 如 "job.cancel", "dataset.delete", "train.submit"
+    resource: Resource,  # enterprise_id / group_id / scope / owner / state（v1 从资源自身读，§3.2 硬纪律6）
+) -> Decision            # allow / deny + reason
+# PIP：principal 来自 token；resource 属性来自资源自身（OSS 路径/K8s label/MLflow tag/Gravitino schema）
+```
+
+**调用位置**：所有 mutation API + 跨资源读 API 都必须在 handler 入口调一次；通过后再走业务逻辑。普通业务路径下 `ctx.enterprise_id != resource.enterprise_id` 直接 deny（即便 platform-admin，普通路径仍按企业隔离）；私有资源还须 `group_id` 匹配或 `enterprise-admin`。
+
+**v1 必须覆盖的决策维度**（与 user-stories AC 1:1 对应）：
+
+> 下表术语映射到最终模型：`tenant_id`→`enterprise_id`；`tenant-admin`→`enterprise-admin`；多出一层"用户组 scope"（私有资源须 `group_id` 匹配，`group-admin` 管本组）。所有规则在 Cerbos 策略中以 resource policy + derived role 表达。
+
+| 维度 | 例 | AC 引用 |
+|---|---|---|
+| Tenant 边界 | `resource.tenant_id == ctx.tenant_id` | AC-6 / AC-8 / AC-13 / AC-15 / AC-26 |
+| Owner 检查 | mutation 默认 `resource.owner == ctx.user` | AC-2 / AC-24 / AC-25 / AC-31 |
+| 角色门槛 | `train.submit + gpu>4` 需要 `tenant-admin` | AC-5 / AC-10 |
+| 状态约束 | `job.delete` 拒 completed；`pipeline.update` 拒 running | AC-3 / AC-30 |
+| 派生属性（delete） | `dataset.delete`：`ref_count == 0` 才允许直接删；`ref_count > 0` 时普通成员拒 | AC-22 / AC-23 |
+| 派生属性（deprecate） | `dataset.deprecate`（`--force`）：owner 或 tenant-admin 均可；**不跳 ref_count**；结果是 `deprecated` 状态（OSS 保留，阻止新引用）而非立即删除；ref_count 降为 0 后才真正删除 | AC-27 |
+| 特权路径 | `/admin/*` 仅 `platform-admin` | AC-14 / AC-16 / AC-17 / AC-34 |
+| Pipeline update 所有权 | `pipeline.update params` 仅 pending 状态；普通成员仅限 `resource.owner == ctx.user`；tenant-admin 可改任意成员的 pending 管线 | AC-35（新） |
+| Workspace 入口 | `workspace.enter` 仅 `resource.owner == ctx.user`；tenant-admin 在 v1 被显式拒（非 owner 无法入）；platform-admin 仅走 `/admin/*` 可进 | AC-36（新） |
+
+**实现约束**：
+- Cerbos 无状态、策略 in git 可单测；`can()` 输入只有 ctx + action + resource snapshot
+- 决策结果必须**可解释**（`reason` 字符串直接进 4xx 响应 body 和 audit log）
+- handler 禁止散落 `if enterprise_id ==`（CI grep 拦截，硬纪律第 4 条）
+- **resource 属性来源做成抽象**：v1 从资源自身读，PG 回归后改从 PG 读，handler 不变
+
+### 3.10 Quota Service（提交时配额预检）
+
+> ⚠️ **v1 推迟（ADR-010）**：两级预算/配额账本依赖 PG，v1 不建 PG，故 **Quota Service 推迟**——v1 无 submit-time 预算预检与多维滚动账本。v1 仅靠 **Kueue 静态配额**（Cohort=企业 / LocalQueue=用户组）做 admit-time 限制。下文为 PG 回归后的完整设计（届时配额按 `enterprise_id`/`group_id` 两级）。
+
+Kueue 是 K8s **admit-time** 配额（拿 GPU 时检查），不够。Quota Service 在 **submit-time** 做预检——拒绝"明显超额"的提交，提前给用户错误。
+
+**四类配额**（v1）：
+
+| 维度 | 单位 | 来源 | 检查位置 |
+|---|---|---|---|
+| GPU 时（30 天滚动） | GPU·hour | 训练 / SFT 提交 | `train.submit` / `sft.submit` |
+| OSS 流量（每作业） | GB | 管线模板 × 输入数据集大小估算 | `pipeline.submit` |
+| CPU 时（每管线） | CPU·hour | 管线模板估算 | `pipeline.submit` |
+| OSS 存储字节（tenant 累积） | GB | Gravitino 注册 / 模型上传时读 OSS 实际大小 | `data.register` / `model.register`；超额拒注册 |
+
+> **OSS 流量 vs. OSS 存储** 是两个独立维度：流量是作业级吞吐（管线跑一次的临时消耗），存储字节是 tenant 内 OSS 所有资产的持久占用。`laictl --admin tenant quota update --oss-bytes` 管的是存储字节配额，不影响流量上限。
+
+**原子预留设计**（解决并发超额放行问题）：
+
+Submit-time 配额检查必须是原子预留，而非乐观读后写入——两个大作业同时读到剩余配额充足、同时通过检查会击穿保证。v1 实现：
+
+```python
+# 接口：reserve / confirm / release 三步
+QuotaService.reserve(
+    ctx,
+    action: str,
+    request_id: str,           # 幂等键，防重试双扣
+    estimated_usage: dict,
+) -> Reservation               # 含 reservation_id + TTL（默认 30s）
+
+QuotaService.confirm(reservation_id: str)          # 入队成功后调用，预留转为占用
+QuotaService.release(reservation_id: str, reason)  # 入队失败/取消/作业完成时调用
+```
+
+**调用顺序**（Admission Pipeline 的事务边界 = PG 本地状态 + audit + outbox；外部副作用走 outbox worker 异步执行）：
+
+```
+AuthMiddleware
+  → PolicyEngine.can
+  ┌─────────── PG 单事务边界（同步、毫秒级；任何一步失败整事务回滚） ───────────┐
+  │ QuotaService.reserve(request_id, ...)
+  │     - 桶锁 + 幂等短路（见 §3.10 表设计）
+  │     - 失败返 quota_exceeded
+  │ INSERT INTO workloads (workload_id, tenant_id, action, state='pending', spec_json, ...)
+  │ INSERT INTO tenant_audit_log (action, decision='allow', ...)
+  │ INSERT INTO outbox_events (event_id, workload_id, kind='enqueue_kueue',
+  │                            payload, status='pending', attempts=0)
+  └──────────────────────────────────────────────────────────────────────────┘
+  → 立即返 200 + workload_id（客户端轮询 workload 状态获知实际入队结果）
+
+【异步】outbox worker（独立进程；按 workload_id 串行；幂等）：
+  loop:
+    pick event WHERE status='pending'
+    case kind:
+      enqueue_kueue → 调 Kueue / Volcano / Argo API（外部系统按 workload UID 幂等）
+      register_gravitino → 调 Gravitino
+      ... 其它外部副作用
+    成功：UPDATE event SET status='done'；同时 workload 状态前进
+    失败：attempts++，指数退避；超阈值挂 dead-letter + 告警
+    若操作在外部已存在（按 workload UID 探测）→ 视为成功（幂等）
+
+【异步】Kueue/Volcano/Argo informer（驱动 quota 生命周期，#4 单权威）：
+  on Workload Admitted        → QuotaService.confirm(reservation_id, workload_uid)
+  on Workload Finished/Failed → QuotaService.finalize(reservation_id, actual_amount, reason)
+  on Workload NotFound (DELETED externally) →
+                                 QuotaService.release(reservation_id, "external_deleted")
+
+# 滚动维度（gpu_hours / cpu_hours / oss_traffic_gb）必须 finalize，不能 release——
+# 否则历史用量丢失，30 天上限形同虚设；仅"并发容量"维度走 release。
+```
+
+**为什么不在同一事务里直接调外部系统**：
+- Kueue/Argo/Volcano/Gravitino/OSS 是远程系统，调用耗时数百毫秒甚至秒级；放进 PG 事务会导致 audit 表上长锁、连接耗尽、admission P95 不可控。
+- 外部副作用不可回滚——若 K8s 对象已创建但 PG 因 audit 写失败回滚，会产生孤儿资源。
+- outbox 模式把"业务决策（PG 内）"与"外部物化（worker）"解耦，二者各自幂等。
+
+**Outbox 表设计**（§3.11.5 / 与 audit 表同库同事务）：
+
+```sql
+CREATE TABLE outbox_events (
+  event_id     TEXT PRIMARY KEY,
+  workload_id  TEXT NOT NULL,         -- 业务实体 UID，外部系统去重键
+  tenant_id    TEXT NOT NULL,
+  kind         TEXT NOT NULL,         -- enqueue_kueue / register_gravitino / ...
+  payload      JSONB NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending',  -- pending / done / dead
+  attempts     INT  NOT NULL DEFAULT 0,
+  next_retry   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_error   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ON outbox_events (status, next_retry) WHERE status='pending';
+CREATE INDEX ON outbox_events (workload_id);
+```
+
+> ⚠️ 反模式：在同步 handler 内 `try: kueue.submit(); except: pg.rollback()`——Kueue 已成功创建的 Workload **不会被回滚**，下次重试会产生重复对象 / 双扣 Kueue 配额。所有外部副作用必须经 outbox。
+
+**PG 配额表设计**：
+
+```sql
+-- 配额上限（platform-admin 设置）
+CREATE TABLE tenant_quota_limits (
+  tenant_id   TEXT NOT NULL,
+  dimension   TEXT NOT NULL,   -- gpu_hours / oss_traffic_gb / cpu_hours / oss_bytes
+  limit_value NUMERIC NOT NULL,
+  PRIMARY KEY (tenant_id, dimension)
+);
+
+-- 预留账本（submit-time 原子写入；仅表达"当前同时占用"，不承载历史用量）
+CREATE TABLE tenant_quota_reservations (
+  reservation_id TEXT PRIMARY KEY,
+  tenant_id      TEXT NOT NULL,
+  action         TEXT NOT NULL,                     -- "train.submit" / "sft.submit" / "pipeline.submit" / ...
+  request_id     TEXT NOT NULL,                     -- 客户端幂等键（同一 request_id 重试不双扣）
+  dimension      TEXT NOT NULL,
+  amount         NUMERIC NOT NULL,                  -- 估算预留量
+  status         TEXT NOT NULL DEFAULT 'reserved',  -- reserved / confirmed / finalized / released
+  expires_at     TIMESTAMPTZ NOT NULL,              -- TTL 30s，超时自动 release
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, action, request_id)            -- 幂等约束：同 request_id 重试拿回原 reservation
+);
+CREATE INDEX ON tenant_quota_reservations (tenant_id, dimension, status);
+
+-- 滚动用量账本（不可变；承载 30 天等滚动窗口的真实消耗）
+CREATE TABLE tenant_quota_usage (
+  usage_id       TEXT PRIMARY KEY,
+  tenant_id      TEXT NOT NULL,
+  dimension      TEXT NOT NULL,
+  amount         NUMERIC NOT NULL,                  -- 作业完成时的实际用量
+  reservation_id TEXT,                              -- 溯源（finalize 来源）
+  window_start   TIMESTAMPTZ NOT NULL,              -- 作业开始时间
+  window_end     TIMESTAMPTZ NOT NULL,              -- 作业结束时间（计入滚动窗口的时间点）
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ON tenant_quota_usage (tenant_id, dimension, window_end DESC);
+
+-- reserve 实现（单事务，必须串行化到 (tenant_id, dimension) 桶）：
+--   BEGIN;
+--   -- ⓪ 幂等短路：同 (tenant_id, action, request_id) 已存在 → 直接返回原 reservation
+--   SELECT * FROM tenant_quota_reservations
+--     WHERE tenant_id=? AND action=? AND request_id=?
+--     FOR UPDATE;
+--   -- 找到则直接返回；否则继续 ↓
+--
+--   -- ① 锁住配额桶本身（行锁），保证同一 (tenant_id, dimension) 同时只有一个事务能进
+--   SELECT limit_value
+--     FROM tenant_quota_limits
+--    WHERE tenant_id=? AND dimension=?
+--    FOR UPDATE;
+--
+--   -- ② 在桶锁持有期间统计 "活跃预留 + 滚动窗口内历史用量"
+--   SELECT
+--     (SELECT COALESCE(SUM(amount),0)
+--        FROM tenant_quota_reservations
+--       WHERE tenant_id=? AND dimension=? AND status IN ('reserved','confirmed'))
+--   + (SELECT COALESCE(SUM(amount),0)
+--        FROM tenant_quota_usage
+--       WHERE tenant_id=? AND dimension=?
+--         AND window_end > now() - INTERVAL '30 days');   -- 滚动窗口长度按维度配置
+--
+--   -- ③ 合计 + 本次申请 ≤ limit → INSERT reservation（带 request_id）；
+--   --    否则 RAISE quota_exceeded
+--   COMMIT;
+--
+-- finalize 实现（confirm 后、作业真正结束时调用）：
+--   BEGIN;
+--   UPDATE tenant_quota_reservations
+--      SET status='finalized'
+--    WHERE reservation_id=? AND status IN ('confirmed','reserved');
+--   INSERT INTO tenant_quota_usage(usage_id, tenant_id, dimension, amount,
+--                                  reservation_id, window_start, window_end)
+--   VALUES (..., actual_amount, ..., job_start, now());
+--   COMMIT;
+-- finalize 也按 reservation_id 幂等：状态已是 finalized 时直接返回成功。
+--
+-- 备选实现：若桶不存在或不想依赖 limits 表行锁，使用
+--   SELECT pg_advisory_xact_lock(hashtext(tenant_id||':'||dimension));
+-- 任选其一，关键是 reserve 全程持有 per-bucket 独占锁，禁止"先 SUM 后 INSERT"未加锁的模式。
+```
+
+> ⚠️ 反模式 1（并发）：仅对预留行 `FOR UPDATE` 不够——两个并发请求会同时看到相同的剩余量并各自 INSERT 新行（新行不在彼此的锁集合里），导致双扣。必须锁桶本身（`tenant_quota_limits` 行锁或 advisory lock）。
+> ⚠️ 反模式 2（滚动绕过）：作业完成时直接 `release` 而不写 `tenant_quota_usage` 会让历史消耗从配额视图中消失——租户串行跑作业即可永远不撞 30 天上限。所有滚动维度必须走 `finalize` 路径。
+> ⚠️ 反模式 3（重试双扣）：`reserve` 入参不带 `request_id`、或表上没有 `UNIQUE(tenant_id, action, request_id)`，客户端超时重试就会两次扣额。
+>
+> L2 集成测试覆盖（见 §7.3）：Quota 并发、Quota 滚动累计、Quota 幂等三组用例。
+
+**配额释放路径**（防止泄漏）：
+- 入队失败：handler 捕获异常后显式调 `release`
+- 作业完成/取消：Volcano webhook 或 Argo callback 调 `release`
+- 超时兜底：nightly reconciler 扫 `expires_at < now() AND status='reserved'`，自动 release 并告警
+
+**三层配额的权威分工与冲突裁决**：
+
+| 层 | 角色 | 权威范围 | 数据源 |
+|---|---|---|---|
+| Quota Service（PG） | UX 预检 + 预算（滚动用量） | submit-time 拒绝明显超额 + 30 天滚动账本 | `tenant_quota_reservations` + `tenant_quota_usage` |
+| Kueue（admit-time） | **GPU/CPU 并发容量的唯一运行时权威** | 决定作业是否被 admit；可抢占、重排 | `Workload.status`（ClusterQueue 实时状态） |
+| Runtime 对账（nightly） | 偏差发现 + 修账，不做拒绝 | 对齐 PG ↔ Kueue ↔ 实际运行作业 | nightly job |
+
+**核心规则**：
+1. **reservation 必须绑定 Kueue `Workload UID`**：reserve 时由 outbox worker 创建 Kueue Workload 后回填到 reservation；未绑定的 reservation 超过 TTL 自动 release。
+2. **confirm/finalize/release 由 informer 驱动，而不是 handler 即时调用**：
+   - `Workload Admitted` → `confirm(reservation_id)`
+   - `Workload Finished/Failed` → `finalize(reservation_id, actual_amount)`
+   - `Workload NotFound`（被人工 `kubectl delete` 或未创建）→ `release(reservation_id, "external_deleted")`
+   - callback 丢失兜底：reservation TTL（默认 30s，confirmed 后续到作业结束）+ nightly reconciler 按 Workload UID 反查。
+3. **PG 与 Kueue 不一致时的裁决**（nightly job）：
+   - **并发容量**（GPU/CPU 同时占用）→ **以 Kueue Workload 实际状态为准**，PG 自动修账（reservation/usage 与 Kueue 不符则按 Kueue 覆盖，并写 audit）。
+   - **滚动用量**（gpu_hours/cpu_hours/oss_traffic_gb 历史累积）→ **以 PG `tenant_quota_usage` 为准**（Kueue 不保留历史）；缺失的 usage 由 nightly 从 Kueue Workload 终态补写。
+4. **submit-time 行为**：PG 视图与 Kueue 不一致时，**不阻塞用户**——以 PG 视图做预检（避免依赖 Kueue 同步可用性）；真实是否能跑由 admit-time Kueue 决定。
+5. **运维口径**：偏差 > 阈值告警，但**不自动阻断新提交**（防止误报雪崩）。
+
+**运行时对账**：nightly job 对比 PG `confirmed` / `usage` 总量与 Kueue Workload 终态，按上述规则修账（O8 风险项）。
+
+**配额账本**：超过 80% 时仪表盘黄、90% 红。
+
+**用户故事映射**：AC-29 / 一日故事 09:30 "配额预检通过（OSS 流量 100GB / CPU 8h）"
+
+### 3.11 Audit Layer（审计）
+
+**v1 必做**（ADR-010 §5）。⚠️ **v1 无 PG**，故审计落 **OSS 只追加**（非 PG 同事务原子；强保证待 PG 回归）。
+
+**模型**（OSS append-only JSON-lines，每行一条事件）：
+```jsonc
+// oss://lite-ai-infra/audit/{yyyy}/{mm}/{dd}/{shard}.jsonl  （只追加，不可改）
+{
+  "ts": "2026-06-04T...Z",
+  "enterprise_id": "e-0001",
+  "group_id": "g-0001",
+  "actor_user": "...",        // Keycloak sub
+  "actor_role": "...",        // member / group-admin / enterprise-admin / platform-admin（来自 token groups）
+  "action": "job.cancel",     // "dataset.force_delete" ...
+  "resource_uri": "...",
+  "decision": "allow",        // allow / deny
+  "override": false,          // admin override / --force 标记
+  "reason": "...",            // Cerbos decision reason
+  "metadata": { "ip": "...", "ua": "...", "payload_digest": "..." }
+}
+```
+
+**写入路径**：
+- **事后尽力写**：mutation handler 用 `@audited` 装饰器，在业务动作后**追加写 OSS**（v1 非同事务——进程崩溃可能漏记；关键路径可双写兜底）。
+- **Cerbos decision log**：每次 allow/deny 由 Cerbos 自带 decision log 输出（补充覆盖）。
+- **OpenSearch 索引（可选）**：Fluent Bit 读 OSS audit → `audit-{enterprise_id}-*` index，仅作 Grafana 查询视图。
+- **PG 回归后**：改为 `@audited` 同事务写 PG `audit_log`（原子，真相源），OSS/OpenSearch 转为归档/视图。
+
+**强制 audit 的动作**（v1）：
+- 所有 `mutation`（POST/PUT/PATCH/DELETE）API
+- 所有 `/admin/*` 路径（无论 mutation 或 read）
+- 所有 `--force`（如 `data delete --force`）
+- 所有 `--on-behalf` 提交
+- Cerbos `deny` 决策（写 `decision=deny`，便于追"为什么拒"）
+
+**查询接口**：
+- 普通成员：无（看不到 audit）
+- enterprise-admin：`GET /v1/audit?enterprise_id=<self>` 仅本企业；CLI `laictl audit list`
+- platform-admin：`GET /admin/audit?enterprise_id=*` 跨企业
+
+**v1 不做**：tamper-proof（区块链/WORM）、SIEM 集成、跨企业聚合分析视图、**同事务原子审计**（待 PG 回归）。
+
+### 3.12 资源状态机与生命周期
+
+> v1 引入显式状态机；决策中"看 state"的部分由 PolicyEngine 统一处理（见 §3.9 表）。
+
+| 资源 | 状态机 | 转换触发 | mutation 约束 |
+|---|---|---|---|
+| 训练 Job | `pending → running → (completed \| failed \| canceled) → archived`；`archived → active`（restore）；`archived → [deleted]` | Volcano webhook | `delete` 仅 running；completed 必须 `archive`；`restore`（archived → active）仅 tenant-admin+；`delete(永久)`（archived → [deleted]）仅 platform-admin |
+| 推理 Deployment | `deploying → healthy → (degraded \| terminated)` | readiness probe | `scale` / `tear-down` 任意状态 |
+| Workspace | `creating → running → (stopped \| deleting)` | 用户 / 8h idle | `start` 仅 stopped；`enter` 仅 running，且仅 owner（tenant-admin v1 不可进；platform-admin 走 `/admin/*`）|
+| 数据集 | `active → (deprecated \| deleting) → [deleted]` + 派生 `ref_count` | Gravitino lineage / `--force` / nightly GC | 所有 mutation 必须在 `datasets` 行锁内完成状态转换；`active→deleting` / `active→deprecated` 是同步原子操作（事务内），OSS/Gravitino 真删只在状态进入 `deleting` 之后异步执行（见下方两阶段删除）|
+| 数据管线 | `pending → running → (succeeded \| failed \| canceled)` | Argo | `update params` 仅 pending 且仅 owner（tenant-admin 可改任意成员）；`retry` 仅 failed |
+| Tenant | `active → (suspended \| archived)` | platform-admin | suspended 拒所有用户登录；archived 仅 read-only 元数据 |
+
+**数据集 `ref_count` 计算**（user-stories AC-23 / 表注 [1]）：
+- 权威源：**Gravitino lineage 边**（dataset → run / pipeline / model）
+- 写入路径：
+  - 训练 / SFT 提交时，Platform API 写 `dataset → job` 边
+  - 管线注册产物时，Argo callback 写 `input_dataset → output_dataset` 边
+  - 模型注册时，写 `dataset → model` 边
+- 查询：`GET /v1/datasets/{uri}/refs` → 聚合返回所有边及对应资源 URI + owner
+
+**两阶段删除与 tombstone**（防止"边删边引用"竞态）：
+
+数据集删除**禁止**单步硬删——必须先在事务内立 tombstone，再异步真删。所有"创建新引用"的路径（train.submit / sft.submit / pipeline.submit / model.register / Argo callback 写血缘）也必须在同一事务里检查状态：
+
+```python
+# 创建引用方（提交/注册类）共享的事务模板
+with pg.transaction():
+    ds = SELECT state FROM datasets WHERE uri=? FOR UPDATE       # 行锁
+    if ds.state != 'active':
+        raise dataset_not_writable(ds.state)                      # 拒 submit/register
+    INSERT INTO gravitino_lineage_edges (...)                     # 同事务写血缘
+    # → 事务提交后，引用才生效
+```
+
+```python
+# 删除方
+with pg.transaction():
+    ds = SELECT state, ref_count FROM datasets WHERE uri=? FOR UPDATE
+    if 普通成员 and ds.ref_count > 0:
+        raise dataset_in_use(ds.ref_count)
+    if --force and ds.ref_count > 0:
+        UPDATE datasets SET state='deprecated' WHERE uri=?        # tombstone：拒新引用，旧引用只读
+    else:
+        UPDATE datasets SET state='deleting' WHERE uri=?          # tombstone：彻底拒新引用
+    INSERT audit_log(...)
+# 事务提交后，新 submit 立即被拒（因为状态不是 active）。
+# 真正的 OSS / Gravitino 硬删由后台 deletion worker 异步执行——
+# 仅当 state='deleting' 且持续 N 分钟无新引用尝试时，才真删并置为 [deleted]。
+```
+
+- **delete 决策**：
+  - `ref_count == 0` + owner/tenant-admin：`active → deleting`（tombstone 生效，异步硬删 OSS + Gravitino）
+  - `ref_count > 0` + 普通成员：拒（`dataset 被 N 个资源引用`）
+  - `ref_count > 0` + `--force` + owner/tenant-admin：`active → deprecated`（OSS 保留；阻止新引用；现有 running job 可继续读）；audit 写入引用快照
+  - `deprecated` + `ref_count == 0`：nightly GC 把 `deprecated → deleting` → 异步硬删 → `[deleted]`
+  - `deprecated` + `ref_count > 0` + platform-admin gc（admin path）：`deprecated → deleting`（强制跳过 ref_count；最高破坏性；强 audit + 二次确认）
+
+> ⚠️ 反模式：在 handler 里"先查 ref_count == 0、再调 OSS 删除"而不持有 `datasets` 行锁——并发的 submit 会在删除决策之后、OSS 真删之前写入新血缘边，导致悬空引用 / 作业运行时找不到对象。所有引用创建路径**必须**在同一事务内 `FOR UPDATE` 校验 `state='active'`，硬删**必须**滞后于 tombstone。
+
+`laictl data delete --dry-run` 直接调 `refs` API 列出引用方，**不执行任何状态变更**（user-stories 一日故事 15:00）。
+
+### 3.13 OSS 写权限分层（per-enterprise/group RAM + STS）
+
+> **按最终模型（ADR-011 §5）**：OSS 是数据路径，Cerbos 决策"发不发凭据"，由阿里云 **RAM + STS 短期受限凭据**在路径级执行。下表 `{tid}` 读作两级前缀 `e-XXXX/g-YYYY`（私有）或 `e-XXXX/shared`（共享）；STS policy 限定到对应前缀。
+
+§3.4 路径列了，但 user-stories AC-33 要求 `processed/` 区拒绝用户直写。v1 实现：**per 企业/组 两类 RAM 角色 + STS**：
+
+| 子账号 | 名字 | 写权限路径 | 读权限路径 | 谁用 |
+|---|---|---|---|---|
+| user-sa | `lite-ai-{tid}-user` | `raw/{tid}/*`、`checkpoints/{tid}/*`（训练 SA）、`models/{tid}/*`（训练 SA） | `*/{tid}/*` | 用户 SDK / Workspace / 训练 Pod |
+| pipeline-sa | `lite-ai-{tid}-pipe` | `processed/{tid}/*`、`embeddings/{tid}/*` | `raw/{tid}/*`、`processed/{tid}/*` | Argo Workflow ServiceAccount |
+
+> `logs/{tid}/` 写权限给 Fluent Bit / OpenSearch 归档 job 的独立 SA（非 tenant scope）。
+
+**资源清单（§3.2 表）相应修订**：第 11 行"OSS RAM 子账号"由 1 个改为 2 个。
+
+### 3.14 Enterprise Provisioner（自动 provision / 状态转换）
+
+由 §1.2 子系统 ⑬ 承担。
+
+> ⚠️ **按最终模型（ADR-010）调整开通对象**：
+> - **v1 reconcile 项**：Keycloak **Organization**（企业）+ **Group 子组骨架**（`/e-x/g-y/{admins,members}`，含角色）；OSS 前缀 + RAM/STS；Gravitino schema；MLflow experiment tag 约定；Grafana org；OpenSearch index template。
+> - **v1 推迟（无 PG）**：PG `tenant_metadata` 行、Quota 账本、Capsule/配额相关 PG 状态——预算/中央元数据回归 PG 时再纳入。
+> - 身份/组织/角色的真相源是 Keycloak，Provisioner 通过 **Keycloak Admin API** 建 Organization/Group（幂等）。
+
+**设计原则（v1 修订）**：
+- **平台只维护 `Tenant` CR + status conditions，不直接持有 10 个外部系统的命令式编排逻辑**。
+- 外部资源生命周期交给 **Crossplane Compositions**（K8s 原生资源 / 云资源 / RAM）+ **ArgoCD app-of-apps**（Keycloak realm 配置 / Grafana org / OpenSearch index template / MLflow / Gravitino schema 等可声明化对象）。
+- 每个外部资源都是独立 K8s 对象，**有 owner reference 指向 Tenant CR + 独立 finalizer + 独立 condition**；不再是单进程内 10 步顺序调用。
+- **v1 首发租户走人工 / IaC 创建**（terraform plan + apply），把自动 provisioner 降级为 3-4 租户落地前的 P1 能力——v1 不要求一键创建租户。
+
+**Tenant CR 结构**（concept）：
+
+```yaml
+apiVersion: platform.lite-ai/v1
+kind: Tenant
+metadata:
+  name: t-0001
+spec:
+  displayName: "x-user-team"
+  state: active                        # active | suspended | archived
+status:
+  phase: Ready                         # Provisioning | Ready | Degraded | Suspended | Archived
+  conditions:
+    - type: KeycloakGroupReady          status: True
+    - type: CapsuleTenantReady          status: True
+    - type: KueueLocalQueueReady        status: True
+    - type: OSSPrefixReady              status: True
+    - type: RAMSubAccountsReady         status: True
+    - type: GravitinoSchemaReady        status: True
+    - type: MLflowExperimentReady       status: True
+    - type: GrafanaOrgReady             status: True
+    - type: OpenSearchTemplatesReady    status: True
+    - type: AuditRecorded               status: True
+```
+
+每个 condition 由独立 controller / Crossplane composition 维护；任何一项 `False` → `phase=Degraded`，**不允许 tenant 进入 Ready**。
+
+**资源映射与责任划分**：
+
+| 资源 | 实现方式 | finalizer 行为 |
+|---|---|---|
+| PG `tenant_metadata` | Platform API 写 | 删除时校验所有 condition = False/Removed |
+| Keycloak Group | ArgoCD 同步 `keycloak-config-cli` realm 文件 | suspend 时禁用登录；archive 时移除 |
+| Capsule Tenant CR | Crossplane composition | 删除时阻塞，直到 ns 内无 Workload |
+| Kueue LocalQueue | Crossplane composition | 删除时排空队列 |
+| OSS prefix + 2 RAM 子账号 | Crossplane composition（阿里云 provider） | suspend 时**先吊销 RAM AK**，再禁 bucket 写 |
+| Gravitino schema | ArgoCD job（idempotent CLI） | archive 保留只读 |
+| MLflow experiment | ArgoCD job | archive 保留只读 |
+| Grafana Org + Datasource | Grafana operator / Crossplane | suspend 禁登录 |
+| OpenSearch index template | ArgoCD job | archive 转冷 |
+| Audit `tenant.create` | Platform API 同事务写 | — |
+
+**状态机与冻结顺序**：
+
+```
+provisioning → active → (suspended | archived | failed)
+suspended → active（恢复） | archived
+active → archived（先经 suspended 中间态，不允许直跳）
+```
+
+**suspend 冻结顺序（必须严格按下列顺序执行，每步等待 condition 反馈再下一步，防止隔离绕过）**：
+
+```
+① 吊销 RAM 子账号 AK（OSS 写入立即失败）          ← 最早，防数据泄漏 / 写入
+② Keycloak group 禁用登录（拒新会话）
+③ Kueue LocalQueue 停止 admit（拒新作业）
+④ Grafana Org 禁登录
+⑤ OpenSearch index template 标记 readonly
+⑥ 现存 K8s 运行中作业：保留（让其跑完或 owner kill）
+⑦ Platform API mutation 全拒（state=suspended 时由 PolicyEngine 一票否决）
+```
+
+**archive 顺序**：先经 `suspended` ≥ 30 天 → OSS prefix 转冷归档 → K8s 资源回收 → 保留 PG / Gravitino / MLflow 只读元数据。
+
+**Drift detection**：
+- Crossplane 自带 reconcile loop（资源被人工改动 → 自动纠正或告警）
+- ArgoCD 自带 OutOfSync 检测
+- Platform 仅做 **cross-system invariant check**（nightly）：
+  - "tenant=suspended 但 Keycloak group 仍可登录" → 告警 + 拒所有 API
+  - "tenant=archived 但 RAM 子账号 AK 仍 active" → 告警 + 立刻吊销
+  - "Capsule Tenant 存在但 Kueue LocalQueue 缺失" → 告警
+
+**v1 不做**：
+- 一键 `laictl tenant create` 自动化（首租户人工 + IaC；3-4 租户落地前补齐）
+- 跨集群 tenant 拓扑
+- tenant 模板 / 配额阶梯
+
+> ⚠️ 反模式：把 10 个外部系统的 create/suspend/archive 写进一个自研单进程 reconciler 顺序调用——某一步失败 + 重试边界不明 → 半租户（可登录但无队列 / RAM 已建但 OSS prefix 未建 / suspend 撤了 Keycloak 但 OSS 仍可写）= **租户隔离绕过 + 账务漂移**。必须每个资源独立 condition + finalizer + drift detector。
+
+### 3.16.1 共享观测面的多租户硬隔离（OpenSearch / Fluent Bit）
+
+**问题背景**：v1 共享 OpenSearch + Fluent Bit 是平台所有租户的日志/审计查询面。单租户作业刷日志、输出高基数字段、触发 mapping 爆炸都可能压垮集群。软隔离（label + Grafana datasource filter）不足——一次 datasource 配错即跨租户漏审计。
+
+**v1 必做（不延后到 v2）**：
+
+| 维度 | 措施 |
+|---|---|
+| **集群可用性** | StatefulSet 3 节点（master+data 合并；replica_count=1）；单节点故障不中断；本地 PV + 每日快照到 OSS |
+| **租户查询隔离** | OpenSearch security plugin v1 起启用；每 tenant 一个 role，绑定 `logs-{tid}-*` / `audit-{tid}-*` index pattern；Grafana datasource 走 per-tenant role token（不再依赖 datasource filter） |
+| **写入限速** | Fluent Bit per-tenant `mem_buf_limit` + `rate_limit`（默认 10MB/s/tenant；超限 drop 并打 metric `fluentbit.drop.{tid}` 触发告警） |
+| **mapping 爆炸防护** | 每个 `logs-{tid}-*` 模板设 `index.mapping.total_fields.limit=1000`；动态字段超限即 reject + 告警 |
+| **索引大小防护** | ILM 策略：单 index 50GB 或 1 天 rollover；保留 14 天（hot）+ 自动转 oss://logs/{tid}/ 冷归档；per-tenant 总大小上限 100GB（超限 reject 并告警） |
+| **PG 连接池保护** | Fluent Bit 不直接写 PG；audit 通过 Platform API 同事务写入；OpenSearch 仅从 PG CDC 复制 |
+
+**audit 查询权威 = PG，不是 OpenSearch**：
+- `GET /v1/audit?tenant_id=...` / `GET /admin/audit?tenant_id=*` 一律查 PG `tenant_audit_log`
+- OpenSearch `audit-{tid}-*` 仅作 Grafana 可视化 / 长期检索 cache；OpenSearch 全集群挂掉**不影响**审计查询与合规导出
+- 这也消除"audit 必须靠 OpenSearch 才能查"的隐式 SLA 绑定
+
+**降级行为**：
+- OpenSearch 集群 unhealthy → Fluent Bit 本地缓冲 + 排队（buffer 满即 drop 并告警）；Platform API 提交路径**不受影响**
+- Grafana 日志面板 unavailable → 退化到 `kubectl logs` + PG `tenant_audit_log` 直查
+
+### 3.16.2 Gravitino 高可用与降级（消除单点）
+
+**问题背景**：Gravitino 同时承担"租户 schema 隔离 + 数据血缘 + 资产命名解析"，是 train.submit / sft.submit / data.register / dataset 删除两阶段决策的同步依赖。单副本 = 平台单点故障源。
+
+**v1 必做**：
+
+| 维度 | 措施 |
+|---|---|
+| **部署形态** | StatefulSet **2 副本（active-active）**；元数据全部落到共享 RDS PG（一致性由 PG 保证）；K8s Service VIP 前端做轮询；任一 pod 故障不中断 |
+| **PG 后端** | 复用底座 RDS PG（已有 multi-AZ HA + 自动备份），不引入额外 DB；Gravitino schema 独占 PG database，与 MLflow / Keycloak / Platform API 资源隔离（避免连接池互相挤占） |
+| **客户端缓存** | Platform API 内嵌 Gravitino client 缓存：`uri → OSS path` / `dataset → lineage` 解析结果缓存 60s（命中率 > 90% 时 Gravitino 短暂不可用不阻塞读路径）|
+| **健康探测** | readinessProbe = `GET /api/metalakes/lite-ai/health`；非健康 pod 自动下线 |
+
+**Gravitino 不可用时的平台行为（明确降级语义）**：
+
+| 操作类型 | Gravitino 不可用时行为 | 原因 |
+|---|---|---|
+| `train.submit` / `sft.submit`（需解析 `gravitino://` URI） | **拒绝**，返 503 `metadata_unavailable` | 无法解析 OSS 路径，强行入队会产生找不到数据的作业 |
+| `dataset.delete` / `dataset.delete --force`（需读 ref_count + 写 deprecated/deleting） | **拒绝** | 两阶段删除依赖 lineage 边查询 |
+| `data.register` / `model.register`（写 schema） | **拒绝** | 资产注册必须写元数据 |
+| **读路径走缓存**：`GET /v1/datasets/{uri}/refs`、SDK 解析已缓存过的 URI、Workspace 内读 dataset | **降级可用**（返缓存数据，response header 标 `X-Stale: true`） | 不阻塞用户日常工作 |
+| 已 running 的训练 / SFT 作业 | **不受影响** | 启动时已解析路径，运行中不再依赖 Gravitino |
+| Argo callback 写 lineage 边 | **重试 + 入 outbox**（见 §3.10）；最终一致 | 不阻塞作业完成 |
+
+**核心原则**：
+- **新提交类操作 fail-fast**（避免产生坏作业），但**读路径与运行中作业不受影响**
+- audit 与 quota 真相源都在 PG，**不依赖 Gravitino**——所以"Gravitino 挂了 = 平台挂了"不成立
+- Gravitino 恢复后，outbox worker 自动补回所有 pending 的 lineage 边写入
+
+**监控**：
+- Gravitino pod up count < 2 → 立刻告警（高优）
+- 客户端缓存命中率 < 80% → 告警（缓存策略需调优）
+- Gravitino p95 latency > 200ms → 告警
+
+**v2 演进**：评估是否引入 Gravitino client-side 一致性 hash 或独立 Gravitino-PG（如果业务量证明共享 PG 是瓶颈）。
+
+### 3.15 Keycloak 运营纪律
+
+| 项 | 规则 |
+|---|---|
+| Master admin 凭证 | 锁 1Password 团队保险柜；日常**禁用**；仅救火 / IaC apply 出错时取 |
+| Realm 配置 | **IaC 化**（`keycloak-config-cli` + `realm-base.yaml` 入 git）；禁止 Admin Console 直接改 |
+| Apply 流程 | PR → 双签 → `apply --env=staging`（dry-run + 验证）→ `apply --env=prod`；失败回滚走 PR revert |
+| 普通用户登 Admin Console | Keycloak 默认按 role 拒，无需平台额外处理（user-stories 已验收点） |
+| 漂移检测 | Sprint 5 起，nightly job 跑 `keycloak-config-cli diff`，差异 > 0 告警 |
+
+### 3.16 未登录路径白名单（Ingress）
+
+`platform-ingress` OIDC 中间件**仅放行**以下路径不带 token：
+
+```
+GET /healthz                         # K8s readiness/liveness
+GET /readyz                          # 同上
+GET /realms/lite-ai/.well-known/*    # OIDC discovery
+GET /                                # Portal 落地页（内部跳 Keycloak）
+```
+
+其余一律 `401`（API）/ 跳 Keycloak（Portal/Workspace/推理 endpoint）。对应 AC-18~20。
+
+### 3.17 `laictl --admin` 子命令体系
+
+普通业务命令走 `laictl <verb>`；admin 命令走 `laictl --admin <verb>`，CLI 客户端在请求头加 `X-Admin-Path: true`，路由进 Platform API `routers/admin/`。
+
+| 命令 | 用途 | user-stories 来源 |
+|---|---|---|
+| `laictl --admin tenant create --id <tid> --display <name>` | 创建 tenant（触发 §3.14 provision） | platform-admin 一日故事 10:00 |
+| `laictl --admin tenant suspend\|archive <tid>` | 暂停 / 归档 | §角色 3 |
+| `laictl --admin tenant quota update <tid> --gpu <N> --oss-bytes <N>` | 改配额 | 一日故事 09:00 |
+| `laictl --admin data list --all-tenants --by-size` | 跨 tenant 容量审计（仅元数据） | 一日故事 11:00 |
+| `laictl --admin data gc <uri> --reason <txt>` | 删孤儿 dataset（强 audit + 二次确认） | AC-34 / 一日故事 11:00 |
+| `laictl --admin pipeline cancel <id> --reason <txt>` | 跨 tenant 救火 | 一日故事 13:00 |
+| `laictl --admin audit list --tenant <tid>\|*` | 查 audit | tenant-admin / platform-admin |
+| `laictl --admin workspace enter <id>` | 进任意 tenant 的 Workspace（救火；强制写 audit + admin override 标记） | AC-36 / §3.8 |
+
+普通命令侧需要新增（user-stories 已用但 §3 此前未列）：
+
+| 命令 | 用途 |
+|---|---|
+| `laictl job archive <id>` | completed 作业归档 |
+| `laictl job restore <id>` | archived 作业恢复为 active（tenant-admin+） |
+| `laictl member add\|remove <user>` | tenant-admin 管成员 |
+| `laictl train submit ... --on-behalf <user>` | tenant-admin 代提（owner 仍记目标用户） |
+| `laictl data delete <uri> --dry-run \| --force` | dry-run 列引用方不变更状态；`--force` 跳过 owner 检查，**不跳 ref_count**：ref_count==0 时硬删，ref_count>0 时转 `deprecated`（OSS 保留）+ audit 写引用快照（仅 owner / tenant-admin）|
+| `laictl data update <uri> --name <name> [--desc <desc>]` | 数据集元数据更新（owner 或 tenant-admin） |
+| `laictl pipeline submit ... --large` | 提交超默认配额阈值的大管线（需 tenant-admin 角色；仍受 tenant 总配额约束） |
+| `laictl pipeline retry <id>` | failed 重跑（owner 或 tenant-admin；重新配额预检） |
+| `laictl audit list` | tenant-admin 查本 tenant audit |
+
+### 3.18 调用链总览（更新版）
+
+所有 mutation API 与 `/admin/*` 路径必须经过：
+
+```
+请求
+ → Ingress OIDC（未登录跳 Keycloak；白名单见 §3.16）
+ → AuthMiddleware（JWT → TenantContext；含 user / role / tenant_id）
+ → Router 选择（routers/v1 普通 / routers/admin 特权）
+ → PolicyEngine.can(ctx, action, resource)        ← §3.9
+ → QuotaService.precheck(...)（仅 submit 类）       ← §3.10
+ → @audited 装饰器（事务内写 audit）                ← §3.11
+ → 业务 handler
+ → 响应 + audit commit
+```
+
 ---
 
 ## 4. 数据流详图
+
+> 所有 mutation 流共同前置：AuthMiddleware → PolicyEngine.can → QuotaService.precheck（仅 submit）→ @audited（见 §3.18）。下文每条流不再重复，只在与默认有偏差处显式标注。
 
 ### 4.1 数据准备流（10TB 图文 → Lance）
 
 ```
 laictl data prepare → Platform API (Keycloak token 校验 → 解析 tenant_id=t-0001)
+  → PolicyEngine.can(ctx, "pipeline.submit", template)         ← §3.9
+  → QuotaService.precheck(ctx, "pipeline.submit",              ← §3.10
+       {oss_traffic_gb: est, cpu_hours: est})
+  → @audited 写 audit_log(action="pipeline.submit")            ← §3.11
   → Argo Workflow (拉 RayCluster in tenant ns)
     step-1: ray-data-load  (从 oss://raw/t-0001/ 流式读)
     step-2: data-juicer-ops
@@ -476,12 +1242,15 @@ laictl data prepare → Platform API (Keycloak token 校验 → 解析 tenant_id
 ### 4.2 预训练流（1B 多模态 DDP）
 
 ```
-platform.submit_pretrain(image, entrypoint, data_uri="gravitino://my/v1", output_model="my/multimodal-1b")
+platform.submit_pretrain(image, entrypoint, data_uri="gravitino://my/v1", output_model="my/multimodal-1b", gpu=4)
   → SDK：从本地 token 缓存 取 OIDC token 注入 Authorization header
   → Platform API
     → Keycloak token 校验 → 解析 tenant_id=t-0001
+    → PolicyEngine.can(ctx, "train.submit", {gpu: 4})          ← 角色门槛：>4 需 tenant-admin
+    → QuotaService.precheck(ctx, "train.submit", {gpu_hours: est})
+    → @audited(action="train.submit", on_behalf=opt)            ← --on-behalf 时 actor / owner 分离
     → "my" → "t-0001" 替换
-    → Gravitino 解析 t_0001.v1 → OSS 路径
+    → Gravitino 解析 t_0001.v1 → OSS 路径 + 写 lineage edge (dataset → run)
     → MLflow 创建 run（tag tenant_id=t-0001）
     → Kueue（LocalQueue=tenant-t-0001）入队
     → Volcano Job in ns=tenant-t-0001
@@ -490,7 +1259,8 @@ platform.submit_pretrain(image, entrypoint, data_uri="gravitino://my/v1", output
     Lance 流式读 → MLflow log → 30min/epoch 写 ckpt 到 oss://checkpoints/t-0001/<run_id>/
   → 完成
     artifact → oss://models/t-0001/multimodal-1b/v<N>/
-    Gravitino t_0001 schema 注册 model version (lineage: dataset)
+    Gravitino t_0001 schema 注册 model version (lineage: dataset → model 边写入)
+    Argo callback → 更新 dataset ref_count（§3.12）
 ```
 
 **容错**：节点挂 → Volcano 整组重启 → 自动续训 ≤30min 前 ckpt。
@@ -557,10 +1327,13 @@ Lineage 边（v1 手工）：
 | 用户 URI | `gravitino://my/...` 或 `gravitino://t-0001/...`；**禁止 display_name** |
 | 平台内部 URI | `gravitino://t_0001.<name>@<version>` |
 | OSS 路径 | 用户不直接拼，平台用 tenant_id 解析 |
-| 凭证 | K8s ServiceAccount per tenant + RAM Role（OSS 仅 `*/t-XXXX/*` 前缀） |
+| 凭证 | K8s ServiceAccount per tenant + **2 个 RAM Role**（user-sa / pipeline-sa，见 §3.13） |
 | Token | 用户 → Keycloak access token → SDK 注入 → Platform API 校验 |
+| 决策 | 所有 mutation 经 PolicyEngine.can（§3.9）；submit 类经 QuotaService.precheck（§3.10） |
+| 审计 | mutation / `/admin/*` / `--force` / `--on-behalf` 强制 audit（§3.11） |
+| Lineage | 提交训练 / 注册产物时同步写 Gravitino lineage 边（驱动 `ref_count`，§3.12） |
 | 失败 | Gravitino + MLflow 同步 status=failed |
-| 取消 | 删 K8s 对象 + Argo + 关闭 Ray cluster |
+| 取消 | PolicyEngine 校验 owner / 角色 → 删 K8s 对象 + Argo + 关闭 Ray cluster |
 
 ---
 
@@ -579,110 +1352,196 @@ Lineage 边（v1 手工）：
 
 ### 5.3 Sprint 计划
 
-#### Sprint 0（Week 1，05-08 → 05-15）：地基 + Spike + Keycloak
+> ⚠️ **交付优先级已调整（2026-06-04），下方 Sprint 排期需按此重排**（细化为后续工作）：
+> - **Sprint 0–1（基础设施 + 阶段①起步）**：身份层（Keycloak 26.6.2 + Organizations/Group + Org Service）、Cerbos 授权 spike + can() seam、OSS 审计、SDK/CLI 骨架；**数据管线 + 多模态处理 + Lance/Gravitino 元数据先跑通**（原 Sprint 2 的数据管线提前）。
+> - **Sprint 2–3（阶段①完成 + 阶段②）**：数据域收尾（Embedding/向量、MLflow 元数据）；**微调 SFT/LoRA + Checkpoint/容错 + 推理部署**。
+> - **Sprint 4–5（阶段③）**：**1B 多模态预训练**（8 卡 DDP，3-4 天）作为最后压轴；Enterprise Provisioner 落地。
+> - **Sprint 6**：上线 buffer。
+> - **推迟**：Quota Service / PG 预算账本 / 同事务审计（ADR-010）。
+> 以下原始 Sprint 内容（训练在前、数据在后）为旧顺序，按上述重排理解。
+
+> **修订说明（v3）**：基于 Codex 排期对抗式评审（findings #1–#6）再次修订：
+> - **P3 Sprint 2 过载**：Quota Service 转给 P2（与配额数据同侧）；P3 只保 PolicyEngine + Audit。
+> - **Tenant Provisioner 单担 / 自相矛盾**：Sprint 1 加 Spike 3（Tenant CR + Crossplane POC）；Sprint 3 拆为 P1（Crossplane Composition + ArgoCD app）+ P3（Tenant CR 控制面 + audit）。
+> - **outbox / Kueue informer 关键路径无 owner**：Sprint 1 P1 接 outbox 地基（POST /pretrain 强制走 outbox），Sprint 2 P1 完成 informer + worker 稳态。
+> - **OpenSearch HA / Gravitino HA**：Sprint 1 P1 装 OpenSearch 3 节点 + security plugin；Sprint 2 P2 升 Gravitino 2 副本 + client cache。
+> - **V2/V8 大规模验收**：Sprint 3 加 V8 1TB 斜率测试；Sprint 4 第 1 周 1B 24h soak + checkpoint kill drill（前移自 Sprint 5）。
+> - **Sprint 6 验收门禁**：Day 1-2 跑 V1-V12 全量；硬阈值替代 Partial 主观放行。
+> - **腾出容量来源**：DeepSpeed 镜像、CLI 高级命令、Lineage 自动化全部砍到 v2（已写入 §5.6）。
+
+#### Sprint 0（Week 1，05-08 → 05-15）：地基 + Spike + 身份层
 
 | 负责 | 任务 |
 |---|---|
 | P1 | ACK 集群（GPU 节点池、网络、ACR） |
-| P1 | Volcano + Kueue + KubeRay + Argo Helm 装 |
-| P2 | **Spike 1**: Lance on OSS 读写延迟（100GB） |
-| P2 | **Spike 2**: Data-Juicer + Ray 在 100GB 子集跑通 |
-| P3 | **Keycloak 部署**（StatefulSet + RDS）+ realm/client 初始配置 |
-| P3 | Gravitino + MLflow + Postgres 部署 |
-| P3 | **Tenant Service v0**（最简：硬编码 t-0001 + Keycloak token 校验中间件） |
-| 全员 | spec-kit `/specify` `/plan` `/tasks`，constitution.md（含资源命名约束） |
+| P1 | Volcano + Kueue + KubeRay + Argo Helm 装；验证 GPU 节点调度可用 |
+| P2 | **Spike 1**：Lance on OSS 读写延迟（100GB）；有 fallback 结论 |
+| P2 | **Spike 2**：Data-Juicer + Ray 在 100GB 子集跑通；有 OOM 边界数据 |
+| P1 | **Crossplane + ArgoCD 安装**（仅 helm install + 跑官方 sample composition / app；不做业务集成） |
+| P3 | **Keycloak 部署**（StatefulSet + RDS PG）+ realm/client 初始配置（IaC 入库） |
+| P3 | Gravitino + MLflow + Postgres 部署（Helm） |
+| P3 | **Tenant Service v0**：Keycloak token 校验中间件 + 硬编码 t-0001 解析 |
 
-**出口**：3 个 spike PASS；Keycloak 可登录拿 token；Platform API 能解析 token 出 tenant_id。
+> Sprint 0 是 1 周，不做 spec-kit plan/tasks（推到 Sprint 1 第一天）。constitution.md 由全员在 Sprint 1 前完成。
 
-#### Sprint 1（Week 2-3，05-16 → 05-29）：训练运行时 + Tenant 注入
+**出口**：两个 Spike PASS（有 fallback 结论）；Keycloak 可登录拿 token；Platform API 能从 token 解析出 tenant_id=t-0001；Crossplane + ArgoCD 可起 sample（为 Sprint 1 Spike 3 兜底）。
 
-| P1 | 训练镜像 train-pytorch-ddp:v1（含 TENANT_ID 环境变量约定） |
-| P1 | Volcano Job 模板 + ServiceAccount per tenant + RAM Role |
-| P1 | Checkpoint 恢复脚本 |
-| P2 | Lance 读取 helper |
-| P2 | 公开 baseline 跑通 DDP |
-| P3 | Platform API v0：POST /pretrain（含 token 校验 + tenant_id 注入） |
+---
+
+#### Sprint 1（Week 2-3，05-16 → 05-29）：训练跑通 + Admission Pipeline 启动 + Tenant CR Spike
+
+| 负责 | 任务 |
+|---|---|
+| P1 | 训练镜像 train-pytorch-ddp:v1（torchrun 契约：entrypoint.sh / 环境变量 / SIGTERM） |
+| P1 | Volcano Job 模板 + ServiceAccount per tenant + RAM Role（user-sa，§3.13） |
+| P1 | **Checkpoint 恢复完整逻辑**：SIGTERM → 保存 → 重启 → 加载；`laictl job` 杀 pod 验证 ≤30min 丢失 |
+| P1 | **Spike 3（关键）**：Tenant CR + Crossplane Composition POC——用 Crossplane 把 Capsule Tenant + Kueue LocalQueue 拉起来（手工 apply Tenant CR），验证 condition / finalizer 反馈链路；输出 v1 是否可行结论 + 风险清单 |
+| P1 | **OpenSearch 3 节点 cluster + security plugin** 装好（仅装，不接业务）；ArgoCD app 管 index template |
+| P1 | **outbox 路径地基**：POST /pretrain **不直提 Volcano**，走 outbox_events 表 + 极简 worker（v0：消费 enqueue_kueue 事件，按 workload_id 幂等创建 VolcanoJob） |
+| P2 | Lance 读取 helper（OSS 流式 + 本地 cache）|
+| P2 | 公开 baseline 跑通 DDP（Volcano + Kueue LocalQueue + OSS）|
+| P3 | Platform API v0：POST /pretrain（token 校验 + tenant_id 注入 + **写 outbox_events**） |
 | P3 | SDK v0：submit_pretrain（OIDC device flow login + token 缓存） |
+| P3 | **PolicyEngine v1**：核心逻辑实现 + AC-1～AC-20 单测（Tenant 边界 / Owner / 角色门槛 / 状态约束 / 未登录路径） |
+| 全员 | constitution.md 定稿；spec-kit `/plan` `/tasks` |
 
-**出口**：手工或 SDK 提交 → 训练在 tenant-t-0001 ns 跑起来；MLflow run 带 tenant_id tag。
+**出口**：SDK 提交 → outbox worker → Volcano Job 在 tenant-t-0001 ns 跑起；MLflow run 带 tenant_id tag；杀 pod 自动续训；PolicyEngine AC-1~20 全过；**Spike 3 结论 PASS（Crossplane/ArgoCD 可承载 Tenant Provisioner）或触发滑窗**；OpenSearch 3 节点 cluster ready。
 
-#### Sprint 2（Week 4-5，05-30 → 06-12）：数据管线 + Gravitino 多 schema
+---
 
-| P2 | Argo data-prep DAG（按 tenant_id 隔离） |
-| P2 | **Data-Juicer 跑 10TB**（关键里程碑） |
-| P2 | Lance 索引创建 |
-| P2 | Gravitino 注册（schema=t_0001） |
-| P3 | URI 解析器（gravitino://my/... → tenant_id 替换） |
-| P3 | CLI laictl data prepare/list/describe（含 laictl login） |
-| P3 | Tenant Service：成员/角色查询 API |
-| P1 | DeepSpeed 镜像 train-deepspeed:v1 |
-| P1 | Prometheus + Grafana + DCGM 看板（含 tenant_id label） |
+#### Sprint 2（Week 4-5，05-30 → 06-12）：数据管线 + Admission Pipeline 完成
 
-**出口**：raw → 命令一行 → Lance + Gravitino t_0001 schema 可查。监控可见。
+| 负责 | 任务 |
+|---|---|
+| P1 | Prometheus + Grafana + DCGM 看板（含 tenant_id label）；P0 告警规则上线 |
+| P1 | **Kueue/Volcano informer + Workload UID 回填**（驱动 quota confirm/finalize/release，单一权威，§3.10）|
+| P1 | **outbox worker v1**：稳定状态机（pending/done/dead）+ 指数退避 + dead-letter 告警 + nightly reconciler |
+| P2 | Argo data-prep DAG（4 步：load / juicer / write / stats；按 tenant_id 隔离 ns） |
+| P2 | **Data-Juicer 跑 10TB**（关键里程碑；OOM 兜底：分片 + spill） |
+| P2 | Lance 索引创建 + Gravitino 注册（schema=t_0001） |
+| P2 | **Quota Service**：4 维预检（GPU 时 / OSS 流量 / CPU 时 / OSS 存储字节）+ PG 配额账本（reservations + usage 双表，§3.10）+ 并发/幂等/滚动累计 L1 测试 |
+| P2 | **Gravitino HA**：从单副本升 2 副本 active-active；Platform API 端 client cache（60s TTL）+ 降级行为测试 |
+| P3 | URI 解析器（gravitino://my/... → tenant_id 替换；错误格式单测） |
+| P3 | CLI：laictl data prepare / list / describe / delete（含 --dry-run / --force） |
+| P3 | Tenant Service：成员/角色查询 API（`/v1/tenants/me` 等） |
+| P3 | **PolicyEngine 完成**：AC-21～AC-36（数据集 / 管线 / Workspace 入口维度）+ 集成测试 fixture（fixture 用 Sprint 1 Spike 3 验证过的 Crossplane 拉起两个 tenant） |
+| P3 | **Audit Layer**：`@audited` 装饰器 + PG 同事务写入 + Fluent Bit 复制到 OpenSearch（仅观测）；audit 权威查询走 PG |
 
-#### Sprint 3（Week 6-7，06-13 → 06-26）：SFT + 推理 + Workspace
+> **砍到 v2**：DeepSpeed 镜像（v1 用 PyTorch DDP 已能跑 1B；3D 并行真有需要再做）
 
-| P1 | SFT 镜像 + submit_sft API |
-| P1 | 推理镜像 serve-vllm:v1 + platform.deploy（按 tenant_id ns） |
-| P1 | Workspace Operator + dev 镜像 |
-| P1 | Workspace 生命周期 + Keycloak OIDC ingress |
-| P2 | Embedding 批处理 Argo Workflow |
-| P2 | Lance ANN 在线查询封装 |
-| P3 | SDK 全集 + CLI 对应命令 |
+**出口**：raw → 一行命令 → Lance + Gravitino t_0001 schema 可查；监控看板可见；PolicyEngine 全 36 条 AC 过；所有 mutation API 有 audit 记录；**Quota 并发/幂等/滚动累计三组测试全绿**；提交超额作业被 Quota Service 拦截；outbox worker 处理人工 `kubectl delete VolcanoJob` 场景能正确 release reservation；Gravitino 2 副本 + 关掉一个副本平台仍可读。
 
-**出口**：pretrain → SFT → deploy → 推理 → embedding → ANN 全链路通；Workspace 经 Keycloak 鉴权。
+---
 
-#### Sprint 4（Week 8-9，06-27 → 07-10）：完整租户模型 + Portal + 全量预演 #1
+#### Sprint 3（Week 6-7，06-13 → 06-26）：全链路功能通 + Tenant Provisioner
 
+| 负责 | 任务 |
+|---|---|
+| P1 | SFT 镜像 + submit_sft API（LoRA / 全量 SFT；走 outbox 路径） |
+| P1 | 推理镜像 serve-vllm:v1 + platform.deploy（tenant_id ns + Ingress 子域；走 outbox） |
+| P1 | **Workspace Operator 骨架**：controller-runtime 状态机（creating / running / stopped）+ PVC 持久化 + 8h 空闲 stop；暂不含 OIDC ingress（Sprint 4 补） |
+| P1 | **Tenant Provisioner — K8s/云资源层**（基于 Spike 3 产物落地）：Crossplane Composition for Capsule Tenant CR / Kueue LocalQueue / OSS prefix + 2 RAM 子账号；ArgoCD app for Keycloak realm / OpenSearch index template / Grafana org / Gravitino schema / MLflow experiment；每个资源独立 condition + finalizer |
+| P2 | Embedding 批处理 Argo Workflow（**用 Argo + K8s Job**，不引入新 Ray 用例 §3.7.1；一次性 TEI/vLLM Pod） |
+| P2 | Lance ANN 在线查询封装（IVF_PQ 索引 + nearest 查询 helper） |
+| P2 | **V8 斜率测试（关键）**：1TB 子集端到端跑 embedding → Lance → ANN，外推 24h/10TB 吞吐；不达标立即决策（Sprint 4 调优 / 砍到 10% 数据 / 推迟 V8） |
+| P3 | SDK 核心命令 + CLI 核心命令（job / pipeline / data / model / inference / audit / workspace 主路径） |
+| P3 | **Tenant Provisioner — Platform 控制面**：Tenant CR controller（Python，封装 Crossplane/ArgoCD apply）+ 状态聚合 + suspend 冻结顺序 + audit 写入 + drift detection nightly job |
+
+> **砍到 v2**：CLI 高级命令（data update / job restore / lineage 自动化）——v1 SDK/CLI 只保最小可用集
+
+**出口**：pretrain → SFT → deploy → 推理 → embedding → ANN 全链路功能通（Workspace 可创建/停止，OIDC ingress Sprint 4 完成）；`laictl --admin tenant create` 一命令跑通（底层走 Crossplane + ArgoCD）；Provisioner 幂等验证（跑 3 次结果一致）；**V8 1TB 斜率测试结果有数 → 决策 Sprint 4 是否调优**。
+
+---
+
+#### Sprint 4（Week 8-9，06-27 → 07-10）：Workspace 完整 + 完整租户模型 + 1B Soak + 预演 #1
+
+> 第 1 周：**1B 24h soak + checkpoint kill drill**（必须在预演 #1 之前发现训练性能/容错问题）；第 2 周：预演 #1。
+
+| 负责 | 任务 |
+|---|---|
+| P1 | **Workspace 完整**：Keycloak OIDC ingress + SSH（NodePort + key-pair）+ code-server 鉴权；AC-36 验证（tenant-admin 无法进队友 Workspace） |
 | P1 | Kueue ClusterQueue + LocalQueue per tenant，配额硬限 |
-| P1 | RAM Role per tenant（OSS prefix 隔离） |
-| P3 | **第二个测试 tenant 接入演练**（不真用，只验证多租户路径全通） |
-| P3 | Portal v1（Next.js + Keycloak OIDC） |
-| P3 | Portal 列表 + 跨子系统跳转（MLflow/Grafana/Workspace） |
-| P2 | Gravitino 跨 schema 搜索 API（仅自己的） |
-| 全员 | **X-user team 1B 全量预演 #1** |
+| P1 | RAM pipeline-sa（OSS processed/ 专用写权限；AC-33 验证） |
+| P1 | **1B 24h soak 测试（第 1 周，关键）**：用 prod 8×A100/H800 跑 1B DDP 24 小时，测 GPU util / DataLoader 瓶颈 / OSS 带宽；结果不达标 → 立即调优或砍范围（不等 Sprint 5） |
+| P1 | **Checkpoint kill drill（第 1 周）**：训练运行中随机杀 GPU 节点 → 验证 Volcano gang restart + 续训 ≤30min |
+| P2 | Gravitino 跨 schema 搜索 API（仅当前 tenant） |
+| P3 | **前端 v1**（Next.js + Keycloak OIDC，**数据域完整页面优先**）：数据集管理（上传/浏览/血缘）/ 数据管线提交·监控 / 元数据浏览 / 实验对比；作业·模型域先提交+只读监控；经 API Gateway 走 OpenAPI 契约 |
+| P3 | **第二个测试 tenant 接入演练**：`laictl --admin tenant create t-test` → 验证 Tenant CR + Crossplane + ArgoCD 全链路 + V9 资源命名审计（grep display_name 为空）+ suspend 冻结顺序（先吊 RAM AK → 后续步） |
+| 全员（第 2 周）| **X-user team 1B 全量预演 #1**（X-user 独立走完全链路；平台在旁观察记录问题） |
 
-**出口**：Portal 可用；架构验证 = 有 2 个 tenant 同时存在但隔离；X-user 独立走完全流程。
+**出口**：Portal 可用；Workspace 经 Keycloak 鉴权可进；2 个 tenant 隔离验证通过；V9 命名审计无违规；**1B 24h soak GPU util ≥ 60% baseline**；checkpoint kill drill 通过；全链路预演 #1 跑通（可有已知问题，记录进 backlog）。
 
-#### Sprint 5（Week 10-11，07-11 → 07-24）：硬化 + 性能调优
+---
 
-| 全员 | 处理预演 #1 反馈 |
-| P1 | 训练 GPU 利用率调优（≥60%） |
-| P1 | 推理 P95 延迟基准 + vLLM 调优 |
-| P1 | 抢占恢复演练（≤1h） |
-| P2 | Lance 热点路径优化 |
-| P2 | Embedding 批吞吐基准 |
-| P3 | SDK/CLI 错误信息友好化 + 文档 |
-| P3 | Keycloak HA 演练（杀一副本） |
-| 全员 | **X-user 全量预演 #2**（达性能目标） |
+#### Sprint 5（Week 10-11，07-11 → 07-24）：硬化 + 调优 + 预演 #2
 
-**出口**：8 + 1 条验收标准全过。
+> 第 1 周：消化预演 #1 backlog + 性能调优；第 2 周：预演 #2 达标。
+> **规则**：预演 #1 backlog 中阻塞性 bug 第 1 周必须清零，性能调优只在 bug 清零后启动，不并行。
 
-#### Sprint 6（Week 12，07-25 → 08-01）：联调 + 上线 buffer
+| 负责 | 任务 |
+|---|---|
+| 全员（第 1 周前半）| 处理预演 #1 反馈（阻塞性 bug 优先；非阻塞记 v2 backlog） |
+| P1 | 训练 GPU 利用率调优（基于 Sprint 4 soak baseline，目标 ≥60% × 1.3）；DataLoader 并发 / prefetch / SSD 缓存 |
+| P1 | 推理 P95 延迟基准 + vLLM 调优（batch size / KV cache） |
+| P2 | Lance 热点路径优化（读放大 / 列裁剪） |
+| P2 | Embedding 批吞吐基准（基于 Sprint 3 1TB 斜率结果决定调优方向；目标 10TB/24h 或已砍 10%） |
+| P3 | SDK/CLI 错误信息友好化 + 用户文档 |
+| P3 | **Keycloak HA 演练**（杀一副本，验证第二副本接管 + 平台无中断） |
+| P3 | Nightly drift 检测 job 上线（`keycloak-config-cli diff`，差异 > 0 告警） |
+| 全员（第 2 周）| **X-user 全量预演 #2**（所有 V1-V12 验收标准达标） |
 
-| 全员 | 仅 bugfix |
-| 全员 | 文档收口、监控告警上线、X-user 培训 |
+**出口**：V1-V12 全部验收标准过（包括性能基准 + audit 完整性 + Provisioner 幂等）。
 
-**出口（MVP 验收 08-01）**：X-user team 独立提交 1B 真实预训练。
+---
+
+#### Sprint 6（Week 12，07-25 → 08-01）：上线 buffer
+
+| 负责 | 任务 |
+|---|---|
+| 全员 | 仅 bugfix（无新 feature） |
+| 全员 | 文档收口（runbook / 用户手册 / ADR 补全） |
+| 全员 | 监控告警上线（P0 告警推送渠道验证） |
+| P3 | X-user team 培训（SDK/CLI 使用 + 常见错误处理） |
+
+**出口（MVP 验收 08-01）**：X-user team 独立提交 1B 真实预训练，平台团队不介入。
+
+---
 
 ### 5.4 Hard Deadlines
 
 | 日期 | 里程碑 | 不达标后果 |
 |---|---|---|
-| 05-15 | Spike 全 PASS + Keycloak 可登录 | 顺延，可能砍 v1 范围 |
-| 05-29 | 训练跑通小模型 + tenant_id 注入正确 | 顺延 1 周 |
-| 06-12 | 10TB 数据管线 PASS + Gravitino schema=t_0001 | 砍数据集量 |
-| 06-26 | SFT/推理/Workspace 三件套通 + OIDC 全链 | 砍推理或 Workspace |
-| 07-10 | 全链路预演 #1 + 第二 tenant 接入演练 | **必须达成** |
-| 07-24 | 预演 #2 性能达标 | 顺延 buffer 周 |
-| **08-01** | **MVP 验收** | **MVP 失败** |
+| 05-15 | 两 Spike PASS + Keycloak 可登录 + tenant_id 解析 + Crossplane/ArgoCD sample 可起 | 顺延 Sprint 0，可能砍 v1 范围 |
+| 05-29 | DDP 训练跑通（**走 outbox 路径**）+ tenant_id 注入 + Checkpoint 续训 + PolicyEngine AC-1~20 + **Spike 3 PASS（Tenant CR + Crossplane 可行）** + OpenSearch 3 节点 ready | Spike 3 不 PASS → 立即触发滑窗：V12 降级或推迟 |
+| 06-12 | **10TB 数据管线 PASS** + Gravitino t_0001 + Gravitino 2 副本 HA + **全 36 条 AC 过** + Audit Layer + **Quota 三组测试全绿（并发/幂等/滚动）** + outbox worker 稳定 | 砍数据集量；PolicyEngine 滑入 Sprint 3 |
+| 06-26 | SFT + 推理全链路通 + **Tenant Provisioner 幂等（基于 Crossplane/ArgoCD）** + Workspace Operator 骨架 + **V8 1TB 斜率有结果** | V8 不达标 → 当场决策砍 10% 或推迟 V8；其它砍 Workspace |
+| 07-10 | Workspace 完整 + Portal 可用 + **1B 24h soak GPU util ≥60%** + **checkpoint kill drill PASS** + **预演 #1 PASS** + V9 命名审计 + 第二 tenant 接入演练 | **必须达成**；Portal 可降级为静态链接页；soak 不达标 → 推迟 |
+| 07-24 | 预演 #2 性能达标 + V1-V12 全过 | 顺延 buffer 周；通知 X-user 推迟上线 |
+| **08-01** | **MVP 验收（V10/V11/V12 + V2/V5/V8 任一 fail 即推迟）** | **MVP 失败** |
 
-### 5.5 滑窗策略
+### 5.5 关键路径与超载预警
+
+原计划隐含的三处超载，修订后的缓解方式：
+
+| 超载点 | 原计划 | 修订后（v3） |
+|---|---|---|
+| **P1 Sprint 3** | SFT + vLLM + Workspace Operator（完整）+ OIDC ingress，约 3 周量压 2 周 | Workspace 拆成骨架（Sprint 3）+ 完整（Sprint 4），P1 Sprint 3 可交付 |
+| **P3 Sprint 2 单点过载** | P3 同 sprint 背 PolicyEngine 36 AC + Quota 4 维 + Audit + CLI + URI 解析，Codex 评审 #1 | **Quota Service 转给 P2**（与配额数据/账本同侧）；P3 只保 PolicyEngine + Audit + Tenant API；CLI delete/force 等推到 Sprint 3 |
+| **P3 Sprint 3 Tenant Provisioner 单担** | P3 一人接 10 个外部系统编排，与"v1 首租户人工/IaC"自相矛盾，Codex 评审 #2 | **P1 接 K8s/云资源层（Crossplane Composition + ArgoCD app）**；P3 只接 Tenant CR 控制面 + audit；Sprint 1 加 Spike 3 兜底 |
+| **outbox / Kueue informer 无 owner** | 配额闭环关键路径无独立任务，Codex 评审 #4 | **Sprint 1 P1 接 outbox 基础 + POST /pretrain 走 outbox**；Sprint 2 P1 完成 informer + worker 稳态；P2 写对账测试 |
+| **OpenSearch HA / Gravitino HA 无 owner** | §3.16 升 v1 必做，但 sprint 未跟，Codex 评审 #5 | **Sprint 1 P1 接 OpenSearch 3 节点 + security plugin**；Sprint 2 P2 接 Gravitino 2 副本 + cache |
+| **V2/V8 大规模验收无资源窗口** | Sprint 5 才跑全量，发现问题来不及修，Codex 评审 #3 | **Sprint 3 P2 跑 V8 1TB 斜率测试**；**Sprint 4 第 1 周 P1 跑 1B 24h soak + checkpoint kill drill** |
+| **Sprint 6 验收门禁不含 V10-V12** | Day 1-3 只跑 V1-V9，Codex 评审 #6 | Day 1-2 跑 V1-V12 全量；硬阈值取代 Partial 主观放行 |
+| **Sprint 5 双重满载** | 消化预演反馈 + 全量调优 + HA 演练 + 预演 #2，4 件事并行 | 第 1 周 bug 优先，bug 清零后才调优；预演 #2 放第 2 周，有序 |
+
+### 5.6 滑窗策略
 
 按"不可砍 → 可降级 → 必砍"分层：
-1. **不可砍**：训练运行时、Checkpoint 容错、数据管线、监控、**Keycloak/Tenant Service**（架构基线）
-2. **可降级**：推理（单实例无 Ingress）、Embedding 批（10% 数据）、Workspace（仅 SSH）、Portal 美化
-3. **必砍优先**：Lineage 自动化 → CLI 高级命令 → 模板镜像数量 → 第二 tenant 接入演练（保留架构能力即可）
+
+1. **不可砍**：训练运行时、Checkpoint 容错、数据管线、监控、Keycloak/Tenant Service、**PolicyEngine + Quota + Audit + outbox worker + Kueue informer**（Admission Pipeline 整体）、**Tenant Provisioner（含 Crossplane/ArgoCD 栈）**、**Portal v1 只读**、**Embedding（V8 至少 10%）**、**OpenSearch HA + security plugin**、**Gravitino HA**
+2. **可降级**：推理（单实例无 Ingress → 可用 NodePort）、Embedding（10TB → 10% = 1TB）、Workspace（仅 SSH，去掉 code-server）、Portal（静态链接页替代 Next.js 完整版）、Tenant Provisioner 全自动 → 半自动（人工 apply Tenant CR，Crossplane/ArgoCD 后续物化保留）
+3. **已确定砍到 v2**（无条件）：DeepSpeed 镜像、CLI 高级命令（data update / job restore）、Lineage 自动化（保留手工 tag）、SDK 跨语言扩展
+4. **触发性砍项**：第二 tenant 接入演练（若 Sprint 4 第 1 周 1B soak 失败，腾时间修训练）
 
 ---
 
@@ -702,6 +1561,10 @@ Lineage 边（v1 手工）：
 | S2 | Spike 失败 | 每 spike 有 fallback；按滑窗砍范围 |
 | D1 | OSS 凭证泄漏 | ServiceAccount + RAM Role per tenant；CI secret scan |
 | **D5** | **资源命名混入 display_name 导致泄漏 / 难重命名** | **constitution.md 硬约束；CI 跑 grep 检查（V9 用例）；code review 强制** |
+| **D6** | **PolicyEngine 漏判（handler 散落 `if tenant_id ==`，绕过统一决策点）** | **CI grep 拦截；所有 mutation handler 单测必须 mock PolicyEngine.can 并断言被调用；36 条 AC 用例（AC-1~AC-36）全过** |
+| **D7** | **Audit 写失败但业务成功（违反"audit 写失败即拒"）** | **`@audited` 装饰器内同一 PG 事务；E2E 测试故意挂 audit 表 → 期望业务回滚** |
+| **D8** | **`/admin/*` 与普通路径混用导致 platform-admin 误操作跨 tenant** | **Router 分两个独立模块 + 各自 middleware；CI grep 禁止 admin handler 出现在 `routers/v1/`** |
+| **D9** | **OSS RAM 策略错配（user-sa 误授 processed/ 写权）** | **provision 用 IaC 模板 + 单测；Sprint 2 末故意尝试 alice 写 processed/ → 期望 RAM 拒** |
 
 ### 6.2 P1 风险
 
@@ -715,7 +1578,9 @@ Lineage 边（v1 手工）：
 | O2 | OSS 流量超额 | 监控 + 训练数据预下载 SSD |
 | O4 | Argo/Volcano/Kueue controller 挂 | replica + PDB；runbook |
 | O5 | SSO/网络隔离 | Sprint 0 提前确认 |
-| O7 | **tenant_id 与 K8s ns / OSS prefix / Gravitino schema 不一致** | **Tenant Service 统一 reconcile 任务，发现漂移告警** |
+| O7 | **tenant_id 与 K8s ns / OSS prefix / Gravitino schema 不一致** | **Tenant Provisioner（§3.14）reconcile + 漂移告警；nightly 全 tenant 扫一遍** |
+| O8 | **Quota Service 估算偏差大（管线实际 OSS 流量 ≫ 提交时估算）** | **预检按"模板基线 × 输入数据集 size"算；运行时超 1.5x 自动告警 + admin 可强 cancel** |
+| O9 | **Tenant Provisioner reconcile 卡在某一步（如 OSS RAM 创建失败）** | **每 step 幂等 + 重试；> N 次落入 `provisioning_failed` 状态由 platform-admin 介入；不允许半新半旧** |
 | S3 | 人员请假 | 知识备份 |
 | S4 | 公司临时插队需求 | constitution 写明 v1 拒绝；老板背书 |
 | D2 | 跨租户越权 | OSS prefix RAM 策略 + Gravitino schema RBAC |
@@ -797,12 +1662,13 @@ Lineage 边（v1 手工）：
 
 #### 日志栈（详见 ADR-005）
 
-- **栈**：OpenSearch 2.x（StatefulSet 单副本）+ Fluent Bit 3.x（DaemonSet）+ Grafana（OpenSearch datasource）
-- **多租户隔离**：Fluent Bit 通过 K8s namespace metadata 注入 `tenant_id` label；index 模式 `logs-{tenant_id}-{date}`；无 label 日志写入 `logs-unlabeled-*` 隔离 index
-- **保留**：热数据 14 天本地 PV；超期由定时 job 归档到 `oss://logs/{tenant_id}/{date}/`
-- **查询权限**：v1 软隔离（Grafana datasource 默认带 `tenant_id` 过滤）；v2 接 OpenSearch security plugin RBAC 做硬隔离
-- **环境差异**：dev 用 docker-compose 单容器；staging/prod 上 StatefulSet（Sprint 1 落地，0b 仅 dev 跑通）
-- **故障**：单副本宕机会丢失当时段未落盘日志，RTO 4h（v1 可接受）；v2 上 HA + ILM
+- **栈**：OpenSearch 2.x **StatefulSet 3 节点 cluster（replica=1）** + Fluent Bit 3.x（DaemonSet，per-tenant 限速）+ Grafana（OpenSearch datasource，per-tenant role token）
+- **多租户隔离**：**OpenSearch security plugin（v1 启用）**——每 tenant 一个 role，绑定 `logs-{tid}-*` / `audit-{tid}-*` index pattern；Fluent Bit 按 K8s namespace metadata 注入 `tenant_id` label；无 label 日志写入 `logs-unlabeled-*` 隔离 index；详见 §3.16.1
+- **保留 + ILM**：单 index 50GB 或 1 天 rollover；保留 14 天热数据 + 自动转 `oss://logs/{tid}/{date}/` 冷归档；per-tenant 总大小上限 100GB（超限 reject + 告警）
+- **写入限速**：Fluent Bit per-tenant 10MB/s（超限 drop + 告警）；`index.mapping.total_fields.limit=1000`（防 mapping 爆炸）
+- **查询权限**：v1 硬隔离（security plugin role + index ACL）；**audit 权威查询走 PG，OpenSearch 仅作 Grafana 可降级视图**
+- **环境差异**：dev 用 docker-compose 单容器；staging/prod 上 3 节点 StatefulSet（Sprint 1 落地）
+- **故障**：3 节点任一宕机不中断；OpenSearch 全挂时 Fluent Bit 本地缓冲 + Platform API 提交路径不受影响；audit 查询降级到 PG 直查
 
 ### 6.5 故障演练
 
@@ -848,6 +1714,9 @@ Lineage 边（v1 手工）：
 | V7 | 多租户落地 | OIDC 登录拿 token；submit 自动注入 tenant_id；第二测试 tenant 不能访问 t-0001 资源 |
 | V8 | Embedding 闭环 | 10TB 24h 内，ANN ≤ 500ms |
 | **V9** | **资源命名审计** | **`grep -ri "x-user" oss-paths k8s-resources gravitino-schemas mlflow-experiments` 必须为空（仅出现在 display 字段）** |
+| **V10** | **PolicyEngine AC 全过** | **跑 tenant-team-scenarios.md 的 36 条 AC（AC-1~AC-36，含 AC-35 pipeline 参数归属 / AC-36 Workspace 入口拒入），全 pass；Workspace enter 至少覆盖 owner / 非 owner 的 tenant-admin / 走 `/admin/*` 的 platform-admin 三种角色** |
+| **V11** | **Audit 完整性** | **mutation / `/admin/*` / `--force` / `--on-behalf` 操作都能在 `tenant_audit_log` 查到；故意挂 audit 表 → 业务回滚** |
+| **V12** | **Tenant Provisioner 幂等** | **`tenant create t-test` 跑 3 次结果一致；中途 kill reconciler 重启能续上** |
 
 ### 7.3 L2 集成测试
 
@@ -857,7 +1726,15 @@ Lineage 边（v1 手工）：
 | 数据管线集成 | 100MB 子集 + Gravitino schema 写 | sprint 末 |
 | 推理集成 | 部署 + OIDC 调用 | nightly |
 | Workspace 集成 | OIDC 登录 → 创建 → SSH → 删除 | sprint 末 |
-| **多租户集成** | **创建 tenant t-test → 提作业 → 验隔离 → 删除** | **sprint 末** |
+| **多租户集成** | **创建 tenant t-test → 提作业 → 验隔离 → 删除（验 Provisioner 幂等 + V9 命名审计）** | **sprint 末** |
+| **PolicyEngine AC** | **跑全部 36 条 AC 用例（AC-1~AC-36，fixture 拉两个 tenant + 3 角色用户；含 AC-35 pending pipeline 参数归属 / AC-36 Workspace 入口拒入）** | **每 PR + nightly** |
+| **Audit 完整性** | **mutation / admin / --force / --on-behalf 全路径 → audit_log 行匹配 + 挂表回滚** | **sprint 末** |
+| **Quota 预检** | **构造超额 submit → 期望 400 + quota_exceeded reason** | **每 PR** |
+| **Quota 并发** | **2 个大作业同时提交（各占配额 90%）→ 仅一个 reserve 成功，另一个返 quota_exceeded；验证无双扣** | **sprint 末** |
+| **Quota 释放** | **提交成功后取消作业 → release 后再提交同量作业可通过；验证配额正确归还** | **sprint 末** |
+| **Quota 滚动累计** | **串行跑 N 个小作业累计接近 30 天 GPU-hour 上限 → 第 N+1 个应被拒（quota_exceeded）；验证 finalize 写入 `tenant_quota_usage` 而非 release 丢失** | **sprint 末** |
+| **Quota 幂等** | **同一 `request_id` 重复 `reserve` 两次 → 第二次返回与第一次相同的 reservation_id，配额只扣一次；UNIQUE 约束生效** | **每 PR** |
+| **Dataset 删除竞态** | **并发 `dataset.delete` 与 `train.submit`（引用该数据集）→ 二者只能一个成功；submit 成功则 delete 转 deprecated，delete 成功则 submit 返 `dataset_not_writable`；事务结束后 OSS 真删才异步执行；验证不出现悬空 lineage** | **sprint 末** |
 | Platform API | 全 endpoint pytest（含 token 校验失败路径） | 每 PR |
 
 ### 7.4 L1 单元测试范围
@@ -866,6 +1743,11 @@ Lineage 边（v1 手工）：
 |---|---|
 | URI 解析器 | gravitino:// + my/ 别名、错误格式 |
 | **Tenant Service** | **token 解析、tenant_id 缓存、display_name 查询** |
+| **PolicyEngine** | **36 条 AC 用例（AC-1~AC-36，输入：ctx + action + resource snapshot；断言：allow/deny + reason；显式覆盖 AC-35 pipeline.update 在 pending/non-pending × owner/tenant-admin 矩阵，AC-36 workspace.enter 在 owner/tenant-admin/platform-admin 矩阵）** |
+| **Quota Service** | **OSS 流量 / CPU 时 / GPU 时 预检计算；超额 / 边界 / 多维同时超 |
+| **Audit 装饰器** | **正常路径写入 + 同事务回滚（mock PG 写失败）+ override / on-behalf 标记** |
+| **Tenant Provisioner** | **10 个 step 幂等 + 重启续作 + 失败状态机；mock 外部系统 |
+| **Resource 状态机** | **训练/管线/Workspace/数据集/Tenant 转换合法性表** |
 | Platform API | 鉴权、配额、外部组件 mock |
 | SDK | OIDC 流、token 缓存、重试 |
 | Workspace Operator | 状态机、空闲检测 |
@@ -881,17 +1763,24 @@ Lineage 边（v1 手工）：
 | 数据清洗吞吐 | 测出 | ≥100GB/h | ≥100GB/h |
 | Embedding 批吞吐 | 测出 | 10TB/24h | 10TB/24h |
 | **Token 校验中间件** | **测出** | **P95 ≤ 5ms** | **≤5ms** |
+| **PolicyEngine 决策** | **测出** | **P95 ≤ 2ms（纯内存）** | **≤2ms** |
+| **Audit 写入开销** | **测出** | **P95 ≤ 5ms（同事务）** | **≤5ms** |
 
 ### 7.6 验收判定流程
 
 ```
 Sprint 6 (07-25 起)
-  Day 1-3: 平台跑全部 V1-V9 打分
-  Day 4: X-user team 自跑反馈
-  Day 5: 联席验收会议
-    全 Pass → MVP 达标，08-01 起跑
-    Partial → 平台决定阻塞与否
-    Fail → hot fix 或推迟 + 通知老板
+  Day 1-2: 平台跑全部 V1-V12 自动化（含 V10 PolicyEngine 36 AC / V11 Audit / V12 Provisioner）
+           + 性能基准 + Quota 并发/幂等/滚动累计 + Dataset 删除竞态测试
+  Day 3:   X-user team 自跑反馈
+  Day 4:   修复 + 复验（仅 bugfix；不允许新 feature）
+  Day 5:   联席验收会议 → go / no-go
+
+硬阈值（不允许 Partial 主观放行）：
+  - V10 / V11 / V12 任一 fail        → 推迟 MVP
+  - V2 / V5 / V8 任一性能未达标        → 推迟 MVP（V8 可走 Sprint 3 已决策的 10% 范围）
+  - V1 / V3 / V4 / V6 / V7 / V9 任一 fail → 推迟 MVP
+  - 全部 Pass → MVP 达标，08-01 起跑
 ```
 
 ### 7.7 上线后持续验证
