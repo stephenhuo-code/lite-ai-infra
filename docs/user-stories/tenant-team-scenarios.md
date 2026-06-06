@@ -177,10 +177,11 @@
 11:00  离职同事 dave 留下一个被引用的 dataset，alice 要清理
        alice 自己删失败（owner ≠ alice），找 lead
        laictl data delete gravitino://my/dave-corpus@v1 --force
-       ❌ "dataset 被 1 个 model 引用：[model-x]" + 提示先解引用
-       → 解引用后:
-       laictl data delete gravitino://my/dave-corpus@v1 --force
-       ✅ 通过（admin 跳过 owner 检查，audit 写入 admin override）
+       ✅ 通过 — tenant-admin + --force 跳过 owner 检查；ref_count=1 > 0
+          → 数据集状态转为 deprecated（OSS 数据保留，阻止新作业引用）
+          audit 写入：action=dataset.deprecate, override=true, 引用快照 [model-x]
+       后续：model-x 被删除后 ref_count 降为 0
+          → nightly GC 自动完成硬删，或 `laictl data delete gravitino://my/dave-corpus@v1` 再次触发
 
 12:00  想给自己加配额
        Portal 只读显示配额，没有"改"按钮
@@ -375,7 +376,7 @@
 
 | 能力 | 行为 | 备注 |
 |---|---|---|
-| 删队友注册的数据集（含被引用） | `laictl data delete <uri> --force` | 带 `--force` 时跳过引用检查，但仍写 audit log |
+| 废弃队友注册的数据集（含被引用） | `laictl data delete <uri> --force` | ref_count>0 时转为 `deprecated`（OSS 保留、阻止新引用）；ref_count==0 时直接硬删；写 audit + 引用快照 |
 | 改任何队友的数据集元数据 | `laictl data update <uri> --name newname` | rename / 改描述 |
 | 取消任何队友的 running 管线 | `laictl pipeline cancel <run_id>` | — |
 | 提交超大管线（> 默认配额阈值） | `laictl pipeline submit --large` | 仍受 tenant 总配额约束 |
@@ -459,7 +460,7 @@ PolicyEngine 必须通过的端到端测试：
 | AC-24 | alice 删 bob 的数据集 | ❌ `only owner or tenant-admin` |
 | AC-25 | alice 改 bob 的数据集 schema | ❌ `only owner or tenant-admin` |
 | AC-26 | alice 引用 t-0099 数据集（OSS 直读 + URI 解析双路径） | ❌ `cross-tenant`（RAM 拒 + PolicyEngine 拒） |
-| AC-27 | tenant-admin 强删队友数据集（含引用） | ✅ + audit |
+| AC-27 | tenant-admin `--force` 废弃队友数据集（ref_count>0） | ✅ 转 deprecated + audit（OSS 保留，不硬删）|
 | **数据管线** | | |
 | AC-28 | alice 提交管线（配额内） | ✅ |
 | AC-29 | alice 提交管线（OSS 流量超配额） | ❌ `quota exceeded: oss_traffic`（提交时拒） |
@@ -468,6 +469,10 @@ PolicyEngine 必须通过的端到端测试：
 | AC-32 | alice 重跑自己 failed 管线 | ✅（配额重新预检） |
 | AC-33 | alice 直接写 OSS `processed/` 区 | ❌ RAM 拒（仅管线 SA 可写） |
 | AC-34 | platform-admin gc 孤儿数据集 | ✅ + audit + 二次确认 |
+| **数据管线（续）** | | |
+| AC-35 | alice 改 bob 的 pending 管线参数 | ❌ `only owner or tenant-admin can update pipeline params` |
+| **Workspace** | | |
+| AC-36 | tenant-admin 进队友 Workspace（v1） | ❌ `Workspace 仅 owner 可访问（v1）` — tenant-admin 在 v1 被显式拒 |
 
 ---
 
@@ -481,13 +486,17 @@ PolicyEngine 必须通过的端到端测试：
 | 推理 Deployment | healthy | view, scale(own), tear-down(own) | view, scale(any), tear-down(any) | view, override |
 | Workspace | running | enter(own), stop(own) | view list（不进 v1） | enter(any), stop(any) |
 | Workspace | stopped | start(own), delete(own) | delete(any) | delete(any) |
-| 数据集 | active | view, pull, register, delete(own)[1], update(own) | view, pull, delete(any)[1] `--force`, update(any) | view, pull, gc(orphan)[1] + 强 audit |
+| 数据集 | active | view, pull, register, delete(own)[1], update(own) | view, pull, deprecate(any)[1] `--force`, update(any) | view, pull, gc(orphan)[1] + 强 audit |
+| 数据集 | deprecated | view, pull（只读） | view, pull, delete（ref_count==0 时）[1] | view, pull, gc（强删，含 ref_count>0）[1] + 二次确认 |
 
-> [1] **delete 决策依赖派生属性 `ref_count`**（实时查 MLflow run / training job / model 的引用），不是状态：
-> - `ref_count == 0`：owner / admin 可直接删
-> - `ref_count > 0`：普通成员拒；tenant-admin 用 `--force` 可强删 + audit；platform-admin gc 用于 owner 离职后的孤儿
+> [1] **delete / deprecate 决策依赖派生属性 `ref_count`**（实时查 Gravitino lineage 边），不是唯一状态：
+> - `ref_count == 0`：owner / admin 可直接硬删（OSS + Gravitino 同步删除）
+> - `ref_count > 0` + 普通成员：拒（`dataset 被 N 个资源引用`）
+> - `ref_count > 0` + `--force` + owner/tenant-admin：转 `deprecated`（OSS 保留；阻止新引用；现有引用只读）；audit 写引用快照（**不硬删，不跳 ref_count**）（AC-27）
+> - `deprecated` + `ref_count == 0`：nightly GC 自动完成硬删，或 owner/admin 手动触发
+> - `deprecated` + `ref_count > 0` + platform-admin gc（`/admin/*`）：强制硬删（最高破坏性）；强 audit + 二次确认（AC-34）
 >
-> v1 不引入 archived / deprecated / pinned / processing 等附加状态（详见底部"不在 v1 范围"）。删除即硬删，audit log 独立留痕。
+> [2] **训练作业 archived 状态**：`restore`（archived → active）仅 tenant-admin+；`delete(永久)`（销毁作业元数据 + artifact）仅 platform-admin；普通成员 archived 只读。
 | 数据管线 | pending | view, cancel(own), update params(own) | view, cancel(any), update(any) | view, cancel + override |
 | 数据管线 | running | view, cancel(own); 不可改参数 | view, cancel(any); 不可改参数 | view, cancel + override |
 | 数据管线 | failed | view, retry(own) | view, retry(any) | view, retry, override |
