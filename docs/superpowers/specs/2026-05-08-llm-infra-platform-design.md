@@ -10,7 +10,7 @@
 ## 0. Executive Summary
 
 ### 项目定位
-公司级共享 LLM/多模态训练 + 微调 + 推理平台，**对外多公司 SaaS**（架构从第一天起多企业，ADR-010）。**按版本递增交付：v1 = 数据域（数据管线/元数据/多模态处理）→ v2 = 微调（SFT/LoRA）→ v4 = 1B 预训练**（v3 预留，一次顺延）；首个客户 X-user team 在 12 周内（到 2026-08-01）沿此路线走完全链路。通过 Keycloak 做身份/企业管理，所有资源标识与企业名解耦，扩展到 5+ 企业**不需要重命名任何资源**。
+公司级共享 **多模态数据 + Agent + LLM 应用**平台，**对外多公司 SaaS**（架构从第一天起多企业，ADR-010）。**按版本递增交付：v1 = 数据域（数据管线/元数据/多模态处理）→ v2 = Agent 开发平台 + 统一 LLM 接入（Claude/Codex/Minimax 订阅）→ v3 = Agentic Search（多源多模态统一检索）→ v4 = 微调（SFT/LoRA）→ v5 = 1B 预训练**。战略上**先用第三方 LLM + Agent 快速交付价值，自研微调/预训练后置**。通过 Keycloak 做身份/企业管理，所有资源标识与企业名解耦，扩展到 5+ 企业**不需要重命名任何资源**。
 
 ### 核心架构原则（写进 constitution）
 
@@ -39,10 +39,10 @@
 - 实现：所有可用 OSS 都用，3 人聚焦"粘合 + 身份/组织层 + SDK + 前端"
 - 多企业：首发单企业落地但架构完整；后续版本仅扩展企业数量、不动资源命名
 
-> **版本路线（2026-06-06）**：**v1 = 数据管线 + 元数据 + 多模态数据处理**（最高优先）→ **v2 = 微调（SFT/LoRA）** → **v4 = 1B 模型预训练**（v3 预留，一次顺延）。身份/组织/授权/SDK/监控/网关等基础设施贯穿、随 v1 最先就位。**递增交付、总时间线不变（→2026-08-01）。**
+> **版本路线（2026-06-06 修订）**：**v1 数据域** → **v2 Agent 平台 + 统一 LLM 接入** → **v3 Agentic Search** → **v4 微调（SFT/LoRA）** → **v5 1B 预训练**。身份/组织/授权/SDK/监控/网关等基础设施贯穿、随 v1 最先就位。**递增交付**（时间线见 §5）。
 
 ### 交付目标（一句话）
-**首个客户 X-user team 在 12 周内（→2026-08-01）沿版本递增走完全链路、总时间线不变：v1（10TB 多模态数据准备 → 清洗/处理 → Lance + Gravitino 元数据）→ v2（基于现成基座 SFT/LoRA → 推理部署 → Embedding 检索）→ v4（1B 多模态预训练，单节点 8 GPU，3-4 天）；每个版本可独立交付验收；节点故障 1h 内自动恢复；任意资源标识不含企业/团队名。**
+**首个客户 X-user team 沿版本递增获得价值：v1（10TB 多模态数据准备 → 清洗/处理 → Lance + Gravitino 元数据）→ v2（Agent 平台 + 统一 LLM 接入，用 Claude/Codex/Minimax 订阅做模型/管线/数据探查）→ v3（Agentic Search 多源多模态统一检索）→ v4（基于现成基座 SFT/LoRA + 推理）→ v5（1B 多模态预训练，8 GPU，3-4 天）；每个版本可独立交付验收；节点故障 1h 内自动恢复；任意资源标识不含企业/团队名。**
 
 ---
 
@@ -58,17 +58,26 @@
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 身份 / 租户层（v1 必做）                                     │
-│   ⑩ Keycloak（OIDC IdP + tenant 注册中心）                  │
-│   ⑪ Tenant Service（Platform API 内：tenant_id 解析、       │
-│      成员管理、display_name ↔ tenant_id 映射）              │
+│ 身份 / 企业层（v1 必做）                                     │
+│   ⑩ Keycloak 26.6.2（OIDC IdP + Organizations=企业 + 授权）  │
+│   ⑪ Org Service（解析 groups claim → enterprise/group/role）│
+│   授权：薄 can()(v1) → Cerbos PDP(v2)                        │
 └─────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────┐
-│ 控制平面（自研薄层）                                        │
-│   ② 配额（Kueue ClusterQueue/LocalQueue per tenant）        │
+│ 控制平面（微服务 + API 优先）                               │
+│   ② 配额（Kueue Cohort=企业 / LocalQueue=组）               │
 │   ③ 实验元数据（MLflow 集成）                                │
-│   Platform API（FastAPI）                                   │
+│   API Gateway/BFF + 各子系统服务（FastAPI）                 │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ AI 应用平面（v2 / v3 新增）                                  │
+│   ⑮ 统一 LLM 接入服务（LLM Gateway，LiteLLM 待选型）         │
+│      接 Claude / Codex / Minimax 订阅 + 路由/计量/密钥/限流  │
+│   ⑯ Agent 平台 + 统一对话交互（v2）                          │
+│      模型开发 / 管线开发 / 数据探查 agent，复用第三方模型    │
+│   ⑰ Agentic Search（v3）：多源多模态数据统一检索 agent      │
 └─────────────────────────────────────────────────────────────┘
               ↓                    ↓                  ↓
 ┌──────────────────┬──────────────────┬──────────────────────┐
@@ -110,6 +119,9 @@
 | Ⓒ | 日志 | 集中日志查询 | OpenSearch **3 节点 cluster（v1）+ security plugin + ILM**（见 §3.16.1）+ Fluent Bit 采集 + Grafana 可视化（详见 ADR-005） |
 | **⑫** | **Admission Pipeline** | **准入中间件链：① PolicyEngine（`can(ctx, action, resource)` → 调 **Cerbos**，ADR-011）→ ② ~~QuotaService~~（**v1 推迟**，无 PG 预算账本，仅 Kueue 静态配额）→ ③ Audit（**v1 追加写 OSS**）+ Outbox（外部副作用由 worker 按 workload_id 幂等执行；**禁止**把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步事务）；详见 §3.9/§3.11** | **Platform API 中间件链 + Cerbos sidecar + OSS audit + outbox worker；v1 无 PG（配额账本/同事务审计推迟）** |
 | **⑬** | **Enterprise Provisioner** | **开通/暂停/归档企业时 reconcile：Keycloak Organization + Group 子组骨架（含角色）/ Kueue LocalQueue+Cohort / OSS prefix + RAM/STS / Gravitino schema / MLflow experiment / Grafana org / OpenSearch index template（v1 推迟：PG 元数据/配额账本）** | **controller-runtime 风格 reconciler，幂等；经 Keycloak Admin API 建 Org/Group** |
+| **⑮** | **统一 LLM 接入服务（LLM Gateway）** | **对所有第三方/自托管模型的统一 API（chat/completion/embedding）：模型路由、密钥/订阅凭证管理、限流、按 enterprise/group 计量、回退**；接 **Claude / Codex / Minimax 订阅** 等 | **LiteLLM 待选型（候选）；独立微服务；策略经 §3.2 授权** |
+| **⑯** | **Agent 平台 + 统一对话交互** | **Agent 开发框架 + 运行时 + 统一 chat UI**；内置 agent 用于**模型开发 / 管线开发 / 数据探查**（复用第三方模型，经 ⑮）；工具调用走 Platform API 契约 | **自研（v2）；前端统一对话入口 + 后端 agent 运行时** |
+| **⑰** | **Agentic Search** | **一个 agent 对集成的多源多模态数据（OSS/Lance/Gravitino/MLflow…）做统一检索**：规划→多模态检索→综合→引用 | **自研（v3）；复用 ⑮ LLM + v1 数据/向量** |
 
 ### 1.3 三人分工
 
@@ -123,24 +135,27 @@
 
 ## 2. MVP 范围切片
 
-### 2.1 v1 验收标准（8 条 + 1 条架构标准）
+### 2.1 验收标准（按版本）
 
-> 下列为 08-01 须全部满足的验收项（非交付顺序）。**按版本递增交付（§2.2）**：**v1** = 数据域（验收 1、6、8 + 架构标准 9）→ **v2** = 微调/推理（验收 3、4、5）→ **v4** = 1B 预训练（验收 2）。每个版本可独立验收。
+> 各版本独立验收。**版本归属**：**v1** = 数据域（1、6、8、架构标准 9）→ **v2** = Agent 平台 + 统一 LLM 接入（10）→ **v3** = Agentic Search（11）→ **v4** = 微调/推理（3、4、5）→ **v5** = 1B 预训练（2）。
 
 1. **数据**：10TB 原始图文 → Data-Juicer 清洗 → Lance 数据集 → Gravitino 注册（按 enterprise_id/group_id schema）
 2. **预训练**：SDK 提交 1B 多模态预训练，单节点 8 GPU DDP，3-4 天完成
-3. **微调**：基于 pretrain artifact 提交 SFT/LoRA，新模型版本登记
+3. **微调**：基于现成基座（或已有模型）提交 SFT/LoRA，新模型版本登记
 4. **推理**：微调模型部署成 HTTP 服务（vLLM），有 P95 延迟基准
 5. **容错**：训练中断能从 ckpt 自动恢复，丢失进度 ≤ 1 小时
 6. **可观测**：训练 + 推理指标实时可看（MLflow + Grafana）
 7. **多租户落地**：X-user team 注册到 Keycloak 成为首个 tenant；所有资源（OSS 路径 / K8s ns / Gravitino schema / MLflow experiment）通过 tenant_id 引用；用户 SDK 调用时由 Tenant Service 自动从 token 解析 tenant_id
 8. **Embedding 闭环**：批量生成向量 → Lance + IVF_PQ 索引 → ANN 查询可用
-9. **架构标准（新增）**：grep 全部资源命名（OSS bucket prefix / K8s 资源 / Gravitino / MLflow），**任意 display_name（如 "x-user"）不得出现在资源标识中**
+9. **架构标准**：grep 全部资源命名（OSS bucket prefix / K8s 资源 / Gravitino / MLflow），**任意 display_name（如 "x-user"）不得出现在资源标识中**
+10. **Agent + 统一 LLM 接入（v2）**：经统一 LLM Gateway 用 Claude/Codex/Minimax（订阅）发起对话；内置 agent 能完成一次"数据探查 / 管线开发 / 模型开发"任务；LLM 调用按 enterprise/group 计量与授权
+11. **Agentic Search（v3）**：一次自然语言查询经 agent 对多源多模态数据（OSS/Lance/Gravitino/MLflow）统一检索，返回带引用的综合结果，且结果严格限定在当前 enterprise/group scope
 
 ### 2.2 版本路线图（按交付优先级）
 
-> **版本路线（2026-06-06）**：**v1 = 数据域**（数据管线 + 元数据 + 多模态处理）→ **v2 = 微调（SFT/LoRA）** → **v4 = 1B 预训练**（v3 预留，一次顺延）。基础设施贯穿、随 v1 最先就位。**递增交付、总时间线不变（→08-01，见 §5）。**
-> **术语约定**：`v1`/`v2`/`v4` **专指功能版本里程碑**；"以后再做"的事一律写 **`vN+`（未来/后续）**，不再用裸 `v2`。大写 `V1`–`V12` 是验收标准 ID，与版本号无关。
+> **版本路线（2026-06-06 修订）**：**v1 = 数据域** → **v2 = Agent 开发平台 + 统一 LLM 接入** → **v3 = Agentic Search** → **v4 = 微调（SFT/LoRA）** → **v5 = 1B 预训练**。基础设施贯穿、随 v1 最先就位。**递增交付**（时间线见 §5；v3+ 多为 08-01 后路线）。
+> **战略取向**：先用**第三方 LLM（Claude/Codex/Minimax 订阅）+ Agent** 快速交付应用价值；自研微调/预训练**后置**。
+> **术语约定**：`v1`–`v5` **专指功能版本里程碑**；"以后再做"写 **`vN+`（未来/后续）**。大写 `V1`–`V12` 是验收标准 ID，与版本号无关。
 
 **v1 基础设施（贯穿，最先就位）**
 
@@ -151,7 +166,7 @@
 | **Audit Layer** | mutation + `/admin/*` 全有 audit；v1 追加写 OSS（事后尽力） |
 | **Enterprise Provisioner** | `laictl --admin enterprise create` 建 Keycloak Organization + Group 骨架 + 资源前缀 |
 | **API Gateway/BFF + API 契约** | gateway 路由 + token 校验；OpenAPI/proto 契约**先行**、入 git、CI 校验 breaking-change |
-| **SDK + CLI** | 由 OpenAPI 契约生成 + 薄封装；submit_sft/deploy/workspace（自动注入 enterprise_id/group_id；submit_pretrain v4 接入） |
+| **SDK + CLI** | 由 OpenAPI 契约生成 + 薄封装；submit_sft/deploy/workspace（自动注入 enterprise_id/group_id；submit_pretrain v5 接入） |
 | 监控 | GPU/作业/IO 看板 |
 | 数据存储 | OSS + Lance 就位 |
 | ~~Quota Service~~（推迟）| v1 无 PG 预算账本；仅 Kueue 静态配额（Cohort=企业 / LocalQueue=组） |
@@ -168,17 +183,33 @@
 | Dev Workspace | code-server + Remote-SSH（按 enterprise/group 分配）；数据探索/处理用 |
 | **前端（数据域，完整 UI）** | 数据集管理（上传/浏览/血缘）+ 数据管线提交/监控 + 元数据浏览 + 实验对比，Next.js 完整页面 |
 
-**v2：微调（SFT / LoRA）**
+**v2：Agent 开发平台 + 统一 LLM 接入 + 统一对话交互**
 
 | 子系统 | 验收点 |
 |---|---|
-| **Cerbos PDP（授权升级）** | 细粒度 ABAC / derived role **替换薄 can()**，36 条 AC（AC-1~AC-36）全过；resource policy in git；handler 零改（seam，ADR-011） |
+| **统一 LLM 接入服务（LLM Gateway，⑮）** | 统一 API（chat/completion/embedding）接 **Claude / Codex / Minimax 订阅**；模型路由 + 密钥/订阅凭证管理 + 限流 + 按 enterprise/group 计量；**LiteLLM 待选型**（spike 选定，见 §6/ADR） |
+| **Agent 平台 + 统一对话交互（⑯）** | Agent 框架 + 运行时 + **统一 chat UI**；内置 agent：**模型开发 / 管线开发 / 数据探查**（复用第三方模型 + 工具调用走 Platform API 契约） |
+| **Cerbos PDP（授权升级）** | 细粒度 ABAC / derived role **替换薄 can()**，36 条 AC 全过；agent/LLM 访问数据/模型按 enterprise/group scope 受控；handler 零改（seam，ADR-011） |
+| **前端（Agent/对话域）** | 统一对话界面 + agent 任务/会话管理 + LLM 用量/模型管理页 |
+
+**v3：Agentic Search（多源多模态统一检索）**
+
+| 子系统 | 验收点 |
+|---|---|
+| **Agentic Search agent（⑰）** | 一个 agent 对集成的**多源多模态数据**（OSS / Lance 向量 / Gravitino 元数据 / MLflow…）做**统一检索**：查询规划 → 多模态检索（结构化+向量+全文）→ 综合 → 带引用返回 |
+| 检索编排 | 复用 v1 数据/向量 + v2 LLM Gateway；结果按 enterprise/group scope 过滤（数据层 + Cerbos） |
+| **前端（搜索）** | 统一搜索入口 + 多模态结果展示 + 引用溯源 |
+
+**v4：微调（SFT / LoRA）**
+
+| 子系统 | 验收点 |
+|---|---|
 | 微调工作流 | 基于现成基座 LoRA/SFT 跑通，新模型版本登记 |
 | Checkpoint + 容错 | 杀 pod 自动恢复，丢失进度 ≤ 1h |
-| 推理服务 | 微调模型部署 HTTP（vLLM），有 P95 延迟基准 |
+| 推理服务（自托管） | 微调模型部署 HTTP（vLLM），有 P95 延迟基准；可经 LLM Gateway 统一暴露 |
 | **前端（作业/模型）** | 微调提交/监控页 + 模型管理/部署页（提交 + 监控） |
 
-**v4：1B 模型预训练（v3 预留，一次顺延）**
+**v5：1B 模型预训练**
 
 | 子系统 | 验收点 |
 |---|---|
@@ -1338,28 +1369,37 @@ Lineage 边（v1 手工）：
 
 ---
 
-## 5. 实施路径（12 周 6 sprint）
+## 5. 实施路径（v1–v5 递增，~25 周）
 
 ### 5.1 时间盘
 - 起点：2026-05-08
-- 终点：2026-08-01
-- Sprint：6 × 2 周
-- 缓冲：最后一周不写新代码
+- **终点（GA，v5 完成）：≈ 2026-10-30**（按合理工时顺延 v3/v4/v5 后估算，约 **25 周 / ~6 个月**）
+- Sprint：S0 = 1 周；其余 2 周/sprint，共 S0–S12（13 个）
+- 缓冲：最后一个 sprint（S12）不写新 feature，仅硬化/上线
+- **递增交付**：每个版本完成即可独立上线（v1≈06-12 / v2≈07-24 / v3≈08-21 / v4≈09-18 / v5≈10-16）
+
+> 上线节奏可灵活：v1/v2 完成即对客户开放（数据域 + Agent/LLM 应用），v3–v5 随后滚动发布。
 
 ### 5.2 角色简称
 - **P1**：平台/K8s/训练/推理/Workspace/API Gateway/微服务脚手架
 - **P2**：数据/多模态处理/元数据/向量
 - **P3**：产品/SDK/CLI/**前端**/MLflow/**Keycloak·Org Service/授权(薄 can()→Cerbos)**
 
-### 5.3 Sprint 计划
+### 5.3 版本发布计划（总览）
 
-> **已按 §2.2 版本路线重排（2026-06-06 修订）**。**递增交付、总时间线不变**：基础设施（贯穿）→ **v1 数据域**（S1–S2 末交付）→ **v2 微调**（S3 末交付）→ **v4 1B 预训练**（S4 交付）→ S5–S6 硬化/上线。关键变化：
-> - v1 数据管线 / 多模态处理 / 元数据 / 向量 / **Dev Workspace** / **数据域前端** 在 Sprint 1–2；
-> - v2 微调（SFT/LoRA）+ 推理 + **Cerbos 细粒度授权（替换薄 can()）** 在 Sprint 3；
-> - **v4 1B 多模态预训练在 Sprint 4**（压轴）+ 24h soak + checkpoint kill drill；
-> - 身份 = Keycloak **26.6.2 + Organizations（HA 双副本）**；授权 = v1 **薄 `can()`（企业隔离）**、v2 **Cerbos**；审计 = **OSS 追加写**；后端 = **微服务 + API 优先**；
-> - **推迟（ADR-010）→ vN+**：Quota Service / PG 预算账本 / 同事务审计 / 中央元数据 PG；外部副作用走 outbox/reconcile。
-> - **砍到 vN+（未来）**：DeepSpeed 镜像、CLI 高级命令、Lineage 自动化。
+> 决策（2026-06-06）：**延长时间线、不压缩深度**，v3/v4/v5 按合理工时顺延。总时长 **≈25 周（→ 2026-10-30 GA）**。基础设施贯穿；授权 v1 薄 `can()` → v2 Cerbos；身份 Keycloak 26.6.2 + Organizations（HA）；后端微服务 + API 优先；审计 OSS 追加写；**推迟（ADR-010）→ vN+**：Quota / PG 预算账本 / 同事务审计 / 中央元数据。
+
+| 版本 | Sprint | 周 | 日期 | 交付 |
+|---|---|---|---|---|
+| 基础设施 | S0 | W1 | 05-08→05-15 | 地基 + Spike + Keycloak/Org + API 契约 |
+| **v1 数据域** | S1–S2 | W2–5 | 05-16→06-12 | 数据管线 + 多模态处理 + 元数据 + 向量 + Dev Workspace + 数据域前端 |
+| **v2 Agent + 统一 LLM** | S3–S5 | W6–11 | 06-13→07-24 | LLM Gateway（LiteLLM 选型）+ Agent 平台/对话 + 模型/管线/数据探查 agent + Cerbos |
+| **v3 Agentic Search** | S6–S7 | W12–15 | 07-25→08-21 | 多源多模态统一检索 agent + 搜索前端 |
+| **v4 微调** | S8–S9 | W16–19 | 08-22→09-18 | SFT/LoRA + Checkpoint/容错 + 自托管推理 + 作业/模型前端 |
+| **v5 1B 预训练** | S10–S11 | W20–23 | 09-19→10-16 | 8 卡 DDP 1B baseline + 24h soak + kill drill |
+| 硬化 / 上线 | S12 | W24–25 | 10-17→10-30 | 仅硬化/调优/上线（GA） |
+
+> 下面只对**近期 S0–S2（基础设施 + v1）给出 owner 级任务表**；**v2–v5（S3–S12）给版本级 Sprint 提纲**（goal + 关键工作流 + 出口），进入各版本前再细化到 owner。
 
 #### Sprint 0（Week 1，05-08 → 05-15）：地基 + Spike + 身份骨架 + API 契约
 
@@ -1419,107 +1459,117 @@ Lineage 边（v1 手工）：
 
 ---
 
-#### Sprint 3（Week 6-7，06-13 → 06-26）：**v2 交付** 微调 + 推理 + Cerbos 细粒度授权
+### v2 Agent 平台 + 统一 LLM 接入（S3–S5，W6–11，06-13 → 07-24）
 
-| 负责 | 任务 |
-|---|---|
-| P1 | SFT 镜像 + submit_sft（LoRA / 全量 SFT；走 outbox）；training-service 骨架 |
-| P1 | **Checkpoint 恢复完整逻辑**：SIGTERM → 保存 → 重启 → 加载；`laictl job` 杀 pod 验证 ≤30min 丢失 |
-| P1 | 推理镜像 serve-vllm:v1 + inference-service（按 enterprise_id/group_id ns + Ingress 子域；走 outbox） |
-| P3 | **Cerbos PDP 上线**：部署 sidecar + 策略 in git（resource policy + derived role）；**替换薄 `can()`**；**AC-1~AC-36 全过**（企业/组 scope + owner + 共享资源读）；handler 零改（seam，ADR-011） |
-| P3 | **前端（作业/模型页）**：微调提交·监控 + 模型管理/部署（提交 + 监控） |
-| P3 | SDK/CLI：job / pipeline / model / inference / workspace 主路径 |
+> 目标：用第三方 LLM（Claude/Codex/Minimax 订阅）+ Agent 快速交付应用价值；授权升级到 Cerbos。详见 **ADR-012**。
 
-> **砍到 vN+（未来）**：CLI 高级命令（job restore / lineage 自动化）——v1 SDK/CLI 只保最小可用集。
+**S3（W6-7）LLM Gateway + 授权升级**
+- **LiteLLM 选型 spike 落定** → 部署 **LLM Gateway**（统一 chat/completion/embedding API）
+- 接 **Claude / Codex / Minimax**（订阅/API）+ 模型路由 + 密钥/凭证管理 + 限流 + 按 enterprise/group 用量统计
+- **Cerbos PDP 上线**，替换薄 `can()`（**AC-1~36 全过**）；LLM/数据访问按 scope 受控
+- 出口：经 Gateway 用三家模型发起对话；调用按租户计量 + 授权；Cerbos 全 AC 过
 
-**出口**：基于现成基座 SFT/LoRA → 部署 → 推理 全链路通；**Cerbos 36 条 AC 全过**（企业/组 scope、owner、共享资源读正确）；checkpoint 续训 ≤30min；作业/模型前端可用。
+**S4（W8-9）Agent 框架 + 运行时 + 统一对话**
+- Agent 框架 + 运行时（规划 / 工具调用 / 多轮）；**工具走 Platform API 契约**
+- **统一 chat UI**（前端）+ 会话/任务管理
+- 出口：统一对话界面可用；agent 能多轮调用平台工具完成任务
 
----
-
-#### Sprint 4（Week 8-9，06-27 → 07-10）：**v4 交付** 1B 预训练（压轴）+ Soak + 预演 #1
-
-> 第 1 周：1B 训练跑通 + 24h soak + checkpoint kill drill（必须在预演 #1 前发现训练性能/容错问题）；第 2 周：预演 #1。
-
-| 负责 | 任务 |
-|---|---|
-| P1 | 训练镜像 train-pytorch-ddp:v1（torchrun 契约：entrypoint.sh / 环境变量 / SIGTERM）+ submit_pretrain（走 outbox） |
-| P1 | **1B 多模态 DDP 跑通**（prod 8×A100/H800）+ Kueue **Cohort(企业)/LocalQueue(组)** 配额硬限 |
-| P1 | **1B 24h soak（第 1 周，关键）**：GPU util / DataLoader 瓶颈 / OSS 带宽；不达标 → 立即调优或砍范围（不等 Sprint 5） |
-| P1 | **Checkpoint kill drill（第 1 周）**：随机杀 GPU 节点 → Volcano gang restart + 续训 ≤30min |
-| P1 | RAM pipeline-sa（OSS processed/ 专用写权限；AC-33 验证） |
-| P3 | **第二个测试企业接入演练**：`laictl --admin enterprise create e-test` → 验证 Keycloak Org/Group + V9 资源命名审计（grep display_name 为空）+ suspend 冻结顺序（先吊 RAM/STS → 后续步） |
-| 全员（第 2 周）| **X-user team 1B 全量预演 #1**（X-user 独立走完全链路；平台在旁观察记录问题） |
-
-**出口**：**1B 多模态预训练跑通**；**24h soak GPU util ≥ 60% baseline**；checkpoint kill drill 通过；2 企业隔离验证通过；V9 命名审计无违规；全链路预演 #1 跑通（可有已知问题，记录进 backlog）。
+**S5（W10-11）内置 agent + 前端 + 硬化**
+- 内置 agent：**模型开发 / 管线开发 / 数据探查**（复用第三方模型）
+- 前端 Agent/对话域完整 + LLM 用量/模型管理页；v2 预演 + 硬化
+- **出口：v2 交付**——三类 agent 各完成一次真实任务；**验收 10 过**
 
 ---
 
-#### Sprint 5（Week 10-11，07-11 → 07-24）：硬化 + 调优 + 预演 #2
+### v3 Agentic Search（S6–S7，W12–15，07-25 → 08-21）
 
-> 第 1 周：消化预演 #1 backlog + 性能调优；第 2 周：预演 #2 达标。
-> **规则**：预演 #1 backlog 中阻塞性 bug 第 1 周必须清零，性能调优只在 bug 清零后启动，不并行。
+> 目标：一个 agent 对集成的多源多模态数据统一检索（**ADR-012**）。
 
-| 负责 | 任务 |
-|---|---|
-| 全员（第 1 周前半）| 处理预演 #1 反馈（阻塞性 bug 优先；非阻塞记 vN+ backlog） |
-| P1 | 训练 GPU 利用率调优（基于 Sprint 4 soak baseline，目标 ≥60% × 1.3）；DataLoader 并发 / prefetch / SSD 缓存 |
-| P1 | 推理 P95 延迟基准 + vLLM 调优（batch size / KV cache） |
-| P2 | Lance 热点路径优化（读放大 / 列裁剪） |
-| P2 | Embedding 批吞吐基准（基于 Sprint 3 1TB 斜率结果决定调优方向；目标 10TB/24h 或已砍 10%） |
-| P3 | SDK/CLI 错误信息友好化 + 用户文档 |
-| P3 | **Keycloak HA 演练**（杀一副本，验证第二副本接管 + 平台无中断） |
-| P3 | Nightly drift 检测 job 上线（`keycloak-config-cli diff`，差异 > 0 告警） |
-| 全员（第 2 周）| **X-user 全量预演 #2**（所有 V1-V12 验收标准达标） |
+**S6（W12-13）检索编排**
+- Agentic Search 设计 spike（向量 + 全文 + 元数据融合策略）
+- 检索编排：**查询规划 → 多模态检索**（Lance 向量 / Gravitino 元数据 / OSS / 全文）**→ 综合**
+- 结果按 enterprise/group **scope 过滤**（数据层 + Cerbos）
 
-**出口**：V1-V12 全部验收标准过（包括性能基准 + audit 完整性 + Provisioner 幂等）。
+**S7（W14-15）综合/引用 + 前端**
+- 综合 + **带引用返回**；搜索前端（统一入口 + 多模态结果 + 引用溯源）
+- v3 预演 + 硬化
+- **出口：v3 交付**——自然语言查询返回带引用的跨源综合结果、scope 严格隔离；**验收 11 过**
 
 ---
 
-#### Sprint 6（Week 12，07-25 → 08-01）：上线 buffer
+### v4 微调（S8–S9，W16–19，08-22 → 09-18）
+
+**S8（W16-17）SFT/LoRA + 容错**
+- SFT 镜像 + submit_sft（LoRA / 全量；走 outbox）；training-service
+- **Checkpoint 恢复完整逻辑**（SIGTERM → 保存 → 重启 → 加载，≤30min）
+
+**S9（W18-19）推理 + 前端**
+- 推理镜像 serve-vllm + inference-service（按 scope ns + Ingress；可经 LLM Gateway 统一暴露）
+- 前端作业/模型页
+- **出口：v4 交付**——基于现成基座 SFT/LoRA → 部署 → 推理 全链路；**验收 3/4/5 过**
+
+---
+
+### v5 1B 模型预训练（S10–S11，W20–23，09-19 → 10-16）
+
+**S10（W20-21）训练跑通 + Soak**
+- 训练镜像 train-pytorch-ddp + submit_pretrain（走 outbox）
+- **1B 多模态 DDP 跑通**（8×A100/H800）+ Kueue **Cohort(企业)/LocalQueue(组)**
+- **1B 24h soak**（GPU util / DataLoader / OSS 带宽）；RAM pipeline-sa（AC-33）
+
+**S11（W22-23）容错 + 预演**
+- **Checkpoint kill drill**（杀节点 → Volcano gang restart → 续训 ≤30min）
+- 第二企业接入演练（命名审计 + suspend 顺序）；1B 全量预演 #1
+- **出口：v5 交付**——1B 预训练跑通 + 24h soak GPU util ≥60% + kill drill；**验收 2 过**
+
+---
+
+### 硬化 / 上线（S12，W24–25，10-17 → 10-30）
 
 | 负责 | 任务 |
 |---|---|
-| 全员 | 仅 bugfix（无新 feature） |
-| 全员 | 文档收口（runbook / 用户手册 / ADR 补全） |
-| 全员 | 监控告警上线（P0 告警推送渠道验证） |
-| P3 | X-user team 培训（SDK/CLI 使用 + 常见错误处理） |
+| 全员 | 仅硬化/调优/bugfix（无新 feature）；预演 #2（全量 V1–V12 + 验收 10/11 达标） |
+| P1 | 训练 GPU util 调优（≥60%×1.3）；推理 P95 + vLLM 调优 |
+| P3 | **Keycloak HA 杀副本演练** + drift 检测（`keycloak-config-cli diff`）上线 |
+| 全员 | 文档收口（runbook / 用户手册 / ADR）；监控告警上线；X-user 培训 |
 
-**出口（MVP 验收 08-01）**：X-user team 独立提交 1B 真实预训练，平台团队不介入。
+**出口（GA ≈ 2026-10-30）**：v1–v5 全部验收达标（V1–V12 + 验收 10/11）；X-user team 独立使用全平台，团队不介入。
 
 ---
 
 ### 5.4 Hard Deadlines
 
-| 日期 | Sprint | 里程碑 | 不达标后果 |
+| 日期 | Sprint | 版本里程碑 | 不达标后果 |
 |---|---|---|---|
-| 05-15 | S0 | 两数据 Spike PASS + Keycloak 26.6.2 可登录（带 groups claim）+ Gateway 解析 enterprise_id/group_id + 契约代码生成跑通 | 顺延 Sprint 0，可能砍 v1 范围 |
-| 05-29 | S1 | 100GB 数据管线 + **多模态处理** → Lance → Gravitino schema 可查 + **薄 can() 企业隔离** + Dev Workspace 骨架 + 契约 SDK 可调 | 砍数据子集量；薄 can() 滑窗 |
-| 06-12 | S2 | **【v1 交付】10TB 数据管线 PASS** + Gravitino 2 副本 HA + Embedding/ANN（或 V8 决策）+ **数据域前端完整** + **Enterprise Provisioner 幂等**（建 Org+Group+资源）+ OpenSearch 审计可查 | 砍数据集量 / V8 砍 10% / 前端降级 |
-| 06-26 | S3 | **【v2 交付】** SFT + 推理全链路通 + **Cerbos 替换薄 can()，36 条 AC 全过** + checkpoint 续训 ≤30min + 作业/模型前端 | Cerbos 滑则保留薄 can()（粗粒度）上线、细粒度推迟 |
-| 07-10 | S4 | **【v4 交付】1B 多模态预训练跑通 + 24h soak GPU util ≥60% + checkpoint kill drill PASS** + 2 企业隔离 + V9 命名审计 + **预演 #1 PASS** | **必须达成**；soak 不达标 → 调优或砍范围 |
-| 07-24 | S5 | 预演 #2 性能达标 + V1-V12 全过 | 顺延 buffer 周；通知 X-user 推迟上线 |
-| **08-01** | S6 | **MVP 验收（V10/V11/V12 + V2/V5/V8 任一 fail 即推迟）** | **MVP 失败** |
+| 05-15 | S0 | 两数据 Spike PASS + Keycloak 26.6.2 可登录（带 groups claim）+ Gateway 解析 enterprise_id/group_id + 契约代码生成跑通 | 顺延 S0，可能砍 v1 范围 |
+| 05-29 | S1 | 100GB 数据管线 + **多模态处理** → Lance → Gravitino + **薄 can() 企业隔离** + Dev Workspace 骨架 + 契约 SDK | 砍数据子集量；薄 can() 滑窗 |
+| **06-12** | S2 | **【v1 交付】10TB 数据管线 PASS** + Gravitino HA + Embedding/ANN（或 V8 决策）+ **数据域前端完整** + Enterprise Provisioner 幂等 + OSS 审计 | 砍数据集量 / V8 砍 10% / 前端降级 |
+| **07-24** | S5 | **【v2 交付】LLM Gateway（接 Claude/Codex/Minimax）+ Agent 平台/统一对话 + 三类内置 agent + Cerbos 36 AC 全过**（验收 10） | LiteLLM 不行→换备选；Cerbos 滑则薄 can() 先上 |
+| **08-21** | S7 | **【v3 交付】Agentic Search**：多源多模态统一检索 + 带引用 + scope 隔离（验收 11） | 检索深度降级（先单模态）/ 顺延 |
+| **09-18** | S9 | **【v4 交付】**基于现成基座 SFT/LoRA → 部署 → 推理全链路（验收 3/4/5）+ checkpoint 续训 ≤30min | 顺延 |
+| **10-16** | S11 | **【v5 交付】1B 预训练跑通 + 24h soak GPU util ≥60% + kill drill**（验收 2）+ 2 企业隔离 + V9 审计 | soak 不达标 → 调优或砍范围 |
+| **≈10-30** | S12 | **GA**：全量 V1–V12 + 验收 10/11 达标；X-user 独立使用 v1–v5 | 顺延 buffer；通知 X-user 推迟 |
 
 ### 5.5 关键路径与超载预警（按版本路线重排后）
 
 | 风险 / 超载点 | 缓解 |
 |---|---|
-| **数据为早期关键路径（S1–S2）**：10TB Data-Juicer 是最大里程碑 | S0 Spike 验 OOM 边界 + 分片/spill 兜底；**V8 1TB 斜率前移到 S2** 早决策（砍 10% / 推迟） |
-| **Cerbos 在 S3 替换薄 can()** | S0/S1 先做**半天 Cerbos spike**（Python SDK + derived role）；**薄 can() 作 fallback**——Cerbos 滑则粗粒度先上、细粒度推迟（seam 保证不返工） |
-| **1B 预训练压轴（S4）晚发现风险** | S4 **第 1 周即 24h soak + kill drill**（不等 S5）；用 DDP（非 DeepSpeed）降风险；S5 buffer 调优 |
-| **微服务全拆 × 3 人** | **统一脚手架**（FastAPI 模板 / CI / 可观测埋点）+ **API 契约先行**，避免每服务各搞一套；服务独立可部署但共享脚手架 |
-| **P3 在 S2 多担**：数据域前端 + Provisioner + Dev Workspace 完整 | 数据域前端优先；**admin 管理页推 vN+/CLI**；URI/CLI 次要项可滑 S3 |
-| **外部副作用（Kueue/Volcano/Argo/Gravitino/OSS）** | 一律走 **outbox/reconcile 幂等**，禁纳入同步链路阻塞主流程 |
-| **Sprint 5 双重满载** | 第 1 周 bug 优先（清零后才调优）；预演 #2 放第 2 周，有序 |
+| **数据为早期关键路径（v1，S1–S2）**：10TB Data-Juicer 是最大里程碑 | S0 Spike 验 OOM 边界 + 分片/spill 兜底；**V8 1TB 斜率前移到 S2** 早决策（砍 10% / 推迟） |
+| **v2 是最大新增工作量（Agent + LLM Gateway，S3–S5）** | **LiteLLM 选型 spike 前置（S0/S3 初）**核实订阅接入/计量/ToS；薄 `can()`→Cerbos 用 seam 不返工；agent 工具走 Platform API 契约受治理 |
+| **订阅式接入 Claude/Codex/Minimax 的可行性/ToS** | spike 核实每家接入方式 + 准备 API 计费回退（ADR-012 风险表） |
+| **1B 预训练（v5，S10–S11）晚发现风险** | S10 **第 1 周即 24h soak + kill drill**；用 DDP（非 DeepSpeed）降风险；S12 buffer 调优 |
+| **微服务全拆 × 3 人** | **统一脚手架**（FastAPI 模板 / CI / 可观测）+ **API 契约先行**，避免每服务各搞一套 |
+| **外部副作用（Kueue/Volcano/Argo/Gravitino/OSS）** | 一律走 **outbox/reconcile 幂等**，禁纳入同步链路 |
+| **时间线拉长（~25 周）团队疲劳/范围漂移** | **每版本独立可上线**（递增交付，早见价值）；版本间留硬化；vN+ 严格控范围 |
 
 ### 5.6 滑窗策略
 
-按"不可砍 → 可降级 → 必砍"分层：
+递增交付下每个版本可独立上线；范围按"不可砍 → 可降级 → 必砍"分层：
 
-1. **不可砍**：数据管线 + **多模态处理** + 元数据（Gravitino）+ Embedding（V8 至少 10%）、Keycloak 26.6.2 + **Org Service**、**薄 can()（企业隔离硬检查）**、**OSS 审计**、**API Gateway + API 契约**、SDK/CLI、监控、**Enterprise Provisioner（建 Org+Group+资源）**、OpenSearch + Gravitino HA、Checkpoint 容错、**微调（SFT）**、训练运行时（1B baseline）
-2. **可降级**：**Cerbos 细粒度授权**（滑则薄 can() 粗粒度先上、细粒度推迟，seam 保证不返工）、推理（单实例 → NodePort）、Embedding（10TB → 10% = 1TB）、Dev Workspace（仅 SSH，去 code-server）、**前端**（数据域核心保住；作业/模型/admin 页降级或 CLI）、Enterprise Provisioner（全自动 → 半自动 `laictl` 脚本）
-3. **已确定砍到 vN+（未来）**（无条件）：DeepSpeed 镜像、CLI 高级命令（data update / job restore）、Lineage 自动化（保留手工 tag）、SDK 跨语言扩展、**PG 预算/Quota Service / 同事务审计 / 中央元数据目录**（ADR-010 推迟）
-4. **触发性砍项**：第二企业接入演练（若 Sprint 4 第 1 周 1B soak 失败，腾时间修训练）
+1. **不可砍（各版本核心）**：基础设施（Keycloak 26.6.2 + Org Service + **薄 can()** + **API Gateway + 契约** + OSS 审计 + 监控 + Enterprise Provisioner + OpenSearch/Gravitino HA）；**v1** 数据管线 + 多模态处理 + 元数据 + Embedding（V8 至少 10%）；**v2** LLM Gateway + Agent 平台/统一对话 + Cerbos
+2. **可降级**：**v3 Agentic Search**（先单模态/单源，多源融合后补）、**v4 微调**（推理单实例 → NodePort）、**v5 1B 预训练**（soak 不达标 → 砍范围/调优）、Dev Workspace（仅 SSH）、前端（核心保住，admin 页推 vN+/CLI）、Enterprise Provisioner（全自动 → 半自动 `laictl`）
+3. **已确定砍到 vN+（未来）**：DeepSpeed 镜像、CLI 高级命令、Lineage 自动化、SDK 跨语言扩展、**PG 预算/Quota Service / 同事务审计 / 中央元数据目录**（ADR-010 推迟）
+4. **触发性砍项**：第二企业接入演练（若 S10 第 1 周 1B soak 失败，腾时间修训练）；LiteLLM 不达标 → 切备选 Gateway（ADR-012）
 
 ---
 
@@ -1756,9 +1806,9 @@ Sprint 6 (07-25 起)
 
 硬阈值（不允许 Partial 主观放行）：
   - V10 / V11 / V12 任一 fail        → 推迟 MVP
-  - V2 / V5 / V8 任一性能未达标        → 推迟 MVP（V8 可走 Sprint 3 已决策的 10% 范围）
-  - V1 / V3 / V4 / V6 / V7 / V9 任一 fail → 推迟 MVP
-  - 全部 Pass → MVP 达标，08-01 起跑
+  - V2 / V5 / V8 任一性能未达标        → 推迟对应版本（V8 可走 S2 已决策的 10% 范围）
+  - V1 / V3 / V4 / V6 / V7 / V9 任一 fail → 推迟对应版本
+  - 全部 Pass → GA 达标（≈2026-10-30 起跑）；各版本按 §5.3 节点分别验收上线
 ```
 
 ### 7.7 上线后持续验证
