@@ -1,6 +1,6 @@
 # Lite AI Infra Platform 设计文档
 
-> **状态**：Draft v2（v1 起即多租户架构）
+> **状态**：Draft（多公司 SaaS 架构；v1 起多企业 + 版本递增 v1/v2/v4）
 > **作者**：平台团队（3 人）
 > **日期**：2026-05-08
 > **目标上线**：2026-08-01（X-user team 起跑 1B 多模态预训练）
@@ -10,7 +10,7 @@
 ## 0. Executive Summary
 
 ### 项目定位
-公司级共享 LLM/多模态训练 + 微调 + 推理平台。**v1 仅服务 X-user team（1B 多模态全链路）**，但**架构从第一天起就是多租户的**——通过 Keycloak 做身份/租户管理，所有资源标识与租户名解耦，未来扩展到 5+ 团队**不需要重命名任何资源**。
+公司级共享 LLM/多模态训练 + 微调 + 推理平台，**对外多公司 SaaS**（架构从第一天起多企业，ADR-010）。**按版本递增交付：v1 = 数据域（数据管线/元数据/多模态处理）→ v2 = 微调（SFT/LoRA）→ v4 = 1B 预训练**（v3 预留，一次顺延）；首个客户 X-user team 在 12 周内（到 2026-08-01）沿此路线走完全链路。通过 Keycloak 做身份/企业管理，所有资源标识与企业名解耦，扩展到 5+ 企业**不需要重命名任何资源**。
 
 ### 核心架构原则（写进 constitution）
 
@@ -22,27 +22,27 @@
 > **层级**：平台 → 企业 → 用户组 → 用户。**身份+组织+成员+角色** = Keycloak 单一 realm（企业=**Organization**；用户组+角色=**Group 子组** `/e-x/g-y/{admins|members}`，随 token 的 `groups` claim 带出）；**授权** = **Cerbos** PDP（principal 来自 token，resource 属性来自资源自身：OSS 路径/K8s label/MLflow tag/Gravitino schema）；**审计** = 只追加写 OSS（v1）；**预算 / 中央元数据(PG) v1 推迟，需要时引入**；**企业硬隔离**落在资源命名 + 授权层。
 
 ### 核心约束
-- **3 人** × **12 周**（2026-05-08 → 2026-08-01）
+- **3 人** × **12 周**（2026-05-08 → 2026-08-01）；版本递增交付（v1→v2→v4），总时间线不变
 - **环境拓扑**：
   - **prod**：阿里云 ACK + OSS（不使用 PAI / PAI-DLC）
   - **dev**：本地 Docker Compose（MinIO 替 OSS、kind/k3d 可选替 K8s、CPU 替 GPU、mock 跳过 Volcano/Argo）
   - **staging**：ACK 小集群（与 prod 同构，e2e 测试用）
-- **身份**：Keycloak（v1 部署，单 realm + 多 client/group）
+- **身份**：Keycloak 26.6.2（HA 双副本，单 realm + Organizations，ADR-002/010）
 - **数据栈**：Ray Data + Data-Juicer + Lance（开源）
-- **训练栈**：PyTorch DDP / DeepSpeed（v1）；Megatron 通过镜像契约 v2 接入
+- **训练栈**：PyTorch DDP / DeepSpeed；Megatron 通过镜像契约**未来**接入
 - **元数据**：Apache Gravitino（资产 catalog）+ MLflow（实验跟踪）
 - **首个租户任务**：10TB 图文，1B 多模态，单节点 8 GPU，3-4 天训练
 
 ### 战略路线
-**路线 1（垂直优先）+ 路线 2（最大化用 OSS）+ 多租户架构从 v1 起**：
-- 范围：v1 实际只服务 X-user team（一个租户落地）
-- 实现：所有可用 OSS 都用，3 人聚焦"粘合 + 身份/组织层 + SDK + 内部门户"
-- 多租户：v1 单租户落地但架构完整；v2 仅扩展企业数量、不动资源命名
+**路线 1（垂直优先）+ 路线 2（最大化用 OSS）+ 多企业架构从 v1 起**：
+- 范围：首个客户只有 X-user team（一个企业落地），架构完整支持多企业
+- 实现：所有可用 OSS 都用，3 人聚焦"粘合 + 身份/组织层 + SDK + 前端"
+- 多企业：首发单企业落地但架构完整；后续版本仅扩展企业数量、不动资源命名
 
-> **交付优先级（2026-06-04 调整）**：① **数据管线 + 元数据 + 多模态数据处理**（最高）→ ② **微调（SFT/LoRA）** → ③ **1B 模型预训练**（最后）。身份/组织/授权/SDK/监控等基础设施贯穿、最先就位。
+> **版本路线（2026-06-06）**：**v1 = 数据管线 + 元数据 + 多模态数据处理**（最高优先）→ **v2 = 微调（SFT/LoRA）** → **v4 = 1B 模型预训练**（v3 预留，一次顺延）。身份/组织/授权/SDK/监控/网关等基础设施贯穿、随 v1 最先就位。**递增交付、总时间线不变（→2026-08-01）。**
 
-### v1 范围（一句话）
-**X-user team（首个租户）在 2026-08-01 能在平台上完成全链路，按交付顺序：先"10TB 多模态数据准备 → 清洗/处理 → Lance + Gravitino 元数据"，再"基于现成基座的 SFT/LoRA → 推理部署 → Embedding 检索"，最后"1B 多模态预训练（单节点 8 GPU，3-4 天）"；节点故障 1h 内自动恢复；任意资源标识不含企业/团队名。**
+### 交付目标（一句话）
+**首个客户 X-user team 在 12 周内（→2026-08-01）沿版本递增走完全链路、总时间线不变：v1（10TB 多模态数据准备 → 清洗/处理 → Lance + Gravitino 元数据）→ v2（基于现成基座 SFT/LoRA → 推理部署 → Embedding 检索）→ v4（1B 多模态预训练，单节点 8 GPU，3-4 天）；每个版本可独立交付验收；节点故障 1h 内自动恢复；任意资源标识不含企业/团队名。**
 
 ---
 
@@ -125,7 +125,7 @@
 
 ### 2.1 v1 验收标准（8 条 + 1 条架构标准）
 
-> 下列为 08-01 须全部满足的验收项（非交付顺序）。**交付顺序见 §2.2**：① 数据管线/元数据/多模态处理（含验收 1、6、8）→ ② 微调（验收 3、4、5）→ ③ 1B 预训练（验收 2）。
+> 下列为 08-01 须全部满足的验收项（非交付顺序）。**按版本递增交付（§2.2）**：**v1** = 数据域（验收 1、6、8 + 架构标准 9）→ **v2** = 微调/推理（验收 3、4、5）→ **v4** = 1B 预训练（验收 2）。每个版本可独立验收。
 
 1. **数据**：10TB 原始图文 → Data-Juicer 清洗 → Lance 数据集 → Gravitino 注册（按 enterprise_id/group_id schema）
 2. **预训练**：SDK 提交 1B 多模态预训练，单节点 8 GPU DDP，3-4 天完成
@@ -137,25 +137,26 @@
 8. **Embedding 闭环**：批量生成向量 → Lance + IVF_PQ 索引 → ANN 查询可用
 9. **架构标准（新增）**：grep 全部资源命名（OSS bucket prefix / K8s 资源 / Gravitino / MLflow），**任意 display_name（如 "x-user"）不得出现在资源标识中**
 
-### 2.2 v1 必做（按交付优先级）
+### 2.2 版本路线图（按交付优先级）
 
-> 交付顺序（2026-06-04 调整）：**基础设施（贯穿）→ 阶段①数据域 → 阶段②微调 → 阶段③1B 预训练**。
+> **版本路线（2026-06-06）**：**v1 = 数据域**（数据管线 + 元数据 + 多模态处理）→ **v2 = 微调（SFT/LoRA）** → **v4 = 1B 预训练**（v3 预留，一次顺延）。基础设施贯穿、随 v1 最先就位。**递增交付、总时间线不变（→08-01，见 §5）。**
+> **术语约定**：`v1`/`v2`/`v4` **专指功能版本里程碑**；"以后再做"的事一律写 **`vN+`（未来/后续）**，不再用裸 `v2`。大写 `V1`–`V12` 是验收标准 ID，与版本号无关。
 
-**基础设施（贯穿，最先就位）**
+**v1 基础设施（贯穿，最先就位）**
 
 | 子系统 | 验收点 |
 |---|---|
 | **Keycloak(26.6.2) + Org Service** | OIDC token 校验 + 从 groups claim 解析 enterprise_id/group_id/role；Organizations + Group 子组 |
-| **薄 can()（授权出入口）** | 认证 + **企业隔离硬检查**（`resource.enterprise_id == ctx.enterprise_id`）+ 基本角色门槛，in-code；`can()` 唯一出入口，无散落 `if enterprise_id == ...`（**细粒度授权阶段②上 Cerbos**） |
+| **薄 can()（授权出入口）** | 认证 + **企业隔离硬检查**（`resource.enterprise_id == ctx.enterprise_id`）+ 基本角色门槛，in-code；`can()` 唯一出入口，无散落 `if enterprise_id == ...`（**细粒度授权 v2 上 Cerbos**） |
 | **Audit Layer** | mutation + `/admin/*` 全有 audit；v1 追加写 OSS（事后尽力） |
 | **Enterprise Provisioner** | `laictl --admin enterprise create` 建 Keycloak Organization + Group 骨架 + 资源前缀 |
 | **API Gateway/BFF + API 契约** | gateway 路由 + token 校验；OpenAPI/proto 契约**先行**、入 git、CI 校验 breaking-change |
-| **SDK + CLI** | 由 OpenAPI 契约生成 + 薄封装；submit_sft/deploy/workspace（自动注入 enterprise_id/group_id；submit_pretrain 阶段③接入） |
+| **SDK + CLI** | 由 OpenAPI 契约生成 + 薄封装；submit_sft/deploy/workspace（自动注入 enterprise_id/group_id；submit_pretrain v4 接入） |
 | 监控 | GPU/作业/IO 看板 |
 | 数据存储 | OSS + Lance 就位 |
 | ~~Quota Service~~（推迟）| v1 无 PG 预算账本；仅 Kueue 静态配额（Cohort=企业 / LocalQueue=组） |
 
-**阶段 ① 数据管线 + 元数据 + 多模态数据处理（最高优先）**
+**v1：数据管线 + 元数据 + 多模态数据处理（最高优先）**
 
 | 子系统 | 验收点 |
 |---|---|
@@ -167,7 +168,7 @@
 | Dev Workspace | code-server + Remote-SSH（按 enterprise/group 分配）；数据探索/处理用 |
 | **前端（数据域，完整 UI）** | 数据集管理（上传/浏览/血缘）+ 数据管线提交/监控 + 元数据浏览 + 实验对比，Next.js 完整页面 |
 
-**阶段 ② 微调（SFT / LoRA）**
+**v2：微调（SFT / LoRA）**
 
 | 子系统 | 验收点 |
 |---|---|
@@ -177,7 +178,7 @@
 | 推理服务 | 微调模型部署 HTTP（vLLM），有 P95 延迟基准 |
 | **前端（作业/模型）** | 微调提交/监控页 + 模型管理/部署页（提交 + 监控） |
 
-**阶段 ③ 1B 模型预训练（最后）**
+**v4：1B 模型预训练（v3 预留，一次顺延）**
 
 | 子系统 | 验收点 |
 |---|---|
@@ -192,7 +193,7 @@
 - ❌ 自动 lineage 追踪（手工 Gravitino tag）
 - ❌ 数据脱敏 / 隐私合规
 
-> 注：v1 **必做**审计（Audit Layer，子系统 ⑭）—— 所有 mutation API、`/admin/*`、`--force` 和 admin override 强制写 `tenant_audit_log`；v1 不做的是"跨租户审计聚合视图 / tamper-proof 归档 / SIEM 集成"，留 v2。
+> 注：v1 **必做**审计（Audit Layer，子系统 ⑭）—— 所有 mutation API、`/admin/*`、`--force` 和 admin override 强制写 `tenant_audit_log`；v1 不做的是"跨租户审计聚合视图 / tamper-proof 归档 / SIEM 集成"，留 vN+。
 - ❌ Web UI 提交作业（CLI/SDK 即可）
 - ❌ Megatron / NeMo（v1 用 DDP/DeepSpeed）
 - ❌ Ray Train（v1 训练不用 Ray，仅数据管线用 Ray Data）
@@ -201,9 +202,9 @@
 - ❌ Keycloak 高级特性：SAML、social login、自助注册、密码策略复杂规则（v1 单 realm + 公司 LDAP/AD 联邦或本地用户即可）
 - ❌ 多 tenant 跨域共享数据（v1 严格隔离）
 
-### 2.4 v1 → v2 演进点
+### 2.4 v1 之后的演进点（vN+）
 
-| 现在留口子 | v2 补全 |
+| 现在留口子 | vN+ 补全 |
 |---|---|
 | Keycloak 单 realm + 一个 tenant | 多 tenant 上线（仅在 Keycloak 加 group/role + Tenant Service 注册新 tenant_id；**资源命名零改动**） |
 | LocalQueue per tenant 简单配额 | 真正的 quota engine（多维：GPU/CPU/storage/cost）+ 审计 |
@@ -442,7 +443,7 @@ Realm: lite-ai-infra        (单一 realm，只管认证)
  (Observability)  │  Grafana Org / Datasource: t-0001             │
                   │  Prometheus labels: tenant_id=t-0001          │
                   │                                               │
- 凭证层           │  Vault / KMS: secret/tenants/t-0001/  (v2)    │
+ 凭证层           │  Vault / KMS: secret/tenants/t-0001/  (vN+)    │
  (Secrets)        │  v1 走 OSS RAM 子账号 + env var               │
                   │                                               │
  审计层           │  Audit Log: tenant_audit_log（按 tenant_id）  │
@@ -450,9 +451,9 @@ Realm: lite-ai-infra        (单一 realm，只管认证)
                   └───────────────────────────────────────────────┘
 ```
 
-#### 完整资源清单（v1 必管 + v2 演进）
+#### 完整资源清单（v1 必管 + vN+ 演进）
 
-| # | 资源类型 | 系统 | 命名规则 | 创建时机 | v1 / v2 |
+| # | 资源类型 | 系统 | 命名规则 | 创建时机 | v1 / vN+ |
 |---|---|---|---|---|---|
 | 1 | Tenant 元数据记录 | PG | `tenant_metadata` 表，pk = `tenant_id` | 租户创建 | v1 |
 | 2 | Group | Keycloak | `/tenants/{tenant_id}` | 租户创建 | v1 |
@@ -475,15 +476,15 @@ Realm: lite-ai-infra        (单一 realm，只管认证)
 | 19 | 推理 Deployment | K8s | `inf-{tenant_id}-{model}-{ver}` | 用户部署 | v1 |
 | 20 | Workspace Pod | K8s | `ws-{tenant_id}-{user}` | 用户起 | v1 |
 | 21 | Argo Workflow | K8s | `flow-{tenant_id}-{job}` | 数据管线触发 | v1 |
-| 22 | Audit Log 记录 | PG / OpenSearch | per-tenant table 或 index，含 `tenant_id` 列 | 每次操作 | v1（业务侧自记录）/ v2 强化 |
-| 23 | Vault / KMS Secret Path | Vault | `secret/tenants/{tenant_id}/*` | 租户创建 | v2 |
-| 24 | Cost Center / Billing | 自研 | per-tenant cost ledger | — | v2 |
+| 22 | Audit Log 记录 | PG / OpenSearch | per-tenant table 或 index，含 `tenant_id` 列 | 每次操作 | v1（业务侧自记录）/ vN+ 强化 |
+| 23 | Vault / KMS Secret Path | Vault | `secret/tenants/{tenant_id}/*` | 租户创建 | vN+ |
+| 24 | Cost Center / Billing | 自研 | per-tenant cost ledger | — | vN+ |
 
 > 标识符规则统一遵循上文"标识符规范"小节；`display_name` 严禁出现在任何资源名 / 路径 / schema / index 中（v1 验收硬约束第 9 条）。
 
 #### 隔离强度矩阵
 
-| 隔离维度 | v1 强度 | 实现机制 | v2 加强 |
+| 隔离维度 | v1 强度 | 实现机制 | vN+ 加强 |
 |---|---|---|---|
 | 计算（K8s） | **强** | namespace + Capsule 强制 NetworkPolicy + ResourceQuota + RBAC | — |
 | 存储（OSS） | **中-强** | RAM 子账号 + 路径 prefix + bucket policy（每 tenant 一个 RAM 子账号） | — |
@@ -491,7 +492,7 @@ Realm: lite-ai-infra        (单一 realm，只管认证)
 | 实验（MLflow） | **弱** | tag 软隔离 + Tenant Service 中间件硬过滤 | 接 OSS 版 RBAC 或迁 commercial |
 | 日志（OpenSearch） | **强（v1 起）** | OpenSearch security plugin（per-tenant role + `logs-{tid}-*` / `audit-{tid}-*` index ACL）+ Grafana datasource filter | 跨集群联邦查询 |
 | 网络（Ingress） | **强** | per-tenant 子域 + OIDC 鉴权 | — |
-| 凭证 | **弱** | env var + OSS RAM 子账号（共享存储位置） | Vault per-tenant path（v2 落地） |
+| 凭证 | **弱** | env var + OSS RAM 子账号（共享存储位置） | Vault per-tenant path（vN+ 落地） |
 | 监控指标 | **中** | Prometheus label `tenant_id` + Grafana org | — |
 | 审计日志 | **强（PG 权威）** | PG `tenant_audit_log`（业务事务内同步写，真相源）；OpenSearch `audit-{tid}-*` 仅作 Grafana 可降级视图，挂了不影响查询 | tamper-proof（WORM / 区块链）+ SIEM 集成 |
 | 调度（Kueue） | **强** | per-tenant LocalQueue + ClusterQueue 配额借用规则 | — |
@@ -1092,7 +1093,7 @@ active → archived（先经 suspended 中间态，不允许直跳）
 
 **问题背景**：v1 共享 OpenSearch + Fluent Bit 是平台所有租户的日志/审计查询面。单租户作业刷日志、输出高基数字段、触发 mapping 爆炸都可能压垮集群。软隔离（label + Grafana datasource filter）不足——一次 datasource 配错即跨租户漏审计。
 
-**v1 必做（不延后到 v2）**：
+**v1 必做（不延后到 vN+）**：
 
 | 维度 | 措施 |
 |---|---|
@@ -1146,7 +1147,7 @@ active → archived（先经 suspended 中间态，不允许直跳）
 - 客户端缓存命中率 < 80% → 告警（缓存策略需调优）
 - Gravitino p95 latency > 200ms → 告警
 
-**v2 演进**：评估是否引入 Gravitino client-side 一致性 hash 或独立 Gravitino-PG（如果业务量证明共享 PG 是瓶颈）。
+**vN+ 演进**：评估是否引入 Gravitino client-side 一致性 hash 或独立 Gravitino-PG（如果业务量证明共享 PG 是瓶颈）。
 
 ### 3.15 Keycloak 运营纪律
 
@@ -1352,13 +1353,13 @@ Lineage 边（v1 手工）：
 
 ### 5.3 Sprint 计划
 
-> **已按 §2.2 阶段规划重排（2026-06-06，v4）**。交付顺序：**基础设施（贯穿）→ 阶段①数据域 → 阶段②微调 → 阶段③1B 预训练**。关键变化：
-> - 数据管线 / 多模态处理 / 元数据 / 向量 / **Dev Workspace** / **数据域前端** 提前到 Sprint 1–2；
-> - 微调（SFT/LoRA）+ 推理 + **Cerbos 细粒度授权（替换薄 can()）** 在 Sprint 3；
-> - **1B 多模态预训练移到 Sprint 4**（压轴）+ 24h soak + checkpoint kill drill；
-> - 身份 = Keycloak **26.6.2 + Organizations**；授权 = 阶段①**薄 `can()`（企业隔离）**、阶段②**Cerbos**；审计 = **OSS 追加写**；后端 = **微服务 + API 优先**；
-> - **推迟（ADR-010）**：Quota Service / PG 预算账本 / 同事务审计 / 中央元数据 PG；外部副作用走 outbox/reconcile。
-> - 砍到 v2：DeepSpeed 镜像、CLI 高级命令、Lineage 自动化。
+> **已按 §2.2 版本路线重排（2026-06-06 修订）**。**递增交付、总时间线不变**：基础设施（贯穿）→ **v1 数据域**（S1–S2 末交付）→ **v2 微调**（S3 末交付）→ **v4 1B 预训练**（S4 交付）→ S5–S6 硬化/上线。关键变化：
+> - v1 数据管线 / 多模态处理 / 元数据 / 向量 / **Dev Workspace** / **数据域前端** 在 Sprint 1–2；
+> - v2 微调（SFT/LoRA）+ 推理 + **Cerbos 细粒度授权（替换薄 can()）** 在 Sprint 3；
+> - **v4 1B 多模态预训练在 Sprint 4**（压轴）+ 24h soak + checkpoint kill drill；
+> - 身份 = Keycloak **26.6.2 + Organizations（HA 双副本）**；授权 = v1 **薄 `can()`（企业隔离）**、v2 **Cerbos**；审计 = **OSS 追加写**；后端 = **微服务 + API 优先**；
+> - **推迟（ADR-010）→ vN+**：Quota Service / PG 预算账本 / 同事务审计 / 中央元数据 PG；外部副作用走 outbox/reconcile。
+> - **砍到 vN+（未来）**：DeepSpeed 镜像、CLI 高级命令、Lineage 自动化。
 
 #### Sprint 0（Week 1，05-08 → 05-15）：地基 + Spike + 身份骨架 + API 契约
 
@@ -1378,7 +1379,7 @@ Lineage 边（v1 手工）：
 
 ---
 
-#### Sprint 1（Week 2-3，05-16 → 05-29）：阶段① 数据管线 + 多模态处理 起步
+#### Sprint 1（Week 2-3，05-16 → 05-29）：v1 数据管线 + 多模态处理 起步
 
 | 负责 | 任务 |
 |---|---|
@@ -1397,7 +1398,7 @@ Lineage 边（v1 手工）：
 
 ---
 
-#### Sprint 2（Week 4-5，05-30 → 06-12）：阶段① 完成（10TB + 元数据 + 向量 + 数据域前端）
+#### Sprint 2（Week 4-5，05-30 → 06-12）：**v1 交付**（10TB + 元数据 + 向量 + 数据域前端）
 
 | 负责 | 任务 |
 |---|---|
@@ -1412,13 +1413,13 @@ Lineage 边（v1 手工）：
 | P3 | **Dev Workspace 完整**：Keycloak OIDC ingress + SSH（NodePort + key-pair）+ code-server 鉴权 |
 | P3 | URI 解析器（`gravitino://my/...` / `gravitino://shared/...` → enterprise_id/group_id）+ CLI data 命令（含 --dry-run/--force） |
 
-> **砍到 v2**：DeepSpeed 镜像（v1 用 PyTorch DDP 已能跑 1B）。
+> **砍到 vN+（未来）**：DeepSpeed 镜像（v1 用 PyTorch DDP 已能跑 1B）。
 
 **出口**：10TB raw → 一行命令 → Lance + Gravitino schema 可查；Embedding → ANN 可用（或 V8 决策）；**数据域前端完整可用**；监控看板可见；`enterprise create` 一命令建 Org + Group + 资源前缀（幂等跑 3 次一致）；Gravitino 2 副本关一个仍可读；OSS 审计可在 Grafana 查。
 
 ---
 
-#### Sprint 3（Week 6-7，06-13 → 06-26）：阶段② 微调 + 推理 + Cerbos 细粒度授权
+#### Sprint 3（Week 6-7，06-13 → 06-26）：**v2 交付** 微调 + 推理 + Cerbos 细粒度授权
 
 | 负责 | 任务 |
 |---|---|
@@ -1429,13 +1430,13 @@ Lineage 边（v1 手工）：
 | P3 | **前端（作业/模型页）**：微调提交·监控 + 模型管理/部署（提交 + 监控） |
 | P3 | SDK/CLI：job / pipeline / model / inference / workspace 主路径 |
 
-> **砍到 v2**：CLI 高级命令（job restore / lineage 自动化）——v1 SDK/CLI 只保最小可用集。
+> **砍到 vN+（未来）**：CLI 高级命令（job restore / lineage 自动化）——v1 SDK/CLI 只保最小可用集。
 
 **出口**：基于现成基座 SFT/LoRA → 部署 → 推理 全链路通；**Cerbos 36 条 AC 全过**（企业/组 scope、owner、共享资源读正确）；checkpoint 续训 ≤30min；作业/模型前端可用。
 
 ---
 
-#### Sprint 4（Week 8-9，06-27 → 07-10）：阶段③ 1B 预训练（压轴）+ Soak + 预演 #1
+#### Sprint 4（Week 8-9，06-27 → 07-10）：**v4 交付** 1B 预训练（压轴）+ Soak + 预演 #1
 
 > 第 1 周：1B 训练跑通 + 24h soak + checkpoint kill drill（必须在预演 #1 前发现训练性能/容错问题）；第 2 周：预演 #1。
 
@@ -1460,7 +1461,7 @@ Lineage 边（v1 手工）：
 
 | 负责 | 任务 |
 |---|---|
-| 全员（第 1 周前半）| 处理预演 #1 反馈（阻塞性 bug 优先；非阻塞记 v2 backlog） |
+| 全员（第 1 周前半）| 处理预演 #1 反馈（阻塞性 bug 优先；非阻塞记 vN+ backlog） |
 | P1 | 训练 GPU 利用率调优（基于 Sprint 4 soak baseline，目标 ≥60% × 1.3）；DataLoader 并发 / prefetch / SSD 缓存 |
 | P1 | 推理 P95 延迟基准 + vLLM 调优（batch size / KV cache） |
 | P2 | Lance 热点路径优化（读放大 / 列裁剪） |
@@ -1493,13 +1494,13 @@ Lineage 边（v1 手工）：
 |---|---|---|---|
 | 05-15 | S0 | 两数据 Spike PASS + Keycloak 26.6.2 可登录（带 groups claim）+ Gateway 解析 enterprise_id/group_id + 契约代码生成跑通 | 顺延 Sprint 0，可能砍 v1 范围 |
 | 05-29 | S1 | 100GB 数据管线 + **多模态处理** → Lance → Gravitino schema 可查 + **薄 can() 企业隔离** + Dev Workspace 骨架 + 契约 SDK 可调 | 砍数据子集量；薄 can() 滑窗 |
-| 06-12 | S2 | **10TB 数据管线 PASS** + Gravitino 2 副本 HA + Embedding/ANN（或 V8 决策）+ **数据域前端完整** + **Enterprise Provisioner 幂等**（建 Org+Group+资源）+ OpenSearch 审计可查 | 砍数据集量 / V8 砍 10% / 前端降级 |
-| 06-26 | S3 | SFT + 推理全链路通 + **Cerbos 替换薄 can()，36 条 AC 全过** + checkpoint 续训 ≤30min + 作业/模型前端 | Cerbos 滑则保留薄 can()（粗粒度）上线、细粒度推迟 |
-| 07-10 | S4 | **1B 多模态预训练跑通 + 24h soak GPU util ≥60% + checkpoint kill drill PASS** + 2 企业隔离 + V9 命名审计 + **预演 #1 PASS** | **必须达成**；soak 不达标 → 调优或砍范围 |
+| 06-12 | S2 | **【v1 交付】10TB 数据管线 PASS** + Gravitino 2 副本 HA + Embedding/ANN（或 V8 决策）+ **数据域前端完整** + **Enterprise Provisioner 幂等**（建 Org+Group+资源）+ OpenSearch 审计可查 | 砍数据集量 / V8 砍 10% / 前端降级 |
+| 06-26 | S3 | **【v2 交付】** SFT + 推理全链路通 + **Cerbos 替换薄 can()，36 条 AC 全过** + checkpoint 续训 ≤30min + 作业/模型前端 | Cerbos 滑则保留薄 can()（粗粒度）上线、细粒度推迟 |
+| 07-10 | S4 | **【v4 交付】1B 多模态预训练跑通 + 24h soak GPU util ≥60% + checkpoint kill drill PASS** + 2 企业隔离 + V9 命名审计 + **预演 #1 PASS** | **必须达成**；soak 不达标 → 调优或砍范围 |
 | 07-24 | S5 | 预演 #2 性能达标 + V1-V12 全过 | 顺延 buffer 周；通知 X-user 推迟上线 |
 | **08-01** | S6 | **MVP 验收（V10/V11/V12 + V2/V5/V8 任一 fail 即推迟）** | **MVP 失败** |
 
-### 5.5 关键路径与超载预警（v4，按阶段重排后）
+### 5.5 关键路径与超载预警（按版本路线重排后）
 
 | 风险 / 超载点 | 缓解 |
 |---|---|
@@ -1507,7 +1508,7 @@ Lineage 边（v1 手工）：
 | **Cerbos 在 S3 替换薄 can()** | S0/S1 先做**半天 Cerbos spike**（Python SDK + derived role）；**薄 can() 作 fallback**——Cerbos 滑则粗粒度先上、细粒度推迟（seam 保证不返工） |
 | **1B 预训练压轴（S4）晚发现风险** | S4 **第 1 周即 24h soak + kill drill**（不等 S5）；用 DDP（非 DeepSpeed）降风险；S5 buffer 调优 |
 | **微服务全拆 × 3 人** | **统一脚手架**（FastAPI 模板 / CI / 可观测埋点）+ **API 契约先行**，避免每服务各搞一套；服务独立可部署但共享脚手架 |
-| **P3 在 S2 多担**：数据域前端 + Provisioner + Dev Workspace 完整 | 数据域前端优先；**admin 管理页推 v2/CLI**；URI/CLI 次要项可滑 S3 |
+| **P3 在 S2 多担**：数据域前端 + Provisioner + Dev Workspace 完整 | 数据域前端优先；**admin 管理页推 vN+/CLI**；URI/CLI 次要项可滑 S3 |
 | **外部副作用（Kueue/Volcano/Argo/Gravitino/OSS）** | 一律走 **outbox/reconcile 幂等**，禁纳入同步链路阻塞主流程 |
 | **Sprint 5 双重满载** | 第 1 周 bug 优先（清零后才调优）；预演 #2 放第 2 周，有序 |
 
@@ -1517,7 +1518,7 @@ Lineage 边（v1 手工）：
 
 1. **不可砍**：数据管线 + **多模态处理** + 元数据（Gravitino）+ Embedding（V8 至少 10%）、Keycloak 26.6.2 + **Org Service**、**薄 can()（企业隔离硬检查）**、**OSS 审计**、**API Gateway + API 契约**、SDK/CLI、监控、**Enterprise Provisioner（建 Org+Group+资源）**、OpenSearch + Gravitino HA、Checkpoint 容错、**微调（SFT）**、训练运行时（1B baseline）
 2. **可降级**：**Cerbos 细粒度授权**（滑则薄 can() 粗粒度先上、细粒度推迟，seam 保证不返工）、推理（单实例 → NodePort）、Embedding（10TB → 10% = 1TB）、Dev Workspace（仅 SSH，去 code-server）、**前端**（数据域核心保住；作业/模型/admin 页降级或 CLI）、Enterprise Provisioner（全自动 → 半自动 `laictl` 脚本）
-3. **已确定砍到 v2**（无条件）：DeepSpeed 镜像、CLI 高级命令（data update / job restore）、Lineage 自动化（保留手工 tag）、SDK 跨语言扩展、**PG 预算/Quota Service / 同事务审计 / 中央元数据目录**（ADR-010 推迟）
+3. **已确定砍到 vN+（未来）**（无条件）：DeepSpeed 镜像、CLI 高级命令（data update / job restore）、Lineage 自动化（保留手工 tag）、SDK 跨语言扩展、**PG 预算/Quota Service / 同事务审计 / 中央元数据目录**（ADR-010 推迟）
 4. **触发性砍项**：第二企业接入演练（若 Sprint 4 第 1 周 1B soak 失败，腾时间修训练）
 
 ---
