@@ -189,7 +189,7 @@
 |---|---|
 | **统一 LLM 接入服务（LLM Gateway，⑮）** | 统一 API（chat/completion/embedding）接 **Claude / Codex / Minimax API（按 token 计费）**；模型路由 + API key 管理 + 限流 + 按 enterprise/group 计量；**LiteLLM 待选型**（spike 选定，见 §6/ADR） |
 | **Agent 平台 + 统一对话交互（⑯）** | Agent 框架 + 运行时 + **统一 chat UI**；内置 agent：**模型开发 / 管线开发 / 数据探查**（复用第三方模型 + 工具调用走 Platform API 契约） |
-| **Cerbos PDP（授权升级）** | 细粒度 ABAC / derived role **替换薄 can()**，36 条 AC 全过；agent/LLM 访问数据/模型按 enterprise/group scope 受控；handler 零改（seam，ADR-011） |
+| **Cerbos PDP（授权升级）** | 细粒度 ABAC / derived role **替换薄 can()**，43 条 AC 全过；agent/LLM 访问数据/模型按 enterprise/group scope 受控；handler 零改（seam，ADR-011） |
 | **前端（Agent/对话域）** | 统一对话界面 + agent 任务/会话管理 + LLM 用量/模型管理页 |
 
 **v3：Agentic Search（多源多模态统一检索）**
@@ -1469,7 +1469,7 @@ Lineage 边（v1 手工）：
 **S3（W6-7）LLM Gateway + 授权升级**
 - **LiteLLM 选型 spike 落定** → 部署 **LLM Gateway**（统一 chat/completion/embedding API）
 - 接 **Claude / Codex / Minimax**（API key 计费）+ 模型路由 + 密钥/凭证管理 + 限流 + 按 enterprise/group 用量统计
-- **Cerbos PDP 上线**，替换薄 `can()`（**AC-1~36 全过**）；LLM/数据访问按 scope 受控
+- **Cerbos PDP 上线**，替换薄 `can()`（**AC-1~43 全过**）；LLM/数据访问按 scope 受控
 - 出口：经 Gateway 用三家模型发起对话；调用按租户计量 + 授权；Cerbos 全 AC 过
 
 **S4（W8-9）Agent 框架 + 运行时 + 统一对话**
@@ -1547,7 +1547,7 @@ Lineage 边（v1 手工）：
 | 06-13 | S0 | 两数据 Spike PASS + Keycloak 26.6.2 可登录（带 groups claim）+ Gateway 解析 enterprise_id/group_id + 契约代码生成跑通 | 顺延 S0，可能砍 v1 范围 |
 | 06-27 | S1 | 100GB 数据管线 + **多模态处理** → Lance → Gravitino + **薄 can() 企业隔离** + Dev Workspace 骨架 + 契约 SDK | 砍数据子集量；薄 can() 滑窗 |
 | **07-11** | S2 | **【v1 交付】10TB 数据管线 PASS** + Gravitino HA + Embedding/ANN（或 V8 决策）+ **数据域前端完整** + Enterprise Provisioner 幂等 + OSS 审计 | 砍数据集量 / V8 砍 10% / 前端降级 |
-| **08-22** | S5 | **【v2 交付】LLM Gateway（接 Claude/Codex/Minimax）+ Agent 平台/统一对话 + 三类内置 agent + Cerbos 36 AC 全过**（验收 10） | LiteLLM 不行→换备选；Cerbos 滑则薄 can() 先上 |
+| **08-22** | S5 | **【v2 交付】LLM Gateway（接 Claude/Codex/Minimax）+ Agent 平台/统一对话 + 三类内置 agent + Cerbos 43 AC 全过**（验收 10） | LiteLLM 不行→换备选；Cerbos 滑则薄 can() 先上 |
 | **09-19** | S7 | **【v3 交付】Agentic Search**：多源多模态统一检索 + 带引用 + scope 隔离（验收 11） | 检索深度降级（先单模态）/ 顺延 |
 | **10-17** | S9 | **【v4 交付】**基于现成基座 SFT/LoRA → 部署 → 推理全链路（验收 3/4/5）+ checkpoint 续训 ≤30min | 顺延 |
 | **11-14** | S11 | **【v5 交付】1B 预训练跑通 + 24h soak GPU util ≥60% + kill drill**（验收 2）+ 2 企业隔离 + V9 审计 | soak 不达标 → 调优或砍范围 |
@@ -1592,7 +1592,7 @@ Lineage 边（v1 手工）：
 | S2 | Spike 失败 | 每 spike 有 fallback；按滑窗砍范围 |
 | D1 | OSS 凭证泄漏 | ServiceAccount + RAM Role per tenant；CI secret scan |
 | **D5** | **资源命名混入 display_name 导致泄漏 / 难重命名** | **constitution.md 硬约束；CI 跑 grep 检查（V9 用例）；code review 强制** |
-| **D6** | **PolicyEngine 漏判（handler 散落 `if tenant_id ==`，绕过统一决策点）** | **CI grep 拦截；所有 mutation handler 单测必须 mock PolicyEngine.can 并断言被调用；36 条 AC 用例（AC-1~AC-36）全过** |
+| **D6** | **PolicyEngine 漏判（handler 散落 `if tenant_id ==`，绕过统一决策点）** | **CI grep 拦截；所有 mutation handler 单测必须 mock PolicyEngine.can 并断言被调用；43 条 AC 用例（AC-1~AC-43）全过** |
 | **D7** | **Audit 写失败但业务成功（违反"audit 写失败即拒"）** | **`@audited` 装饰器内同一 PG 事务；E2E 测试故意挂 audit 表 → 期望业务回滚** |
 | **D8** | **`/admin/*` 与普通路径混用导致 platform-admin 误操作跨 tenant** | **Router 分两个独立模块 + 各自 middleware；CI grep 禁止 admin handler 出现在 `routers/v1/`** |
 | **D9** | **OSS RAM 策略错配（user-sa 误授 processed/ 写权）** | **provision 用 IaC 模板 + 单测；Sprint 2 末故意尝试 alice 写 processed/ → 期望 RAM 拒** |
@@ -1745,7 +1745,7 @@ Lineage 边（v1 手工）：
 | V7 | 多租户落地 | OIDC 登录拿 token；submit 自动注入 tenant_id；第二测试 tenant 不能访问 t-0001 资源 |
 | V8 | Embedding 闭环 | 10TB 24h 内，ANN ≤ 500ms |
 | **V9** | **资源命名审计** | **`grep -ri "x-user" oss-paths k8s-resources gravitino-schemas mlflow-experiments` 必须为空（仅出现在 display 字段）** |
-| **V10** | **PolicyEngine AC 全过** | **跑 tenant-team-scenarios.md 的 36 条 AC（AC-1~AC-36，含 AC-35 pipeline 参数归属 / AC-36 Workspace 入口拒入），全 pass；Workspace enter 至少覆盖 owner / 非 owner 的 tenant-admin / 走 `/admin/*` 的 platform-admin 三种角色** |
+| **V10** | **PolicyEngine AC 全过** | **跑 tenant-team-scenarios.md 的 43 条 AC（AC-1~AC-43，含 AC-35 pipeline 参数归属 / AC-36 Workspace 入口拒入），全 pass；Workspace enter 至少覆盖 owner / 非 owner 的 tenant-admin / 走 `/admin/*` 的 platform-admin 三种角色** |
 | **V11** | **Audit 完整性** | **mutation / `/admin/*` / `--force` / `--on-behalf` 操作都能在 `tenant_audit_log` 查到；故意挂 audit 表 → 业务回滚** |
 | **V12** | **Tenant Provisioner 幂等** | **`tenant create t-test` 跑 3 次结果一致；中途 kill reconciler 重启能续上** |
 
@@ -1758,7 +1758,7 @@ Lineage 边（v1 手工）：
 | 推理集成 | 部署 + OIDC 调用 | nightly |
 | Workspace 集成 | OIDC 登录 → 创建 → SSH → 删除 | sprint 末 |
 | **多租户集成** | **创建 tenant t-test → 提作业 → 验隔离 → 删除（验 Provisioner 幂等 + V9 命名审计）** | **sprint 末** |
-| **PolicyEngine AC** | **跑全部 36 条 AC 用例（AC-1~AC-36，fixture 拉两个 tenant + 3 角色用户；含 AC-35 pending pipeline 参数归属 / AC-36 Workspace 入口拒入）** | **每 PR + nightly** |
+| **PolicyEngine AC** | **跑全部 43 条 AC 用例（AC-1~AC-43，fixture 拉两个 tenant + 3 角色用户；含 AC-35 pending pipeline 参数归属 / AC-36 Workspace 入口拒入）** | **每 PR + nightly** |
 | **Audit 完整性** | **mutation / admin / --force / --on-behalf 全路径 → audit_log 行匹配 + 挂表回滚** | **sprint 末** |
 | **Quota 预检** | **构造超额 submit → 期望 400 + quota_exceeded reason** | **每 PR** |
 | **Quota 并发** | **2 个大作业同时提交（各占配额 90%）→ 仅一个 reserve 成功，另一个返 quota_exceeded；验证无双扣** | **sprint 末** |
@@ -1774,7 +1774,7 @@ Lineage 边（v1 手工）：
 |---|---|
 | URI 解析器 | gravitino:// + my/ 别名、错误格式 |
 | **Tenant Service** | **token 解析、tenant_id 缓存、display_name 查询** |
-| **PolicyEngine** | **36 条 AC 用例（AC-1~AC-36，输入：ctx + action + resource snapshot；断言：allow/deny + reason；显式覆盖 AC-35 pipeline.update 在 pending/non-pending × owner/tenant-admin 矩阵，AC-36 workspace.enter 在 owner/tenant-admin/platform-admin 矩阵）** |
+| **PolicyEngine** | **43 条 AC 用例（AC-1~AC-43，输入：ctx + action + resource snapshot；断言：allow/deny + reason；显式覆盖 AC-35 pipeline.update 在 pending/non-pending × owner/tenant-admin 矩阵，AC-36 workspace.enter 在 owner/tenant-admin/platform-admin 矩阵）** |
 | **Quota Service** | **OSS 流量 / CPU 时 / GPU 时 预检计算；超额 / 边界 / 多维同时超 |
 | **Audit 装饰器** | **正常路径写入 + 同事务回滚（mock PG 写失败）+ override / on-behalf 标记** |
 | **Tenant Provisioner** | **10 个 step 幂等 + 重启续作 + 失败状态机；mock 外部系统 |
@@ -1801,7 +1801,7 @@ Lineage 边（v1 手工）：
 
 ```
 Sprint 6 (08-23 起)
-  Day 1-2: 平台跑全部 V1-V12 自动化（含 V10 PolicyEngine 36 AC / V11 Audit / V12 Provisioner）
+  Day 1-2: 平台跑全部 V1-V12 自动化（含 V10 PolicyEngine 43 AC / V11 Audit / V12 Provisioner）
            + 性能基准 + Quota 并发/幂等/滚动累计 + Dataset 删除竞态测试
   Day 3:   X-user team 自跑反馈
   Day 4:   修复 + 复验（仅 bugfix；不允许新 feature）

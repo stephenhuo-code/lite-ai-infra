@@ -1,9 +1,21 @@
 # 用户故事：租户团队场景（v1）
 
-- 适用范围：v1 多租户团队协作场景 — 4 类角色的能力边界与一日故事
-- 关联：design doc §3.2 多租户机制 / ADR-002 Keycloak v1 / ADR-007 PolicyEngine
-- 用途：spec 001-tenant-identity 验收依据 / Portal & SDK & CLI 行为契约 / 用户文档撰写素材
-- 日期：2026-05-10
+- 适用范围：对外多企业 SaaS 的团队协作场景 — 角色能力边界与验收
+- 关联：[constitution](../constitution.md) / ADR-010（多企业）/ ADR-011（Cerbos）/ ADR-012（Agent/LLM）/ design §3.2
+- 用途：Cerbos 策略 + `can()` 的验收真相源 / Portal & SDK & CLI 行为契约 / 用户文档素材
+- 日期：2026-05-10（**2026-06-06 升级到两级模型**）
+
+> ⚠️ **已升级为多企业两级模型（2026-06-06）。下方"验收清单（AC 表）"是权威真相源；上方角色定义/一日故事/能力表为历史叙述（旧单层 tenant 模型），按下列映射读。**
+>
+> **层级与角色**：平台 → **企业(enterprise)** → **用户组(group)** → 用户。角色：
+> - `member`：本组私有资源 owner 操作 + 读企业共享 + 读本组
+> - `group-admin`：**仅管本组**（本组资源/成员）← 旧 `tenant-admin`（团队 lead）≈ 此
+> - `enterprise-admin`：管本企业**所有组** + **写企业共享资源** + 配额（配额 vN+）
+> - `platform-admin`：跨企业，仅走 `/admin/*` 特权 API
+>
+> **4 条语义裁定（2026-06-06）**：① group-admin 仅管本组；② 企业共享资源**企业内全读、仅 enterprise-admin 写**；③ 同企业**跨组私有资源默认隔离**；④ agent/LLM/检索**继承调用者 scope**。
+>
+> **授权分期**：v1 **薄 `can()`**（认证 + 企业隔离 + owner + 基本角色门槛，in-code）；v2 **Cerbos**（组 scope / 共享派生角色 / 派生属性 / agent scope）。数据路径（OSS）由 **RAM/STS** 执行。术语：`tenant→enterprise`、`tenant-admin→group-admin`、`t-00xx→e-00xx`、`cross-tenant→cross-enterprise`。
 
 ---
 
@@ -431,48 +443,62 @@
 
 PolicyEngine 必须通过的端到端测试：
 
-| # | 测试场景 | 期望 |
-|---|---|---|
-| AC-1 | alice 删自己的 running 作业 | ✅ |
-| AC-2 | alice 删 bob 的 running 作业 | ❌ `only owner or tenant-admin` |
-| AC-3 | alice 删自己的 completed 作业 | ❌ `已完成作业不能删除` |
-| AC-4 | alice 提交 4 GPU 作业 | ✅ |
-| AC-5 | alice 提交 8 GPU 作业 | ❌ `requires tenant-admin` |
-| AC-6 | alice 引用 t-0099 数据集 | ❌ `cross-tenant` |
-| AC-7 | alice 列 MLflow run | 仅本 tenant 可见 |
-| AC-8 | alice OSS 直读 t-0099 路径 | ❌ RAM 拒（不到 PolicyEngine） |
-| AC-9 | tenant-admin 删队友作业 | ✅ |
-| AC-10 | tenant-admin 提交 8 GPU | ✅ |
-| AC-11 | tenant-admin 加成员 | ✅ |
-| AC-12 | tenant-admin 改本 tenant 配额 | ❌ `requires platform-admin` |
-| AC-13 | tenant-admin 看 t-0099 | ❌ `cross-tenant` |
-| AC-14 | platform-admin 走 `/admin/*` 创建 tenant | ✅ + 全部资源 provision |
-| AC-15 | platform-admin 走普通业务 path 跨 tenant | ❌ `cross-tenant`（强制走 /admin/*） |
-| AC-16 | platform-admin 改 tenant 配额（admin path） | ✅ |
-| AC-17 | platform-admin override 删任何作业 | ✅ + audit 记录 admin override |
-| AC-18 | 未登录访 `/v1/jobs` | `401` |
-| AC-19 | 未登录访推理 endpoint | Ingress 跳 Keycloak |
-| AC-20 | 未登录访 `/healthz` | `200` |
-| **数据集** | | |
-| AC-21 | alice 注册自己的数据集 | ✅ |
-| AC-22 | alice 删自己的数据集（无引用） | ✅ |
-| AC-23 | alice 删自己的数据集（被 2 个 run 引用） | ❌ `dataset 被 N 个资源引用` |
-| AC-24 | alice 删 bob 的数据集 | ❌ `only owner or tenant-admin` |
-| AC-25 | alice 改 bob 的数据集 schema | ❌ `only owner or tenant-admin` |
-| AC-26 | alice 引用 t-0099 数据集（OSS 直读 + URI 解析双路径） | ❌ `cross-tenant`（RAM 拒 + PolicyEngine 拒） |
-| AC-27 | tenant-admin `--force` 废弃队友数据集（ref_count>0） | ✅ 转 deprecated + audit（OSS 保留，不硬删）|
-| **数据管线** | | |
-| AC-28 | alice 提交管线（配额内） | ✅ |
-| AC-29 | alice 提交管线（OSS 流量超配额） | ❌ `quota exceeded: oss_traffic`（提交时拒） |
-| AC-30 | alice 改 running 管线参数 | ❌ `running 后不可修改` |
-| AC-31 | alice 取消 bob 的 running 管线 | ❌ `only owner or tenant-admin can cancel` |
-| AC-32 | alice 重跑自己 failed 管线 | ✅（配额重新预检） |
-| AC-33 | alice 直接写 OSS `processed/` 区 | ❌ RAM 拒（仅管线 SA 可写） |
-| AC-34 | platform-admin gc 孤儿数据集 | ✅ + audit + 二次确认 |
-| **数据管线（续）** | | |
-| AC-35 | alice 改 bob 的 pending 管线参数 | ❌ `only owner or tenant-admin can update pipeline params` |
-| **Workspace** | | |
-| AC-36 | tenant-admin 进队友 Workspace（v1） | ❌ `Workspace 仅 owner 可访问（v1）` — tenant-admin 在 v1 被显式拒 |
+> **场景设定**：alice、bob 同属企业 `e-0001` 的用户组 `g-0001`；`g-0002` 是同企业另一组；`e-0099` 是另一家企业。**授权层**：`v1`=薄 can()（认证/企业隔离/owner/角色门槛）｜`v2`=Cerbos（组 scope/共享/派生属性/agent）｜`数据层`=RAM/STS 或 query 过滤｜`vN+`=推迟。
+
+| # | 测试场景 | 期望 | 授权层 |
+|---|---|---|---|
+| **作业 / 通用** | | | |
+| AC-1 | alice 删自己的 running 作业 | ✅ | v1(owner) |
+| AC-2 | alice 删同组 bob 的 running 作业 | ❌ `only owner / group-admin / enterprise-admin` | v2(owner) |
+| AC-3 | alice 删自己的 completed 作业 | ❌ `已完成作业不能删除` | v2(state) |
+| AC-4 | alice 提交 4 GPU 作业 | ✅ | v1 |
+| AC-5 | alice 提交 8 GPU 作业 | ❌ `> 4 GPU 需 group-admin+ 角色` | v1(role) |
+| AC-6 | alice 引用 e-0099 数据集 | ❌ `cross-enterprise` | v1(企业隔离) |
+| AC-7 | alice 列 MLflow run | 仅本企业、本组私有 + 企业共享可见 | v2(scope)+数据层过滤 |
+| AC-8 | alice OSS 直读 e-0099 路径 | ❌ RAM/STS 拒（不到 PDP） | 数据层(STS) |
+| **用户组管理员（group-admin，仅本组）** | | | |
+| AC-9 | group-admin 删本组队友作业 | ✅ | v2(group) |
+| AC-10 | group-admin 提交 8 GPU | ✅ | v1(role) |
+| AC-11 | group-admin 加本组成员 | ✅ | Keycloak + v2(group) |
+| AC-12 | group-admin 改配额 | ❌ `requires enterprise-admin+`（配额 vN+） | vN+ |
+| AC-13 | group-admin 看 e-0099 | ❌ `cross-enterprise` | v1 |
+| **platform-admin（仅 `/admin/*`）** | | | |
+| AC-14 | platform-admin 走 `/admin/*` 创建 enterprise | ✅ + provision（Org+Group+资源） | v1 / Provisioner |
+| AC-15 | platform-admin 走普通业务 path 跨企业 | ❌ `cross-enterprise`（强制走 /admin/*） | v1 |
+| AC-16 | platform-admin 改企业配额（admin path） | ✅（配额 vN+） | vN+ |
+| AC-17 | platform-admin override 删任何作业 | ✅ + audit 记录 override | v1(特权)+审计 |
+| **未登录** | | | |
+| AC-18 | 未登录访 `/v1/*` | `401` | v1(认证) |
+| AC-19 | 未登录访推理 endpoint | Ingress 跳 Keycloak | v1 |
+| AC-20 | 未登录访 `/healthz` | `200` | 白名单 |
+| **数据集** | | | |
+| AC-21 | alice 注册自己（本组）的数据集 | ✅ | v1 |
+| AC-22 | alice 删自己的数据集（无引用） | ✅ | v2(owner+ref) |
+| AC-23 | alice 删自己的数据集（被 2 个 run 引用） | ❌ `dataset 被 N 个资源引用` | v2(ref) |
+| AC-24 | alice 删同组 bob 的数据集 | ❌ `only owner / group-admin+` | v2(owner) |
+| AC-25 | alice 改同组 bob 的数据集 schema | ❌ `only owner / group-admin+` | v2 |
+| AC-26 | alice 引用 e-0099 数据集（OSS 直读 + URI 双路径） | ❌ `cross-enterprise`（RAM/STS + PDP 双拒） | v1 + 数据层 |
+| AC-27 | group-admin `--force` 废弃本组队友数据集（ref_count>0） | ✅ 转 deprecated + audit（OSS 保留，不硬删） | v2 |
+| **数据管线** | | | |
+| AC-28 | alice 提交管线（配额内） | ✅ | v1 |
+| AC-29 | alice 提交管线（OSS 流量超配额） | ❌ `quota exceeded`（**vN+；v1 仅 Kueue 静态配额**） | vN+ |
+| AC-30 | alice 改 running 管线参数 | ❌ `running 后不可修改` | v2(state) |
+| AC-31 | alice 取消同组 bob 的 running 管线 | ❌ `only owner / group-admin+` | v2(owner) |
+| AC-32 | alice 重跑自己 failed 管线 | ✅ | v1/v2 |
+| AC-33 | alice 直接写 OSS `processed/` 区 | ❌ RAM/STS 拒（仅管线 SA 可写） | 数据层 |
+| AC-34 | platform-admin gc 孤儿数据集 | ✅ + audit + 二次确认 | v1(特权) |
+| AC-35 | alice 改同组 bob 的 pending 管线参数 | ❌ `only owner / group-admin+` | v2 |
+| **Workspace** | | | |
+| AC-36 | group-admin 进队友 Workspace（v1） | ❌ `Workspace 仅 owner 可访问（v1）` | v1/v2 |
+| **用户组 / 企业共享（两级模型新增）** | | | |
+| AC-37 | alice(g-0001) 访问 g-0002 的私有资源 | ❌ `cross-group`（同企业跨组默认隔离） | v2(group scope) |
+| AC-38 | alice 读企业共享数据集（scope=shared） | ✅（企业内全读） | v2(shared 派生角色) |
+| AC-39 | alice(member) 写/发布到企业共享区 | ❌ `requires enterprise-admin` | v2 |
+| AC-40 | enterprise-admin 写企业共享区 | ✅ | v2 |
+| AC-41 | enterprise-admin 管本企业任意组（建组/移成员） | ✅ | v2(enterprise scope) |
+| **Agent / LLM（v2，ADR-012）** | | | |
+| AC-42 | agent / Agentic Search 以 alice 身份检索 | 仅返回 alice 可见（本组私有 + 企业共享），**不越权**；经 can()+数据层过滤 | v2(scope 继承) |
+| AC-43 | LLM Gateway 调用按 enterprise/group 计量；越权模型/超限 | 计量记录；拒越权或超限 | v2 |
 
 ---
 
