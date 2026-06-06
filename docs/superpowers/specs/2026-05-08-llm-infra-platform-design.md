@@ -10,7 +10,7 @@
 ## 0. Executive Summary
 
 ### 项目定位
-公司级共享 **多模态数据 + Agent + LLM 应用**平台，**对外多公司 SaaS**（架构从第一天起多企业，ADR-010）。**按版本递增交付：v1 = 数据域（数据管线/元数据/多模态处理）→ v2 = Agent 开发平台 + 统一 LLM 接入（Claude/Codex/Minimax 订阅）→ v3 = Agentic Search（多源多模态统一检索）→ v4 = 微调（SFT/LoRA）→ v5 = 1B 预训练**。战略上**先用第三方 LLM + Agent 快速交付价值，自研微调/预训练后置**。通过 Keycloak 做身份/企业管理，所有资源标识与企业名解耦，扩展到 5+ 企业**不需要重命名任何资源**。
+公司级共享 **多模态数据 + Agent + LLM 应用**平台，**对外多公司 SaaS**（架构从第一天起多企业，ADR-010）。**按版本递增交付：v1 = 数据域（数据管线/元数据/多模态处理）→ v2 = Agent 开发平台 + 统一 LLM 接入（Claude/Codex/Minimax，API key 按 token 计费）→ v3 = Agentic Search（多源多模态统一检索）→ v4 = 微调（SFT/LoRA）→ v5 = 1B 预训练**。战略上**先用第三方 LLM + Agent 快速交付价值，自研微调/预训练后置**。通过 Keycloak 做身份/企业管理，所有资源标识与企业名解耦，扩展到 5+ 企业**不需要重命名任何资源**。
 
 ### 核心架构原则（写进 constitution）
 
@@ -42,7 +42,7 @@
 > **版本路线（2026-06-06 修订）**：**v1 数据域** → **v2 Agent 平台 + 统一 LLM 接入** → **v3 Agentic Search** → **v4 微调（SFT/LoRA）** → **v5 1B 预训练**。身份/组织/授权/SDK/监控/网关等基础设施贯穿、随 v1 最先就位。**递增交付**（时间线见 §5）。
 
 ### 交付目标（一句话）
-**首个客户 X-user team 沿版本递增获得价值：v1（10TB 多模态数据准备 → 清洗/处理 → Lance + Gravitino 元数据）→ v2（Agent 平台 + 统一 LLM 接入，用 Claude/Codex/Minimax 订阅做模型/管线/数据探查）→ v3（Agentic Search 多源多模态统一检索）→ v4（基于现成基座 SFT/LoRA + 推理）→ v5（1B 多模态预训练，8 GPU，3-4 天）；每个版本可独立交付验收；节点故障 1h 内自动恢复；任意资源标识不含企业/团队名。**
+**首个客户 X-user team 沿版本递增获得价值：v1（10TB 多模态数据准备 → 清洗/处理 → Lance + Gravitino 元数据）→ v2（Agent 平台 + 统一 LLM 接入，用 Claude/Codex/Minimax API（按 token 计费）做模型/管线/数据探查）→ v3（Agentic Search 多源多模态统一检索）→ v4（基于现成基座 SFT/LoRA + 推理）→ v5（1B 多模态预训练，8 GPU，3-4 天）；每个版本可独立交付验收；节点故障 1h 内自动恢复；任意资源标识不含企业/团队名。**
 
 ---
 
@@ -74,7 +74,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │ AI 应用平面（v2 / v3 新增）                                  │
 │   ⑮ 统一 LLM 接入服务（LLM Gateway，LiteLLM 待选型）         │
-│      接 Claude / Codex / Minimax 订阅 + 路由/计量/密钥/限流  │
+│      接 Claude / Codex / Minimax API（按 token 计费） + 路由/计量/密钥/限流  │
 │   ⑯ Agent 平台 + 统一对话交互（v2）                          │
 │      模型开发 / 管线开发 / 数据探查 agent，复用第三方模型    │
 │   ⑰ Agentic Search（v3）：多源多模态数据统一检索 agent      │
@@ -119,7 +119,7 @@
 | Ⓒ | 日志 | 集中日志查询 | OpenSearch **3 节点 cluster（v1）+ security plugin + ILM**（见 §3.16.1）+ Fluent Bit 采集 + Grafana 可视化（详见 ADR-005） |
 | **⑫** | **Admission Pipeline** | **准入中间件链：① PolicyEngine（`can(ctx, action, resource)` → 调 **Cerbos**，ADR-011）→ ② ~~QuotaService~~（**v1 推迟**，无 PG 预算账本，仅 Kueue 静态配额）→ ③ Audit（**v1 追加写 OSS**）+ Outbox（外部副作用由 worker 按 workload_id 幂等执行；**禁止**把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步事务）；详见 §3.9/§3.11** | **Platform API 中间件链 + Cerbos sidecar + OSS audit + outbox worker；v1 无 PG（配额账本/同事务审计推迟）** |
 | **⑬** | **Enterprise Provisioner** | **开通/暂停/归档企业时 reconcile：Keycloak Organization + Group 子组骨架（含角色）/ Kueue LocalQueue+Cohort / OSS prefix + RAM/STS / Gravitino schema / MLflow experiment / Grafana org / OpenSearch index template（v1 推迟：PG 元数据/配额账本）** | **controller-runtime 风格 reconciler，幂等；经 Keycloak Admin API 建 Org/Group** |
-| **⑮** | **统一 LLM 接入服务（LLM Gateway）** | **对所有第三方/自托管模型的统一 API（chat/completion/embedding）：模型路由、密钥/订阅凭证管理、限流、按 enterprise/group 计量、回退**；接 **Claude / Codex / Minimax 订阅** 等 | **LiteLLM 待选型（候选）；独立微服务；策略经 §3.2 授权** |
+| **⑮** | **统一 LLM 接入服务（LLM Gateway）** | **对所有第三方/自托管模型的统一 API（chat/completion/embedding）：模型路由、API key 管理、限流、按 enterprise/group 计量、回退**；接 **Claude / Codex / Minimax API（按 token 计费）** 等 | **LiteLLM 待选型（候选）；独立微服务；策略经 §3.2 授权** |
 | **⑯** | **Agent 平台 + 统一对话交互** | **Agent 开发框架 + 运行时 + 统一 chat UI**；内置 agent 用于**模型开发 / 管线开发 / 数据探查**（复用第三方模型，经 ⑮）；工具调用走 Platform API 契约 | **自研（v2）；前端统一对话入口 + 后端 agent 运行时** |
 | **⑰** | **Agentic Search** | **一个 agent 对集成的多源多模态数据（OSS/Lance/Gravitino/MLflow…）做统一检索**：规划→多模态检索→综合→引用 | **自研（v3）；复用 ⑮ LLM + v1 数据/向量** |
 
@@ -148,13 +148,13 @@
 7. **多租户落地**：X-user team 注册到 Keycloak 成为首个 tenant；所有资源（OSS 路径 / K8s ns / Gravitino schema / MLflow experiment）通过 tenant_id 引用；用户 SDK 调用时由 Tenant Service 自动从 token 解析 tenant_id
 8. **Embedding 闭环**：批量生成向量 → Lance + IVF_PQ 索引 → ANN 查询可用
 9. **架构标准**：grep 全部资源命名（OSS bucket prefix / K8s 资源 / Gravitino / MLflow），**任意 display_name（如 "x-user"）不得出现在资源标识中**
-10. **Agent + 统一 LLM 接入（v2）**：经统一 LLM Gateway 用 Claude/Codex/Minimax（订阅）发起对话；内置 agent 能完成一次"数据探查 / 管线开发 / 模型开发"任务；LLM 调用按 enterprise/group 计量与授权
+10. **Agent + 统一 LLM 接入（v2）**：经统一 LLM Gateway 用 Claude/Codex/Minimax（API key 计费）发起对话；内置 agent 能完成一次"数据探查 / 管线开发 / 模型开发"任务；LLM 调用按 enterprise/group 计量与授权
 11. **Agentic Search（v3）**：一次自然语言查询经 agent 对多源多模态数据（OSS/Lance/Gravitino/MLflow）统一检索，返回带引用的综合结果，且结果严格限定在当前 enterprise/group scope
 
 ### 2.2 版本路线图（按交付优先级）
 
 > **版本路线（2026-06-06 修订）**：**v1 = 数据域** → **v2 = Agent 开发平台 + 统一 LLM 接入** → **v3 = Agentic Search** → **v4 = 微调（SFT/LoRA）** → **v5 = 1B 预训练**。基础设施贯穿、随 v1 最先就位。**递增交付**（总 ~25 周，2026-06-06 → ≈2026-11-28，时间线见 §5）。
-> **战略取向**：先用**第三方 LLM（Claude/Codex/Minimax 订阅）+ Agent** 快速交付应用价值；自研微调/预训练**后置**。
+> **战略取向**：先用**第三方 LLM（Claude/Codex/Minimax，API key 按 token 计费）+ Agent** 快速交付应用价值；自研微调/预训练**后置**。
 > **术语约定**：`v1`–`v5` **专指功能版本里程碑**；"以后再做"写 **`vN+`（未来/后续）**。大写 `V1`–`V12` 是验收标准 ID，与版本号无关。
 
 **v1 基础设施（贯穿，最先就位）**
@@ -187,7 +187,7 @@
 
 | 子系统 | 验收点 |
 |---|---|
-| **统一 LLM 接入服务（LLM Gateway，⑮）** | 统一 API（chat/completion/embedding）接 **Claude / Codex / Minimax 订阅**；模型路由 + 密钥/订阅凭证管理 + 限流 + 按 enterprise/group 计量；**LiteLLM 待选型**（spike 选定，见 §6/ADR） |
+| **统一 LLM 接入服务（LLM Gateway，⑮）** | 统一 API（chat/completion/embedding）接 **Claude / Codex / Minimax API（按 token 计费）**；模型路由 + API key 管理 + 限流 + 按 enterprise/group 计量；**LiteLLM 待选型**（spike 选定，见 §6/ADR） |
 | **Agent 平台 + 统一对话交互（⑯）** | Agent 框架 + 运行时 + **统一 chat UI**；内置 agent：**模型开发 / 管线开发 / 数据探查**（复用第三方模型 + 工具调用走 Platform API 契约） |
 | **Cerbos PDP（授权升级）** | 细粒度 ABAC / derived role **替换薄 can()**，36 条 AC 全过；agent/LLM 访问数据/模型按 enterprise/group scope 受控；handler 零改（seam，ADR-011） |
 | **前端（Agent/对话域）** | 统一对话界面 + agent 任务/会话管理 + LLM 用量/模型管理页 |
@@ -1464,11 +1464,11 @@ Lineage 边（v1 手工）：
 
 ### v2 Agent 平台 + 统一 LLM 接入（S3–S5，W6–11，07-12 → 08-22）
 
-> 目标：用第三方 LLM（Claude/Codex/Minimax 订阅）+ Agent 快速交付应用价值；授权升级到 Cerbos。详见 **ADR-012**。
+> 目标：用第三方 LLM（Claude/Codex/Minimax，API key 按 token 计费）+ Agent 快速交付应用价值；授权升级到 Cerbos。详见 **ADR-012**。
 
 **S3（W6-7）LLM Gateway + 授权升级**
 - **LiteLLM 选型 spike 落定** → 部署 **LLM Gateway**（统一 chat/completion/embedding API）
-- 接 **Claude / Codex / Minimax**（订阅/API）+ 模型路由 + 密钥/凭证管理 + 限流 + 按 enterprise/group 用量统计
+- 接 **Claude / Codex / Minimax**（API key 计费）+ 模型路由 + 密钥/凭证管理 + 限流 + 按 enterprise/group 用量统计
 - **Cerbos PDP 上线**，替换薄 `can()`（**AC-1~36 全过**）；LLM/数据访问按 scope 受控
 - 出口：经 Gateway 用三家模型发起对话；调用按租户计量 + 授权；Cerbos 全 AC 过
 
@@ -1558,8 +1558,8 @@ Lineage 边（v1 手工）：
 | 风险 / 超载点 | 缓解 |
 |---|---|
 | **数据为早期关键路径（v1，S1–S2）**：10TB Data-Juicer 是最大里程碑 | S0 Spike 验 OOM 边界 + 分片/spill 兜底；**V8 1TB 斜率前移到 S2** 早决策（砍 10% / 推迟） |
-| **v2 是最大新增工作量（Agent + LLM Gateway，S3–S5）** | **LiteLLM 选型 spike 前置（S0/S3 初）**核实订阅接入/计量/ToS；薄 `can()`→Cerbos 用 seam 不返工；agent 工具走 Platform API 契约受治理 |
-| **订阅式接入 Claude/Codex/Minimax 的可行性/ToS** | spike 核实每家接入方式 + 准备 API 计费回退（ADR-012 风险表） |
+| **v2 是最大新增工作量（Agent + LLM Gateway，S3–S5）** | **LiteLLM spike**（多 provider API key 路由 + 计量 + Python 集成）；薄 `can()`→Cerbos 用 seam 不返工；agent 工具走 Platform API 契约受治理 |
+| **LLM 成本（按 token 计费）** | spike① 已结：用 **API key 按 token 计费**（非订阅，ADR-012）→ Gateway 限流 + 按 enterprise/group 计量 + 明确计费给客户/平台承担 |
 | **1B 预训练（v5，S10–S11）晚发现风险** | S10 **第 1 周即 24h soak + kill drill**；用 DDP（非 DeepSpeed）降风险；S12 buffer 调优 |
 | **微服务全拆 × 3 人** | **统一脚手架**（FastAPI 模板 / CI / 可观测）+ **API 契约先行**，避免每服务各搞一套 |
 | **外部副作用（Kueue/Volcano/Argo/Gravitino/OSS）** | 一律走 **outbox/reconcile 幂等**，禁纳入同步链路 |

@@ -1,6 +1,6 @@
 # ADR-012: Agent 平台 + 统一 LLM 接入（LLM Gateway）+ Agentic Search
 
-- 状态：Accepted（选型项含待定 spike，见行动项）
+- 状态：Accepted（2026-06-06 更新：spike① 已结 → **接入模型由"订阅"改为 API key 按 token 计费**；LiteLLM 实测等剩余 spike 见行动项）
 - 日期：2026-06-06
 - 决策人：平台团队（P1/P2/P3）
 - 相关：design §0 / §1.1 架构图（AI 应用平面）/ §1.2（⑮⑯⑰）/ §2.2 版本路线（v2/v3）/ §5 发布计划 / ADR-010（多企业）/ ADR-011（Cerbos 授权）
@@ -23,7 +23,7 @@ v1 数据域 → v2 Agent 平台 + 统一 LLM 接入 → v3 Agentic Search → v
 
 需求要点：
 
-- 统一接入 **Claude / Codex / Minimax 订阅** 等第三方模型（也含未来自托管模型）。
+- 统一接入 **Claude / OpenAI / Minimax 等第三方模型**（**经各家 API key、按 token 计费**；也含未来自托管模型）。
 - 内置 agent 辅助 **模型开发 / 管线开发 / 数据探查**。
 - 一个 agent 对**多源多模态数据**统一检索（v3）。
 - 全程按 **enterprise/group** 隔离 + 计量 + 授权。
@@ -35,9 +35,10 @@ v1 数据域 → v2 Agent 平台 + 统一 LLM 接入 → v3 Agentic Search → v
 ### 1. 统一 LLM 接入服务（LLM Gateway，⑮，v2）
 
 - **唯一出口**：所有 chat/completion/embedding 调用都经 Gateway，业务/agent **不直连**任一模型厂商。
-- 能力：**模型路由**（按名称/能力/成本）、**密钥与订阅凭证管理**、**限流**、**按 enterprise/group 计量**、**回退/重试**、统一可观测。
-- 选型：**LiteLLM 为首选候选（待 spike 确认）**；评估点见行动项。
-- 接入目标：**Claude（Anthropic）/ Codex（OpenAI）/ Minimax** 的**订阅**或 API；新增模型 = 加一条 Gateway 配置，业务零改。
+- 能力：**模型路由**（按名称/能力/成本）、**API key 管理**、**限流**、**按 enterprise/group token 计量**、**回退/重试**、统一可观测。
+- 选型：**LiteLLM 为首选候选**（多 provider + API key + 计量，契合需求；spike① 已验，见行动项）。
+- 接入目标：**Claude（Anthropic API）/ OpenAI API / Minimax API**，**统一 API key、按 token 计费**；新增模型 = 加一条 Gateway 配置，业务零改。
+- **⚠️ 不用消费订阅**（Claude Pro/Max、ChatGPT Plus）：其消费 ToS 禁止程序化/多租户使用，且 LiteLLM 按 API key 工作。订阅仅供**团队内部开发工具**（Claude Code / Codex CLI），不进产品路径。
 - 授权：调用经 `PolicyEngine.can()`（Cerbos，ADR-011）——按 enterprise/group + 模型/配额 scope 受控。
 
 ### 2. Agent 平台 + 统一对话交互（⑯，v2）
@@ -72,22 +73,23 @@ v1 数据域 → v2 Agent 平台 + 统一 LLM 接入 → v3 Agentic Search → v
 - Agent 工具走 Platform API 契约 → 能力受治理、可授权、可观测。
 
 ### 负面 / 代价
-- 引入**外部依赖与成本**（厂商可用性、限流、计费）；Gateway 成关键路径需 HA。
-- **订阅式接入第三方模型的可行性与合规（ToS）需核实**（程序化使用 Claude/Codex/Minimax 订阅是否允许、配额、鉴权方式）。
+- 引入**外部依赖与按 token 成本**（厂商可用性、限流、计费）；Gateway 成关键路径需 HA。
+- **成本模型 = API 按 token 计费**（非订阅，见 spike① 结论）→ 需明确 LLM 成本如何计费给客户 / 平台承担。
 - Agent/Agentic Search 是较大的自研工作量 → 时间线延长（见 §5）。
 
 ### 风险登记
 
 | 风险 | 缓解 |
 |---|---|
-| 订阅式程序化接入受 ToS/配额限制 | spike 核实每家的接入方式（订阅 vs API）+ 准备 API 计费回退 |
-| LiteLLM 不满足（多厂商/订阅/计量） | spike 对比备选（OpenRouter / 自研薄 Gateway）；藏在 Gateway 接口后可替换 |
-| LLM 成本失控 | Gateway 限流 + 按 enterprise/group 计量 + 配额（vN+ 硬限） |
-| agent 越权访问数据 | 工具走 Platform API + Cerbos；检索结果 scope 过滤 |
+| ~~订阅式程序化接入受 ToS 限制~~（spike① 已结，见行动项）| **结论：不可用消费订阅 → 改 API key 按 token 计费**（合规）|
+| LiteLLM 不满足（多厂商 / 计量）| 藏在 Gateway 接口后可替换（备选 OpenRouter / 自研薄 Gateway）|
+| LLM 成本失控 | Gateway 限流 + 按 enterprise/group token 计量（v2 必做）+ 硬配额（vN+）|
+| agent 越权访问数据 | 工具走 Platform API + Cerbos；检索结果 scope 过滤（继承调用者 scope）|
 
 ---
 
 ## 行动项
 
-- **LiteLLM 选型 spike（v2 前，1–2 天）**：验证 ① 多厂商路由（Claude/Codex/Minimax）② **订阅凭证**接入可行性与 ToS ③ 按 key/租户计量与限流 ④ Python 集成。结论写回本 ADR。
+- ✅ **spike①（订阅 ToS / 接入可行性，2026-06-06 已结）**：**结论 NO-GO 订阅、GO API key 按 token 计费**。依据：Anthropic 消费 ToS 禁止程序化访问（除 API key / Claude Code）、Agent SDK 强制 API key；OpenAI ChatGPT Plus 不可程序化、Codex+订阅仅限个人；LiteLLM 按 API key 工作。→ 已更新本 ADR 接入模型为 **API key 计费**；订阅仅供团队内部开发工具。
+- **剩余 spike（v2 前）**：① LiteLLM 多厂商路由 + 按租户计量/限流 + Python 集成实测；② 各家 API key 申请/配额/单价确认（成本模型）。
 - v3 Agentic Search 检索策略（向量 + 全文 + 元数据融合）单独设计 spike。
