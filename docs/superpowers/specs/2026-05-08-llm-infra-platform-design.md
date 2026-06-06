@@ -117,7 +117,7 @@
 | Ⓐ | 监控 | GPU/作业/IO/平台健康 | Prometheus + Grafana + DCGM |
 | Ⓑ | CI | 平台代码 + 镜像构建 | GitHub Actions + ACR |
 | Ⓒ | 日志 | 集中日志查询 | OpenSearch **3 节点 cluster（v1）+ security plugin + ILM**（见 §3.16.1）+ Fluent Bit 采集 + Grafana 可视化（详见 ADR-005） |
-| **⑫** | **Admission Pipeline** | **准入中间件链：① PolicyEngine（`can(ctx, action, resource)` → 调 **Cerbos**，ADR-011）→ ② ~~QuotaService~~（**v1 推迟**，无 PG 预算账本，仅 Kueue 静态配额）→ ③ Audit（**v1 追加写 OSS**）+ Outbox（外部副作用由 worker 按 workload_id 幂等执行；**禁止**把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步事务）；详见 §3.9/§3.11** | **Platform API 中间件链 + Cerbos sidecar + OSS audit + outbox worker；v1 无 PG（配额账本/同事务审计推迟）** |
+| **⑫** | **Admission Pipeline** | **准入中间件链：① PolicyEngine（`can(ctx, action, resource)` → 调 **Cerbos**，ADR-011）→ ② ~~QuotaService~~（**v1 推迟**，无 PG 预算账本，仅 Kueue 静态配额）→ ③ Audit（**v1 追加写 OSS**）+ 外部副作用 **reconcile**（v1 走声明式 reconcile；PG 回归后单服务内 outbox + 跨服务 saga，ADR-013）；**禁止**把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步链路；详见 §3.9/§3.11** | **Platform API 中间件链 + Cerbos sidecar + OSS audit + reconcile controller；v1 无 PG（配额账本/同事务审计/outbox 推迟，ADR-013）** |
 | **⑬** | **Enterprise Provisioner** | **开通/暂停/归档企业时 reconcile：Keycloak Organization + Group 子组骨架（含角色）/ Kueue LocalQueue+Cohort / OSS prefix + RAM/STS / Gravitino schema / MLflow experiment / Grafana org / OpenSearch index template（v1 推迟：PG 元数据/配额账本）** | **controller-runtime 风格 reconciler，幂等；经 Keycloak Admin API 建 Org/Group** |
 | **⑮** | **统一 LLM 接入服务（LLM Gateway）** | **对所有第三方/自托管模型的统一 API（chat/completion/embedding）：模型路由、API key 管理、限流、按 enterprise/group 计量、回退**；接 **Claude / Codex / Minimax API（按 token 计费）** 等 | **LiteLLM 待选型（候选）；独立微服务；策略经 §3.2 授权** |
 | **⑯** | **Agent 平台 + 统一对话交互** | **Agent 开发框架 + 运行时 + 统一 chat UI**；内置 agent 用于**模型开发 / 管线开发 / 数据探查**（复用第三方模型，经 ⑮）；工具调用走 Platform API 契约 | **自研（v2）；前端统一对话入口 + 后端 agent 运行时** |
@@ -321,11 +321,11 @@ lite-ai-infra/
 └── docs/
 ```
 
-**关键**：各服务**独立可部署**；服务间只通过 `contracts/`（生成的 client）调用，**不共享 DB session**（同事务约束已随 PG 推迟解除）。外部副作用仍走幂等模式（outbox 或 reconcile），禁止把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步链路阻塞主流程。
+**关键**：各服务**独立可部署**；服务间只通过 `contracts/`（生成的 client）调用，**不共享 DB session**。数据一致性见 **ADR-013**：**v1 外部副作用走 reconcile**（声明式，无需 PG 事务）；PG 回归后单服务内 outbox + 跨服务 saga（**非分布式同事务**）。禁止把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步链路阻塞主流程。
 
 #### 3.0.5 演进口径
 
-- **v1 无 PG**；预算/同事务审计回归时，新增 **quota-service** 为独立服务。
+- **v1 无 PG**；预算/审计 PG 回归时，新增 **quota-service** 为独立服务（per-service DB；跨服务一致性走 saga，ADR-013）。
 - 服务粒度可随负载再调整；**契约稳定则内部重构对其他服务无影响**（API 优先的核心收益）。
 - 3 人团队下的纪律：服务虽全拆，但**共享统一的脚手架**（同一 FastAPI 模板 / 同一 CI / 同一可观测埋点），避免每个服务各搞一套。
 
@@ -528,7 +528,7 @@ Realm: lite-ai-infra        (单一 realm，只管认证)
 | 网络（Ingress） | **强** | per-tenant 子域 + OIDC 鉴权 | — |
 | 凭证 | **弱** | env var + OSS RAM 子账号（共享存储位置） | Vault per-tenant path（vN+ 落地） |
 | 监控指标 | **中** | Prometheus label `tenant_id` + Grafana org | — |
-| 审计日志 | **强（PG 权威）** | PG `tenant_audit_log`（业务事务内同步写，真相源）；OpenSearch `audit-{tid}-*` 仅作 Grafana 可降级视图，挂了不影响查询 | tamper-proof（WORM / 区块链）+ SIEM 集成 |
+| 审计日志 | **中（v1）** | **v1：OSS 追加写（事后尽力，非同事务原子，ADR-010/013）** + 可选 OpenSearch 索引；~~PG 同事务权威~~ → **vN+（PG 回归）** | 同事务原子审计 + tamper-proof（WORM）+ SIEM |
 | 调度（Kueue） | **强** | per-tenant LocalQueue + ClusterQueue 配额借用规则 | — |
 
 #### 多租户机制硬纪律（写进 constitution）
@@ -710,7 +710,9 @@ Kueue 是 K8s **admit-time** 配额（拿 GPU 时检查），不够。Quota Serv
 
 **原子预留设计**（解决并发超额放行问题）：
 
-Submit-time 配额检查必须是原子预留，而非乐观读后写入——两个大作业同时读到剩余配额充足、同时通过检查会击穿保证。v1 实现：
+> ⚠️ **以下为 PG 回归后（vN+）的设计**，且依赖单体内 PG 同事务——**全拆微服务下不成立**（ADR-013）：v1 无 PG、无此服务；PG 回归后配额账本**单服务自治**，跨服务一致性走 reconcile/saga（非同事务原子预留）。下文保留作 PG 单服务内的参考。
+
+Submit-time 配额检查必须是原子预留，而非乐观读后写入——两个大作业同时读到剩余配额充足、同时通过检查会击穿保证。**（PG 回归后）单服务内**实现：
 
 ```python
 # 接口：reserve / confirm / release 三步
