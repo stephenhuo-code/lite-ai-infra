@@ -1,5 +1,7 @@
 [importlinter]
-root_packages = libs, services
+root_packages =
+    libs
+    services
 
 [importlinter:contract:layers]
 name = layering
