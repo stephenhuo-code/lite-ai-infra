@@ -1,5 +1,6 @@
-.PHONY: test test-integration lint contract-check dev-up dev-down sync
+.PHONY: test test-integration lint contract-check dev-up dev-down sync gen
 sync:             ; uv sync --extra dev
+gen:              ; uv run datamodel-codegen --input contracts/openapi/identity-org.yaml --input-file-type openapi --output libs/contracts_gen/identity_org_models.py
 test:             ; uv run pytest -q || [ $$? -eq 5 ]
 test-integration: ; uv run pytest -q -m integration
 lint:             ; uv run lint-imports && bash scripts/ci_guards.sh
