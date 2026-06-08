@@ -42,7 +42,7 @@
 1. **微服务（按子系统全拆）+ API Gateway / BFF**；服务**独立部署、不共享 DB session**。
 2. **API 优先**：每服务**契约（OpenAPI/proto）先行、入 git、CI 校验 breaking-change**；前端/SDK/CLI/服务间 client **全部由契约生成，禁止手写**。
 3. **外部副作用**（Kueue / Volcano / Argo / Gravitino / OSS / Keycloak Admin API）**一律走 outbox / reconcile 幂等**，**禁止纳入同步链路阻塞主流程**。
-4. 语言：控制面/数据/训练/推理服务 **Python 3.11（FastAPI）**；K8s controller **Go**；前端 **TypeScript + Next.js**；授权 PDP **Cerbos（不自写）**。**新增语言必须走 ADR**。
+4. 语言：控制面/数据/训练/推理服务 **Python 3.12（FastAPI）**；K8s controller **Go**；前端 **TypeScript + Next.js**；授权 PDP **Cerbos（不自写）**。**新增语言/改 Python 基线必须走 ADR**。
 5. 3 人团队纪律：服务虽全拆，**共享统一脚手架**（FastAPI 模板 / CI / 可观测埋点）。
 
 ## 5. 运行时与交付纪律
@@ -53,7 +53,7 @@
 5. **契约向后兼容 / 版本化**：对外 / 服务间契约的破坏性变更**必须版本化 + 留迁移期**；CI 拦截未版本化的 breaking（见 §3.1 / §4.2）。
 6. **成本 / 配额意识**：LLM / GPU 等昂贵资源**用量必须计量**（按 enterprise / group）并可限流；v1 起埋点，硬限 → vN+（ADR-010/012）。
 7. **数据迁移纪律（PG 回归后）**：schema 迁移**前向兼容 + 可回滚**，走迁移工具（Alembic）；**禁止手改生产 schema**。
-8. **依赖 / 供应链**：依赖与基础镜像**锁版本**；CI 做兼容性 / 安全扫描（SBOM 轻量，vN+ 强化）。
+8. **依赖 / 供应链（环境即工程）**：**Python 基线 3.12**，用 **uv** 管理——`.python-version` 钉解释器、`uv.lock` 锁依赖（可复现）；依赖与基础镜像**锁版本**；CI 用同一 lock 复现环境；CI 做兼容性 / 安全扫描（SBOM 轻量，vN+ 强化）。
 
 ## 6. 审计与数据（ADR-010）
 1. **v1 审计**：mutation + `/admin/*` + `--force` + admin override **只追加写 OSS**（`oss://audit/...`，事后尽力）；同事务原子审计待 PG 回归。

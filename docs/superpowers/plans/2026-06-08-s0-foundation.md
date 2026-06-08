@@ -6,7 +6,7 @@
 
 **架构：** monorepo、面向微服务的包结构（宪法 §4）。API 优先：OpenAPI 契约放 `contracts/`，client 由契约生成。身份用 Keycloak 26.6.2（单 realm + Organizations + Group 子组编码角色），token 带 `groups` claim。授权是**唯一** `PolicyEngine.can(ctx, action, resource)` 出入口；S0 交付**薄 in-code 版**（认证 + 企业隔离 + owner + 角色门槛），接口设计成 v2 可零改 handler 换 Cerbos（ADR-011）。v1 无 PG；审计 append-only 到 OSS/MinIO（ADR-010/013）。
 
-**技术栈：** Python 3.11、FastAPI、pytest、Keycloak 26.6.2、MinIO（本地，S3 兼容）、阿里云 OSS（测试/线上）、`oasdiff`（契约 breaking 校验）、keycloak-config-cli、docker-compose、GitHub Actions。
+**技术栈：** **Python 3.12（基线）+ uv（环境/依赖管理）**、FastAPI、pytest、Keycloak 26.6.2、MinIO（本地，S3 兼容）、阿里云 OSS（测试/线上）、`oasdiff`（契约 breaking 校验）、keycloak-config-cli、docker-compose、GitHub Actions。
 
 ---
 
@@ -17,6 +17,11 @@
 | **开发（dev）** | **本地 Mac**（Docker Desktop / Apple Silicon arm64）| 日常开发 + 单元 + 本地集成测试（TDD）| docker-compose 的 Keycloak 26.6.2 | **MinIO**（S3 API，docker-compose）|
 | **测试（test）** | **阿里云**（ACK + OSS + Keycloak on ACK）| e2e / 真机 spike / 集成验收 | ACK 上的 Keycloak 26.6.2 | **阿里云 OSS** |
 | CI | GitHub Actions | 单元（零依赖）+ 集成（service 容器起 MinIO/Keycloak）+ lint + 契约 breaking | 集成 job 用容器 Keycloak | 集成 job 用容器 MinIO |
+
+**Python 基线（环境即工程，宪法 §5.8）：**
+- **基线 Python 3.12**，用 **uv** 管理（机器上无 3.12 时 uv 自动获取）：`.python-version` 钉解释器、`uv.lock` 锁依赖 → **dev/CI/阿里云可复现同一环境**。
+- 三处一致：`.python-version` = `3.12`、`pyproject.toml` `requires-python = ">=3.12"`、CI `uv python install 3.12`。
+- **本计划所有命令都在 uv 管理的 3.12 环境内执行**：用 `uv run <cmd>`（如 `uv run pytest`）或 `make <target>`（Makefile 已封装 `uv run`）。下文出现的裸 `pytest`/`lint-imports`/`datamodel-codegen` 等价于 `uv run …`。
 
 **本地 Mac 注意：**
 - Keycloak 26.6.2、MinIO 镜像均为**多架构（arm64 原生）**，Docker Desktop 直接跑；个别无 arm64 的镜像才加 `platform: linux/amd64`（性能降级）。
@@ -76,18 +81,32 @@ lite-ai-infra/
 
 ---
 
-### 任务 1：仓库脚手架 + 工具链
+### 任务 1：仓库脚手架 + uv/3.12 可复现环境
 
 **文件：**
-- 创建：`pyproject.toml`、`Makefile`、`.importlinter`、`.gitignore`（追加 `.superpowers/`）
+- 创建：`.python-version`、`pyproject.toml`、`Makefile`、`.importlinter`、`.gitignore`
 
-- [ ] **步骤 1：创建 `pyproject.toml`**
+- [ ] **步骤 1：钉 Python 基线 + `.gitignore`**
+
+`.python-version`（单行）：
+```
+3.12
+```
+`.gitignore`（追加）：
+```
+.venv/
+.superpowers/
+__pycache__/
+*.pyc
+```
+
+- [ ] **步骤 2：创建 `pyproject.toml`**
 
 ```toml
 [project]
 name = "lite-ai-infra"
 version = "0.0.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115", "uvicorn>=0.32", "pyjwt[crypto]>=2.9",
   "boto3>=1.35", "httpx>=0.27",
@@ -102,19 +121,20 @@ markers = ["integration: 需要本地 MinIO/Keycloak（docker-compose）的集�
 addopts = "-m 'not integration'"   # 默认只跑单元（零依赖）；集成用 make test-integration
 ```
 
-- [ ] **步骤 2：创建 `Makefile`**（本地 Mac 常用命令）
+- [ ] **步骤 3：创建 `Makefile`**（命令统一经 `uv run`，环境即 uv 管理的 3.12 venv）
 
 ```make
-.PHONY: test test-integration lint contract-check dev-up dev-down
-test:             ; pytest -q                       # 单元（零依赖，默认 -m "not integration"）
-test-integration: ; pytest -q -m integration        # 需先 make dev-up（本地 MinIO+Keycloak）
-lint:             ; lint-imports && bash scripts/ci_guards.sh
+.PHONY: test test-integration lint contract-check dev-up dev-down sync
+sync:             ; uv sync --extra dev               # 建/同步 .venv(3.12)（按 uv.lock）
+test:             ; uv run pytest -q                  # 单元（零依赖，默认 -m "not integration"）
+test-integration: ; uv run pytest -q -m integration   # 需先 make dev-up（本地 MinIO+Keycloak）
+lint:             ; uv run lint-imports && bash scripts/ci_guards.sh
 contract-check:   ; oasdiff breaking contracts/openapi/identity-org.yaml@HEAD~1 contracts/openapi/identity-org.yaml || true
 dev-up:           ; docker compose -f deploy/dev/docker-compose.yml up -d
 dev-down:         ; docker compose -f deploy/dev/docker-compose.yml down -v
 ```
 
-- [ ] **步骤 3：创建 `.importlinter`（强制分层：services → libs，libs 不依赖 services）**
+- [ ] **步骤 4：创建 `.importlinter`（强制分层：services → libs，libs 不依赖 services）**
 
 ```ini
 [importlinter]
@@ -128,16 +148,21 @@ layers =
     libs
 ```
 
-- [ ] **步骤 4：验证工具链可装**
+- [ ] **步骤 5：用 uv 建可复现环境 + 验证**
 
-运行：`pip install -e ".[dev]" && pytest -q`
-预期：`no tests ran`（收集 0 个）—— 环境正常、无报错。
+运行：
+```bash
+uv lock                 # 生成 uv.lock（uv 按 .python-version 自动获取 Python 3.12）
+make sync               # uv sync --extra dev → 建 .venv(3.12) 并按 lock 安装
+make test               # = uv run pytest -q
+```
+预期：`uv run pytest` 报 `no tests ran`（收集 0 个）—— 3.12 环境就绪、可复现、无报错。
 
-- [ ] **步骤 5：提交**
+- [ ] **步骤 6：提交**
 
 ```bash
-git add pyproject.toml Makefile .importlinter
-git commit -m "chore: bootstrap monorepo tooling (pytest, import-linter, make)"
+git add .python-version pyproject.toml uv.lock Makefile .importlinter .gitignore
+git commit -m "chore: bootstrap monorepo + uv-managed Python 3.12 env (pinned + locked)"
 ```
 
 ---
@@ -209,8 +234,8 @@ services:
 ```bash
 TOKEN=$(curl -fsS -d 'client_id=gateway' -d 'client_secret=dev-secret' \
   -d 'username=alice' -d 'password=alice' -d 'grant_type=password' \
-  http://localhost:8080/realms/lite-ai/protocol/openid-connect/token | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signature':False})['groups'])"
+  http://localhost:8080/realms/lite-ai/protocol/openid-connect/token | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+uv run python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signature':False})['groups'])"
 ```
 预期：`['/e-0001/g-0001/members']`
 
@@ -769,11 +794,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 2}
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
-      - run: pip install -e ".[dev]"
-      - run: pytest -q                       # 单元（零依赖，默认 -m "not integration"）
-      - run: lint-imports
+      - uses: astral-sh/setup-uv@v5         # uv 装好；按 .python-version 取 3.12
+      - run: uv sync --extra dev            # 按 uv.lock 复现 3.12 环境
+      - run: uv run pytest -q               # 单元（零依赖，默认 -m "not integration"）
+      - run: uv run lint-imports
       - run: bash scripts/ci_guards.sh
       - name: contract breaking-change check
         uses: oasdiff/oasdiff-action/breaking@v0.0.21
@@ -994,9 +1018,8 @@ def test_real_token_verifies_and_parses(kc_token):
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
-      - run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev
       - run: docker compose -f deploy/dev/docker-compose.yml up -d
       - run: sleep 25
       - run: make test-integration
@@ -1022,7 +1045,7 @@ git commit -m "feat: local integration (real MinIO+Keycloak) + gateway runtime w
 - [ ] **步骤 2：`Makefile` 加 `gen` 目标**
 
 ```make
-gen: ; datamodel-codegen --input contracts/openapi/identity-org.yaml \
+gen: ; uv run datamodel-codegen --input contracts/openapi/identity-org.yaml \
         --input-file-type openapi --output libs/contracts_gen/identity_org_models.py
 ```
 
@@ -1040,7 +1063,7 @@ def test_codegen_produces_importable_models():
 
 - [ ] **步骤 4：建包占位 + 运行**
 
-运行：`touch libs/contracts_gen/__init__.py && pytest tests/test_codegen.py -q`
+运行：`touch libs/contracts_gen/__init__.py && uv run pytest tests/test_codegen.py -q`
 预期：PASS —— `make gen` 跑通、生成 `libs/contracts_gen/identity_org_models.py`、可 import 出 `Membership`/`Memberships`（**契约代码生成跑通**，S0 出口 ④）。
 
 - [ ] **步骤 5：CI 加"生成物最新"校验** —— `.github/workflows/ci.yml` 的 build job 追加：
@@ -1073,14 +1096,14 @@ git commit -m "feat(contracts): OpenAPI -> Pydantic models codegen + CI freshnes
 
 > 原则（宪法 §3.2）：**证据先于断言**——每条跑命令看输出，不靠口头声称。
 
-**A. 前置**：plan 任务 1–10 checkbox 全 `- [x]`、代码已合；本地 `pip install -e ".[dev]"` + `make dev-up`；阿里云测试环境就绪（仅出口① 数据 spike 需要）。
+**A. 前置**：plan 任务 1–10 checkbox 全 `- [x]`、代码已合；本地 `make sync`（= `uv sync --extra dev`，按 `uv.lock` 复现 3.12 环境）+ `make dev-up`；阿里云测试环境就绪（仅出口① 数据 spike 需要）。
 
 **B. 自动化验收（本地 Mac）**
 
 ```bash
-pytest -q                                          # 1) 单元全绿 → N passed
-lint-imports && bash scripts/ci_guards.sh          # 2) 分层 + §8 护栏 → 0 broken / exit 0
-make gen && pytest tests/test_codegen.py -q && git diff --exit-code libs/contracts_gen/  # 3) 出口④ codegen → pass + 无 diff
+uv run pytest -q                                   # 1) 单元全绿 → N passed
+uv run lint-imports && bash scripts/ci_guards.sh   # 2) 分层 + §8 护栏 → 0 broken / exit 0
+make gen && uv run pytest tests/test_codegen.py -q && git diff --exit-code libs/contracts_gen/  # 3) 出口④ codegen → pass + 无 diff
 make dev-up && sleep 25 && make test-integration   # 4) 真 MinIO+Keycloak 集成 → 2 passed
 ```
 
@@ -1090,8 +1113,8 @@ make dev-up && sleep 25 && make test-integration   # 4) 真 MinIO+Keycloak 集�
 # 出口② Keycloak 拿带 groups 的 token
 TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret \
   -d username=alice -d password=alice -d grant_type=password \
-  http://localhost:8080/realms/lite-ai/protocol/openid-connect/token | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signature':False})['groups'])"
+  http://localhost:8080/realms/lite-ai/protocol/openid-connect/token | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+uv run python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signature':False})['groups'])"
 # 期望：['/e-0001/g-0001/members']
 
 # 出口③ Gateway 解析 enterprise_id/group_id（真 token，验签开启）

@@ -288,7 +288,7 @@
 
 | 类别 | 语言 | 理由 |
 |---|---|---|
-| 控制面 + 数据/训练/推理服务 | **Python 3.11**（FastAPI） | 团队主语言；ML 生态原生；OpenAPI 友好 |
+| 控制面 + 数据/训练/推理服务 | **Python 3.12**（FastAPI；**uv 管理**，`.python-version` + `uv.lock`） | 团队主语言；ML 生态原生；OpenAPI 友好 |
 | K8s controller（provisioner / workspace） | **Go**（controller-runtime / kubebuilder） | K8s 生态标准 |
 | 授权 PDP | **Cerbos**（Go，不自写） | ADR-011 |
 | **前端** | **TypeScript + Next.js 14+** | 完整页面；OIDC 接 Keycloak |
@@ -360,7 +360,7 @@ lite-ai-infra/
 | | DCGM Exporter | 3.3+ | DaemonSet |
 | | OpenSearch | 2.x | StatefulSet **3 节点 cluster（master+data 合并，replica=1）** + 本地 PV，14 天保留；**v1 启用 security plugin（per enterprise/group role + index pattern ACL）+ ILM（per enterprise/group index 大小/天数上限）**；冷归档 oss://logs/{enterprise_id}/；详见 §3.16.1 |
 | | Fluent Bit | 3.x | DaemonSet，按 K8s namespace 注入 `enterprise_id` label |
-| **平台自身** | Platform API | 自研 | FastAPI（Python 3.11，Keycloak token 校验中间件） |
+| **平台自身** | Platform API | 自研 | FastAPI（Python 3.12，uv 管理，Keycloak token 校验中间件） |
 | | SDK | 自研 | Python pkg（自动注入 token + enterprise_id 解析） |
 | | CLI（laictl） | 自研 | Python click（首次用 `laictl login` 走 OIDC device flow） |
 | | Portal | 自研 | Next.js（OIDC 接 Keycloak） |
@@ -639,7 +639,7 @@ Workspace Pod = StatefulSet（保 PVC）
   ├─ sshd (port 22)                  本地 VSCode Remote-SSH（key-pair 入 Keycloak attr）
   ├─ ~/workspace                     PVC 持久化
   ├─ /mnt/oss/<enterprise_id>/           OSS 通过 ossfs/JindoFS 挂载（仅本企业）
-  └─ 预装：Python 3.11, uv, Git, 平台 SDK, PyTorch, Ray, Lance
+  └─ 预装：Python 3.12, uv, Git, 平台 SDK, PyTorch, Ray, Lance
 
 生命周期：
   • 默认 0 GPU；按需 1 GPU（Kueue 配额限制单用户 ≤1）
@@ -1857,7 +1857,7 @@ Sprint 6 (08-23 起)
 | **GPU** | 真实 A100/H800 | 1-2 × A10 | **mock**（训练用 1 step + tiny model） |
 | **Prometheus/Grafana** | 部署 | 部署 | 容器（可选） |
 | **日志栈** | OpenSearch StatefulSet + Fluent Bit DaemonSet | 同 prod（Sprint 1 上线） | docker-compose 单容器 OpenSearch + Fluent Bit；14 天保留 |
-| **Platform API / SDK / CLI** | 容器化 | 容器化 | 本地 `uvicorn` / `pip install -e .` 热重载 |
+| **Platform API / SDK / CLI** | 容器化 | 容器化 | 本地 `uv run uvicorn` / `uv sync` 热重载 |
 
 ### 8.3 配置与密钥分层
 
@@ -1887,7 +1887,7 @@ config/
 
 dev 加速循环：
   • Platform API：本地直跑 uvicorn，连本地 docker compose 起的依赖
-  • SDK/CLI：pip install -e .，单测 + 集成测试
+  • SDK/CLI：uv sync（或 uv pip install -e .），单测 + 集成测试
   • Workspace Operator：跑在 kind 上调试
 
 构建流水线：
