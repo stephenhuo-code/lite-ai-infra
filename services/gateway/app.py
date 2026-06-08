@@ -34,4 +34,12 @@ def build_app(audit: AuditWriter) -> FastAPI:
         if not d.allow:
             return JSONResponse(status_code=403, content={"reason": d.reason})
         return {"status": "deleted", "ref": ref}
+
+    @app.get("/v1/me/orgs")
+    def me_orgs(request: Request):
+        ctx = context_from_request(request)
+        return {"user": ctx.user, "is_platform_admin": ctx.is_platform_admin,
+                "memberships": [{"enterprise_id": m.enterprise_id, "group_id": m.group_id,
+                                 "role": m.role} for m in ctx.memberships]}
+
     return app

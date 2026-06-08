@@ -1,0 +1,17 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 2}
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev
+      - run: uv run pytest -q
+      - run: uv run lint-imports
+      - run: bash scripts/ci_guards.sh
+      - name: contract breaking-change check
+        uses: oasdiff/oasdiff-action/breaking@v0.0.21
+        with: {base: 'contracts/openapi/identity-org.yaml@HEAD~1', revision: 'contracts/openapi/identity-org.yaml'}
+        continue-on-error: true

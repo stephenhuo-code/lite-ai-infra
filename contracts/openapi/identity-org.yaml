@@ -1,0 +1,28 @@
+openapi: 3.1.0
+info: {title: identity-org, version: 0.1.0}
+paths:
+  /v1/me/orgs:
+    get:
+      summary: 从 token 解析调用者的 企业/组/角色 成员关系
+      responses:
+        '200':
+          description: memberships
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Memberships'}
+        '401': {description: unauthenticated}
+components:
+  schemas:
+    Membership:
+      type: object
+      required: [enterprise_id, role]
+      properties:
+        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        group_id: {type: [string, 'null'], pattern: '^g-[0-9a-z]+$'}
+        role: {type: string, enum: [member, group-admin, enterprise-admin]}
+    Memberships:
+      type: object
+      properties:
+        user: {type: string}
+        is_platform_admin: {type: boolean}
+        memberships: {type: array, items: {$ref: '#/components/schemas/Membership'}}

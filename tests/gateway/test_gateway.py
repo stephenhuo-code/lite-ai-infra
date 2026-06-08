@@ -30,3 +30,11 @@ def test_cross_enterprise_denied_403_and_audited():
     assert r.status_code == 403                              # AC-6/15
     assert "cross-enterprise" in r.json()["reason"]
     assert len(sink.items) == 1                              # deny 也审计
+
+def test_me_orgs_matches_contract():
+    client = _client(MemoryAuditSink())
+    r = client.get("/v1/me/orgs", headers=_hdr("u-alice", ["/e-0001/g-0001/members"]))
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"user", "is_platform_admin", "memberships"}
+    assert body["memberships"][0] == {"enterprise_id": "e-0001", "group_id": "g-0001", "role": "member"}
