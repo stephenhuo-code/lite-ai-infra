@@ -13,3 +13,6 @@ venv/
 
 # Node
 node_modules/
+
+# Specify / superpowers
+.superpowers/

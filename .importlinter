@@ -1,0 +1,9 @@
+[importlinter]
+root_packages = libs, services
+
+[importlinter:contract:layers]
+name = layering
+type = layers
+layers =
+    services
+    libs
