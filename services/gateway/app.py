@@ -8,6 +8,8 @@ from libs.audit.oss_audit import AuditWriter, AuditEvent
 from services.gateway.deps import context_from_request
 
 def _parse_job_ref(ref: str) -> Resource:
+    # S0 stub（非生产逻辑）：用硬编码归属把请求映射成 Resource，仅为驱动 can() 链路演示。
+    # vN+ 必须替换为真实的 job 查询（从元数据/服务读取 enterprise_id/group_id/owner）。
     # "e-0099:job-9" -> 跨企业；"job-1" -> 默认本企业 e-0001/g-0001
     if ":" in ref:
         eid, _ = ref.split(":", 1)
