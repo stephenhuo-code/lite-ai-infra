@@ -1,0 +1,17 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.2
+    command: ["start-dev", "--import-realm", "--features=organization"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports: ["8080:8080"]
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports: ["9000:9000", "9001:9001"]

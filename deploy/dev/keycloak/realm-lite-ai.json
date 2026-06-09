@@ -1,0 +1,26 @@
+{
+  "realm": "lite-ai", "enabled": true,
+  "clients": [{
+    "clientId": "gateway", "publicClient": false, "secret": "dev-secret",
+    "directAccessGrantsEnabled": true, "standardFlowEnabled": true, "redirectUris": ["*"],
+    "protocolMappers": [{
+      "name": "groups", "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "config": {"full.path": "true", "claim.name": "groups",
+                 "access.token.claim": "true", "id.token.claim": "true"}
+    }]
+  }],
+  "groups": [
+    {"name": "platform-admins"},
+    {"name": "e-0001", "subGroups": [
+      {"name": "g-0001", "subGroups": [{"name": "admins"}, {"name": "members"}]}
+    ]}
+  ],
+  "users": [{
+    "username": "alice", "enabled": true, "email": "alice@e-0001.test",
+    "firstName": "Alice", "lastName": "Anderson",
+    "emailVerified": true, "requiredActions": [],
+    "credentials": [{"type": "password", "value": "alice", "temporary": false}],
+    "groups": ["/e-0001/g-0001/members"]
+  }]
+}
