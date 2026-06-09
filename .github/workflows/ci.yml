@@ -16,3 +16,21 @@ jobs:
         with: {base: 'contracts/openapi/identity-org.yaml@HEAD~1', revision: 'contracts/openapi/identity-org.yaml'}
         continue-on-error: true
       - run: make gen && git diff --exit-code libs/contracts_gen/
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev
+      - run: docker compose -f deploy/dev/docker-compose.yml up -d
+      - name: wait for Keycloak realm + MinIO (fail fast, no silent skip)
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8080/realms/lite-ai/.well-known/openid-configuration >/dev/null 2>&1 \
+              && curl -fsS http://localhost:9000/minio/health/live >/dev/null 2>&1 \
+              && echo "deps ready after ${i}s" && exit 0
+            sleep 1
+          done
+          echo "deps not ready in 60s" >&2; exit 1
+      - run: make test-integration
