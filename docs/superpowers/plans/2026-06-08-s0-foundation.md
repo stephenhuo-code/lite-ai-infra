@@ -86,7 +86,7 @@ lite-ai-infra/
 **文件：**
 - 创建：`.python-version`、`pyproject.toml`、`Makefile`、`.importlinter`、`.gitignore`
 
-- [ ] **步骤 1：钉 Python 基线 + `.gitignore`**
+- [x] **步骤 1：钉 Python 基线 + `.gitignore`**
 
 `.python-version`（单行）：
 ```
@@ -100,7 +100,7 @@ __pycache__/
 *.pyc
 ```
 
-- [ ] **步骤 2：创建 `pyproject.toml`**
+- [x] **步骤 2：创建 `pyproject.toml`**
 
 ```toml
 [project]
@@ -121,7 +121,7 @@ markers = ["integration: 需要本地 MinIO/Keycloak（docker-compose）的集�
 addopts = "-m 'not integration'"   # 默认只跑单元（零依赖）；集成用 make test-integration
 ```
 
-- [ ] **步骤 3：创建 `Makefile`**（命令统一经 `uv run`，环境即 uv 管理的 3.12 venv）
+- [x] **步骤 3：创建 `Makefile`**（命令统一经 `uv run`，环境即 uv 管理的 3.12 venv）
 
 ```make
 .PHONY: test test-integration lint contract-check dev-up dev-down sync
@@ -134,7 +134,7 @@ dev-up:           ; docker compose -f deploy/dev/docker-compose.yml up -d
 dev-down:         ; docker compose -f deploy/dev/docker-compose.yml down -v
 ```
 
-- [ ] **步骤 4：创建 `.importlinter`（强制分层：services → libs，libs 不依赖 services）**
+- [x] **步骤 4：创建 `.importlinter`（强制分层：services → libs，libs 不依赖 services）**
 
 ```ini
 [importlinter]
@@ -148,7 +148,7 @@ layers =
     libs
 ```
 
-- [ ] **步骤 5：用 uv 建可复现环境 + 验证**
+- [x] **步骤 5：用 uv 建可复现环境 + 验证**
 
 运行：
 ```bash
@@ -158,7 +158,7 @@ make test               # = uv run pytest -q
 ```
 预期：`uv run pytest` 报 `no tests ran`（收集 0 个）—— 3.12 环境就绪、可复现、无报错。
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add .python-version pyproject.toml uv.lock Makefile .importlinter .gitignore
@@ -172,7 +172,7 @@ git commit -m "chore: bootstrap monorepo + uv-managed Python 3.12 env (pinned + 
 **文件：**
 - 创建：`deploy/dev/docker-compose.yml`、`deploy/dev/keycloak/realm-lite-ai.json`
 
-- [ ] **步骤 1：创建 `deploy/dev/docker-compose.yml`**（arm64 原生，Mac Docker Desktop 直接跑）
+- [x] **步骤 1：创建 `deploy/dev/docker-compose.yml`**（arm64 原生，Mac Docker Desktop 直接跑）
 
 ```yaml
 services:
@@ -194,7 +194,7 @@ services:
     ports: ["9000:9000", "9001:9001"]
 ```
 
-- [ ] **步骤 2：创建 `deploy/dev/keycloak/realm-lite-ai.json`**（realm + client + 子组 + `groups` mapper + 种子用户）
+- [x] **步骤 2：创建 `deploy/dev/keycloak/realm-lite-ai.json`**（realm + client + 子组 + `groups` mapper + 种子用户）
 
 ```json
 {
@@ -223,12 +223,12 @@ services:
 }
 ```
 
-- [ ] **步骤 3：起服务并验证 Keycloak 带 organization 特性导入成功（验证 26.6.2 修复）**
+- [x] **步骤 3：起服务并验证 Keycloak 带 organization 特性导入成功（验证 26.6.2 修复）**
 
 运行：`make dev-up && sleep 25 && curl -fsS http://localhost:8080/realms/lite-ai/.well-known/openid-configuration | head -c 120`
 预期：JSON 含 `"issuer":"http://localhost:8080/realms/lite-ai"`（import 不崩 → 确认 26.6.2 的 organization+import 可用）。
 
-- [ ] **步骤 4：验证 token 带 full-path `groups` claim**
+- [x] **步骤 4：验证 token 带 full-path `groups` claim**
 
 运行：
 ```bash
@@ -241,7 +241,7 @@ uv run python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signatur
 
 > 阿里云测试环境：同一份 `realm-lite-ai.json` 由 keycloak-config-cli apply 到 ACK 上的 Keycloak（ops 计划负责部署），保证 dev/test 配置一致。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add deploy/dev/docker-compose.yml deploy/dev/keycloak/realm-lite-ai.json
@@ -255,7 +255,7 @@ git commit -m "feat(dev): mac docker-compose Keycloak 26.6.2 + MinIO with seeded
 **文件：**
 - 创建：`libs/identity/context.py`、`tests/identity/test_context.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 ```python
 # tests/identity/test_context.py
@@ -291,12 +291,12 @@ def test_ignores_unparseable_groups():
     assert len(ctx.memberships) == 1
 ```
 
-- [ ] **步骤 2：运行验证失败**
+- [x] **步骤 2：运行验证失败**
 
 运行：`pytest tests/identity/test_context.py -q`
 预期：FAIL —— `ModuleNotFoundError: libs.identity.context`
 
-- [ ] **步骤 3：写最小实现**
+- [x] **步骤 3：写最小实现**
 
 ```python
 # libs/identity/context.py
@@ -346,12 +346,12 @@ def parse_context(sub: str, groups: list[str]) -> Context:
     return Context(user=sub, memberships=memberships, is_platform_admin=is_platform)
 ```
 
-- [ ] **步骤 4：运行验证通过**
+- [x] **步骤 4：运行验证通过**
 
 运行：`pytest tests/identity/test_context.py -q`
 预期：PASS（6 passed）
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add libs/identity/context.py tests/identity/test_context.py
@@ -365,7 +365,7 @@ git commit -m "feat(identity): parse Keycloak groups claim into scoped Context"
 **文件：**
 - 创建：`libs/authz/types.py`、`libs/authz/engine.py`、`tests/authz/test_can.py`
 
-- [ ] **步骤 1：写 `libs/authz/types.py`**（纯数据，无需测试）
+- [x] **步骤 1：写 `libs/authz/types.py`**（纯数据，无需测试）
 
 ```python
 # libs/authz/types.py
@@ -387,7 +387,7 @@ class Decision:
     reason: str = ""
 ```
 
-- [ ] **步骤 2：写失败测试**（每行 = 一条 AC；v1 子集，参数化）
+- [x] **步骤 2：写失败测试**（每行 = 一条 AC；v1 子集，参数化）
 
 ```python
 # tests/authz/test_can.py
@@ -420,12 +420,12 @@ def test_can_v1_matrix(name, context, action, resource, expect_allow, reason_sub
     assert reason_sub in d.reason
 ```
 
-- [ ] **步骤 3：运行验证失败**
+- [x] **步骤 3：运行验证失败**
 
 运行：`pytest tests/authz/test_can.py -q`
 预期：FAIL —— `ModuleNotFoundError: libs.authz.engine`
 
-- [ ] **步骤 4：写 `libs/authz/engine.py`**（唯一出入口；薄实现）
+- [x] **步骤 4：写 `libs/authz/engine.py`**（唯一出入口；薄实现）
 
 ```python
 # libs/authz/engine.py
@@ -459,12 +459,12 @@ def can(ctx: Context, action: str, resource: Resource) -> Decision:
     return Decision(True, "")
 ```
 
-- [ ] **步骤 5：运行验证通过**
+- [x] **步骤 5：运行验证通过**
 
 运行：`pytest tests/authz/test_can.py -q`
 预期：PASS（8 passed）
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add libs/authz/types.py libs/authz/engine.py tests/authz/test_can.py
@@ -480,7 +480,7 @@ git commit -m "feat(authz): single can() chokepoint, thin v1 impl (enterprise/ow
 
 > 设计：审计经 **`AuditSink` 接口**（依赖反转）。真实现 `OssAuditSink` 吃注入的 boto3 client（本地 MinIO / 阿里云 OSS）。**单元测试用极小 test double（`MemoryAuditSink`/`RaisingSink`），零依赖、不引入 moto**；真 MinIO 写读在任务 9（集成）覆盖。
 
-- [ ] **步骤 1：写失败测试**（单元，用 test double）
+- [x] **步骤 1：写失败测试**（单元，用 test double）
 
 ```python
 # tests/audit/test_oss_audit.py
@@ -513,12 +513,12 @@ def test_write_never_raises_into_caller():
     assert AuditWriter(RaisingSink()).write(EV) is None
 ```
 
-- [ ] **步骤 2：运行验证失败**
+- [x] **步骤 2：运行验证失败**
 
 运行：`pytest tests/audit/test_oss_audit.py -q`
 预期：FAIL —— `ModuleNotFoundError: libs.audit.oss_audit`
 
-- [ ] **步骤 3：写 `libs/audit/oss_audit.py`**
+- [x] **步骤 3：写 `libs/audit/oss_audit.py`**
 
 ```python
 # libs/audit/oss_audit.py
@@ -572,12 +572,12 @@ class AuditWriter:
             return None
 ```
 
-- [ ] **步骤 4：运行验证通过**
+- [x] **步骤 4：运行验证通过**
 
 运行：`pytest tests/audit/test_oss_audit.py -q`
 预期：PASS（3 passed）
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add libs/audit/oss_audit.py tests/audit/test_oss_audit.py
@@ -591,7 +591,7 @@ git commit -m "feat(audit): AuditSink + best-effort AuditWriter (ADR-010/013), u
 **文件：**
 - 创建：`services/gateway/deps.py`、`services/gateway/app.py`、`tests/gateway/test_gateway.py`
 
-- [ ] **步骤 1：写失败测试**（FastAPI TestClient；token 验签用测试 seam 旁路）
+- [x] **步骤 1：写失败测试**（FastAPI TestClient；token 验签用测试 seam 旁路）
 
 ```python
 # tests/gateway/test_gateway.py
@@ -630,12 +630,12 @@ def test_cross_enterprise_denied_403_and_audited():
 
 > `x-test-claims` 是**仅测试**注入（seam 在 `deps.py`）；真 JWKS 验签需活的 Keycloak —— 走任务 9 集成 / Spike A。生产路径解码并验签 bearer token。审计用 `MemoryAuditSink`（零依赖）；真 MinIO 写读在任务 9 覆盖。
 
-- [ ] **步骤 2：运行验证失败**
+- [x] **步骤 2：运行验证失败**
 
 运行：`pytest tests/gateway/test_gateway.py -q`
 预期：FAIL —— `ModuleNotFoundError: services.gateway.app`
 
-- [ ] **步骤 3：写 `services/gateway/deps.py`**（request → Context）
+- [x] **步骤 3：写 `services/gateway/deps.py`**（request → Context）
 
 ```python
 # services/gateway/deps.py
@@ -653,7 +653,7 @@ def context_from_request(request: Request) -> Context:
     raise HTTPException(status_code=401, detail="unauthenticated")
 ```
 
-- [ ] **步骤 4：写 `services/gateway/app.py`**
+- [x] **步骤 4：写 `services/gateway/app.py`**
 
 ```python
 # services/gateway/app.py
@@ -695,17 +695,17 @@ def build_app(audit: AuditWriter) -> FastAPI:
     return app
 ```
 
-- [ ] **步骤 5：运行验证通过**
+- [x] **步骤 5：运行验证通过**
 
 运行：`pytest tests/gateway/test_gateway.py -q`
 预期：PASS（3 passed）
 
-- [ ] **步骤 6：跑全量 + import-linter**
+- [x] **步骤 6：跑全量 + import-linter**
 
 运行：`pytest -q && lint-imports`
 预期：全绿；import-linter `Contracts: 1 kept, 0 broken`。
 
-- [ ] **步骤 7：提交**
+- [x] **步骤 7：提交**
 
 ```bash
 git add services/gateway/ tests/gateway/test_gateway.py
@@ -719,7 +719,7 @@ git commit -m "feat(gateway): skeleton wiring auth -> can() chokepoint -> OSS au
 **文件：**
 - 创建：`contracts/openapi/identity-org.yaml`、`.github/workflows/ci.yml`
 
-- [ ] **步骤 1：写 `contracts/openapi/identity-org.yaml`**（首个契约，真相源）
+- [x] **步骤 1：写 `contracts/openapi/identity-org.yaml`**（首个契约，真相源）
 
 ```yaml
 openapi: 3.1.0
@@ -752,7 +752,7 @@ components:
         memberships: {type: array, items: {$ref: '#/components/schemas/Membership'}}
 ```
 
-- [ ] **步骤 2：在 gateway 加 `GET /v1/me/orgs`，返回契约结构**
+- [x] **步骤 2：在 gateway 加 `GET /v1/me/orgs`，返回契约结构**
 
 在 `services/gateway/app.py` 的 `build_app` 内追加：
 
@@ -765,7 +765,7 @@ components:
                                  "role": m.role} for m in ctx.memberships]}
 ```
 
-- [ ] **步骤 3：加测试断言端点匹配契约结构**
+- [x] **步骤 3：加测试断言端点匹配契约结构**
 
 ```python
 # 追加到 tests/gateway/test_gateway.py
@@ -778,12 +778,12 @@ def test_me_orgs_matches_contract():
     assert body["memberships"][0] == {"enterprise_id": "e-0001", "group_id": "g-0001", "role": "member"}
 ```
 
-- [ ] **步骤 4：运行验证通过**
+- [x] **步骤 4：运行验证通过**
 
 运行：`pytest tests/gateway/test_gateway.py::test_me_orgs_matches_contract -q`
 预期：PASS
 
-- [ ] **步骤 5：写 `.github/workflows/ci.yml`**（单元测试 + lint + 契约 breaking 门禁，跑在 GitHub Actions，不依赖真环境）
+- [x] **步骤 5：写 `.github/workflows/ci.yml`**（单元测试 + lint + 契约 breaking 门禁，跑在 GitHub Actions，不依赖真环境）
 
 ```yaml
 name: ci
@@ -805,7 +805,7 @@ jobs:
         continue-on-error: true              # 首个稳定 tag 前仅告警
 ```
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add contracts/openapi/identity-org.yaml services/gateway/app.py tests/gateway/test_gateway.py .github/workflows/ci.yml
@@ -819,7 +819,7 @@ git commit -m "feat(contracts): identity-org OpenAPI + /v1/me/orgs + CI (test/li
 **文件：**
 - 创建：`scripts/ci_guards.sh`、`tests/test_ci_guards.py`
 
-- [ ] **步骤 1：写失败测试**
+- [x] **步骤 1：写失败测试**
 
 ```python
 # tests/test_ci_guards.py
@@ -830,12 +830,12 @@ def test_guards_pass_on_clean_tree():
     assert r.returncode == 0, r.stdout + r.stderr
 ```
 
-- [ ] **步骤 2：运行验证失败**
+- [x] **步骤 2：运行验证失败**
 
 运行：`pytest tests/test_ci_guards.py -q`
 预期：FAIL —— `No such file or directory: scripts/ci_guards.sh`
 
-- [ ] **步骤 3：写 `scripts/ci_guards.sh`**（宪法 §8）
+- [x] **步骤 3：写 `scripts/ci_guards.sh`**（宪法 §8）
 
 ```bash
 #!/usr/bin/env bash
@@ -850,14 +850,14 @@ if grep -rnE 'if .*enterprise_id *==' libs services --include='*.py' | grep -v '
 exit $fail
 ```
 
-- [ ] **步骤 4：加可执行权限，运行验证通过**
+- [x] **步骤 4：加可执行权限，运行验证通过**
 
 运行：`chmod +x scripts/ci_guards.sh && pytest tests/test_ci_guards.py -q`
 预期：PASS
 
-- [ ] **步骤 5：接入 CI** —— `.github/workflows/ci.yml` 已在任务 7 步骤 5 含 `bash scripts/ci_guards.sh`（确认存在即可）。
+- [x] **步骤 5：接入 CI** —— `.github/workflows/ci.yml` 已在任务 7 步骤 5 含 `bash scripts/ci_guards.sh`（确认存在即可）。
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add scripts/ci_guards.sh tests/test_ci_guards.py
@@ -872,7 +872,7 @@ git commit -m "feat(ci): constitution §8 grep guards (display_name, scattered e
 - 创建：`tests/conftest.py`、`tests/integration/test_audit_minio.py`、`tests/integration/test_token_verify.py`、`libs/identity/tokens.py`、`services/gateway/main.py`
 - 修改：`services/gateway/deps.py`（加生产验签分支）
 
-- [ ] **步骤 1：写 `tests/conftest.py`**（集成 fixture；本地依赖未起则 skip）
+- [x] **步骤 1：写 `tests/conftest.py`**（集成 fixture；本地依赖未起则 skip）
 
 ```python
 # tests/conftest.py
@@ -913,7 +913,7 @@ def kc_token():
     return r.json()["access_token"]
 ```
 
-- [ ] **步骤 2：写 `libs/identity/tokens.py`**（JWKS 验签）
+- [x] **步骤 2：写 `libs/identity/tokens.py`**（JWKS 验签）
 
 ```python
 # libs/identity/tokens.py
@@ -928,7 +928,7 @@ def verify_and_decode(token: str, jwks_url: str, audience: str | None = None) ->
                       audience=audience, options={"verify_aud": audience is not None})
 ```
 
-- [ ] **步骤 3：扩展 `services/gateway/deps.py` 生产验签分支**
+- [x] **步骤 3：扩展 `services/gateway/deps.py` 生产验签分支**
 
 ```python
 # services/gateway/deps.py  （替换整个文件）
@@ -954,7 +954,7 @@ def context_from_request(request: Request) -> Context:
     return parse_context(sub=claims["sub"], groups=claims.get("groups", []))
 ```
 
-- [ ] **步骤 4：写运行时装配 `services/gateway/main.py`**（env → boto3→MinIO/OSS → OssAuditSink → build_app）
+- [x] **步骤 4：写运行时装配 `services/gateway/main.py`**（env → boto3→MinIO/OSS → OssAuditSink → build_app）
 
 ```python
 # services/gateway/main.py    启动：uvicorn services.gateway.main:app
@@ -974,7 +974,7 @@ def _audit_writer() -> AuditWriter:
 app = build_app(audit=_audit_writer())
 ```
 
-- [ ] **步骤 5：写集成测试（标 `integration`）**
+- [x] **步骤 5：写集成测试（标 `integration`）**
 
 ```python
 # tests/integration/test_audit_minio.py
@@ -1006,12 +1006,12 @@ def test_real_token_verifies_and_parses(kc_token):
     assert any(m.enterprise_id == "e-0001" and m.role == "member" for m in ctx.memberships)
 ```
 
-- [ ] **步骤 6：起本地依赖并跑集成**
+- [x] **步骤 6：起本地依赖并跑集成**
 
 运行：`make dev-up && sleep 25 && make test-integration`
 预期：`2 passed`（真 MinIO 写读 + 真 Keycloak token 验签解析）。
 
-- [ ] **步骤 7：CI 加集成 job**（`.github/workflows/ci.yml` 追加，单独 job 起 compose 跑集成）
+- [x] **步骤 7：CI 加集成 job**（`.github/workflows/ci.yml` 追加，单独 job 起 compose 跑集成）
 
 ```yaml
   integration:
@@ -1025,7 +1025,7 @@ def test_real_token_verifies_and_parses(kc_token):
       - run: make test-integration
 ```
 
-- [ ] **步骤 8：提交**
+- [x] **步骤 8：提交**
 
 ```bash
 git add tests/conftest.py tests/integration/ libs/identity/tokens.py services/gateway/main.py services/gateway/deps.py .github/workflows/ci.yml
@@ -1040,16 +1040,16 @@ git commit -m "feat: local integration (real MinIO+Keycloak) + gateway runtime w
 - 修改：`pyproject.toml`（dev 加生成器）、`Makefile`（`gen` 目标）、`.gitignore`
 - 创建：`libs/contracts_gen/__init__.py`、`tests/test_codegen.py`
 
-- [ ] **步骤 1：dev 依赖加生成器** —— `pyproject.toml` 的 `dev` 列表追加 `"datamodel-code-generator>=0.26"`。
+- [x] **步骤 1：dev 依赖加生成器** —— `pyproject.toml` 的 `dev` 列表追加 `"datamodel-code-generator>=0.26"`。
 
-- [ ] **步骤 2：`Makefile` 加 `gen` 目标**
+- [x] **步骤 2：`Makefile` 加 `gen` 目标**
 
 ```make
 gen: ; uv run datamodel-codegen --input contracts/openapi/identity-org.yaml \
         --input-file-type openapi --output libs/contracts_gen/identity_org_models.py
 ```
 
-- [ ] **步骤 3：写失败测试**（生成后产物可 import 且含契约模型）
+- [x] **步骤 3：写失败测试**（生成后产物可 import 且含契约模型）
 
 ```python
 # tests/test_codegen.py
@@ -1061,18 +1061,18 @@ def test_codegen_produces_importable_models():
     assert hasattr(m, "Membership") and hasattr(m, "Memberships")
 ```
 
-- [ ] **步骤 4：建包占位 + 运行**
+- [x] **步骤 4：建包占位 + 运行**
 
 运行：`touch libs/contracts_gen/__init__.py && uv run pytest tests/test_codegen.py -q`
 预期：PASS —— `make gen` 跑通、生成 `libs/contracts_gen/identity_org_models.py`、可 import 出 `Membership`/`Memberships`（**契约代码生成跑通**，S0 出口 ④）。
 
-- [ ] **步骤 5：CI 加"生成物最新"校验** —— `.github/workflows/ci.yml` 的 build job 追加：
+- [x] **步骤 5：CI 加"生成物最新"校验** —— `.github/workflows/ci.yml` 的 build job 追加：
 
 ```yaml
       - run: make gen && git diff --exit-code libs/contracts_gen/   # 生成物必须已提交且最新
 ```
 
-- [ ] **步骤 6：提交**
+- [x] **步骤 6：提交**
 
 ```bash
 git add pyproject.toml Makefile libs/contracts_gen/ tests/test_codegen.py .github/workflows/ci.yml
@@ -1141,8 +1141,8 @@ curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $TOKE
 - [ ] B + C 全部命令实测通过（贴输出为证）
 - [ ] 出口 ①②③④ 四条全 PASS（任一 fail → **不验收**，触发 §5 滑窗）
 - [ ] Spike A/B + 数据 Spike 结论已回写 ADR/文档
-- [ ] code review 过（`superpowers:requesting-code-review`）
-- [ ] plan 任务 1–10 checkbox 全 `- [x]`、commit 齐
+- [x] code review 过（`superpowers:requesting-code-review`）
+- [x] plan 任务 1–10 checkbox 全 `- [x]`、commit 齐
 - [ ] 团队 go/no-go 签字
 
 ---
