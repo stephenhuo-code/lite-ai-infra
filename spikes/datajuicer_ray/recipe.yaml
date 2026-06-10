@@ -1,0 +1,26 @@
+# Spike 2 — Data-Juicer 多模态清洗 recipe（Ray executor，本地彩排）
+# 只选**轻量、无需下载大模型**的算子(文本长度 / 图像尺寸 / 宽高比 / 去重),
+# 让本地能快速跑通;真 100GB + OOM 边界需上云复跑。
+project_name: spike2-multimodal-smoke
+
+dataset_path: ./spikes/datajuicer_ray/sample/data.jsonl
+export_path: ./spikes/datajuicer_ray/out/cleaned.jsonl
+
+# 用 Ray 执行（本地自动起单机 Ray）
+executor_type: ray
+ray_address: auto
+
+np: 2
+text_keys: text
+image_key: images
+
+process:
+  - text_length_filter:        # 过滤空文本 / 超长文本
+      min_len: 3
+      max_len: 2000
+  - image_shape_filter:        # 过滤过小图(bad_tiny)
+      min_width: 8
+      min_height: 8
+  - image_aspect_ratio_filter: # 过滤极端宽高比(bad_ratio)
+      min_ratio: 0.2
+      max_ratio: 5.0
