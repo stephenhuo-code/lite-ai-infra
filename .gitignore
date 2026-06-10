@@ -16,3 +16,15 @@ node_modules/
 
 # Specify / superpowers
 .superpowers/
+
+# Spike artifacts (generated data / outputs / ray logs)
+spikes/*/sample/
+spikes/*/out/
+
+# Secrets / IaC state (NEVER commit)
+.env
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!*.tfvars.example

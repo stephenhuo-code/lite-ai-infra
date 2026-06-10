@@ -1,0 +1,44 @@
+# deploy/test/docker-compose.yml
+# 阿里云测试(staging)环境的 Keycloak —— 跑在单台 ECS 上。
+# 与 dev 的差异(仅两点,其余同源):
+#   1) Keycloak 后端从 dev 的内置 H2 换成 Postgres(持久化,重启不丢 realm/用户)
+#   2) 不带 MinIO —— 测试环境用真 阿里云 OSS(见 terraform/ + runbook)
+# realm 配置复用 dev 的同一份 realm-lite-ai.json(单一源,防配置漂移,spec E3)。
+# 密钥全部走 .env(见 .env.example),不硬编码。
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${KC_DB_NAME:-keycloak}
+      POSTGRES_USER: ${KC_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD:?set in .env}
+    volumes:
+      - kc-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KC_DB_USER:-keycloak} -d ${KC_DB_NAME:-keycloak}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.2
+    command: ["start-dev", "--import-realm", "--features=organization"]
+    # 注:测试环境用 start-dev(http,无需 TLS/hostname),仅暴露给受限安全组内的 Spike 客户端。
+    #     上 prod 必须换 `start` + KC_HOSTNAME + TLS(见 runbook §6 硬化)。
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:?set in .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:?set in .env}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${KC_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KC_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:?set in .env}
+    ports: ["8080:8080"]
+    volumes:
+      # 同源:挂 dev 那份 realm-lite-ai.json(scp 整个 deploy/ 子树后相对路径成立)
+      - ../dev/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  kc-pgdata:
