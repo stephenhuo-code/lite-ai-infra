@@ -22,7 +22,8 @@ def can(ctx: Context, action: str, resource: Resource) -> Decision:
     # 角色门槛：大 GPU 作业需 group-admin+
     if action == "job.submit" and (resource.attrs or {}).get("gpu", 0) > 4 and rank < 1:
         return Decision(False, "> 4 GPU job requires group-admin+")
-    # mutation 的 owner 检查
+    # mutation 的 owner 检查。owner=None(资源无主,如 S0 stub 解析不出 owner)时
+    # 有意放行任何本组成员——企业/组隔离已在上面强制;owner 细化随真实资源查找落地(vN+)。
     if action.endswith((".delete", ".cancel", ".update")) and resource.owner not in (None, ctx.user):
         if rank < 1:
             return Decision(False, "only owner / group-admin / enterprise-admin")

@@ -89,16 +89,25 @@ uv run python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signatur
 
 ---
 
-## 5. 网关服务 / 集成测试（任务 9，待实现）
+## 5. 网关服务 / 集成测试（任务 9，已落地）
 
-S0 当前交付的是**库 + 网关骨架 + 契约**，单元层用 `x-test-claims` seam 和内存审计 double 全绿（无需真依赖）。以下两项依赖真 Keycloak/MinIO，属计划**任务 9**，尚未落地：
+S0 交付**库 + 网关 + 契约 + 真依赖集成层**。单元层用 `x-test-claims` seam 和内存审计 double（无需真依赖）；集成层打真 Keycloak/MinIO：
 
-- `services/gateway/main.py`（运行时装配 env → boto3→MinIO/OSS → 真网关 ASGI app）→ 启动方式将是 `uv run uvicorn services.gateway.main:app`
-- `tests/integration/`（真 MinIO 写读 + 真 Keycloak 验签）+ `tests/conftest.py` + `libs/identity/tokens.py`（JWKS 验签）+ `deps.py` 生产验签分支
+- `services/gateway/main.py` —— 运行时装配（env → boto3(path-style)→MinIO/OSS → ASGI app）
+- `libs/identity/tokens.py` —— Keycloak JWKS 验签（JWKS client 按 url 缓存；`LITEAI_TOKEN_ISSUER`/`LITEAI_TOKEN_AUDIENCE` 给定时强制校验）
+- `tests/integration/` + `tests/conftest.py` —— 真 MinIO 写读 + 真 Keycloak token 验签
 
-实现后即可：`make dev-up && make test-integration`（期望 `2 passed`）。详见计划任务 9 与验收 runbook §C。
+跑集成：`make dev-up && make test-integration`（期望 `2 passed`）。
 
-> 现状下 `make test-integration` 收集 0 个集成用例（这些测试还没写）。
+起真网关（真验签）：
+
+```bash
+LITEAI_JWKS_URL=http://localhost:8080/realms/lite-ai/protocol/openid-connect/certs \
+  OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 \
+  AUDIT_BUCKET=lite-ai uv run uvicorn services.gateway.main:app --port 8000
+```
+
+> 安全：`x-test-claims` 测试 seam **默认关闭**（default-deny）；仅显式 `LITEAI_ALLOW_TEST_CLAIMS=1`（单测/本地调试）才生效，生产装配绝不设置。
 
 ---
 
@@ -115,7 +124,7 @@ lite-ai-infra/
 ├── services/gateway/{app,deps}.py        # FastAPI 网关骨架：token→can()→audit
 ├── deploy/dev/                 # 本地 docker-compose（Keycloak 26.6.2 + MinIO）+ seeded realm
 ├── scripts/ci_guards.sh        # 宪法 §8 grep 护栏
-├── tests/                      # 单元（零依赖）；integration/（任务 9 待补）
+├── tests/                      # 单元（零依赖）+ integration/（真 MinIO/Keycloak）
 ├── .python-version uv.lock pyproject.toml Makefile .importlinter
 └── .github/workflows/ci.yml    # CI：单元 + lint + 护栏 + oasdiff + codegen freshness
 ```
