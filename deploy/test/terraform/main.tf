@@ -73,7 +73,10 @@ resource "alicloud_ram_access_key" "gateway" {
 
 # --- Spike C：可被该用户 AssumeRole 的受限角色（STS 受限凭据） ---
 resource "alicloud_ram_role" "sts" {
-  role_name = var.sts_role_name
+  # 信任策略引用 gateway 用户的 ARN(字符串拼接,terraform 无法推断依赖)——
+  # 必须显式等用户建成,否则 CreateRole 报 "user not exists"
+  depends_on = [alicloud_ram_user.gateway]
+  role_name  = var.sts_role_name
   assume_role_policy_document = jsonencode({
     Version = "1"
     Statement = [

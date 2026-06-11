@@ -150,3 +150,5 @@ Keycloak 26.6.2(`--features=organization`,docker-compose,seeded realm),脚本 `s
 3. **token-stale 窗口 = accessTokenLifespan = 300s**(realm 配置即实测 `exp-iat`):已签发旧 token 携带 stale groups 直至过期。**含义**:成员变更后最长 5 分钟内,旧 token 仍按旧身份通过授权——v1 接受此窗口(与本 ADR"接受 token 短暂陈旧"一致);若需收紧,调小 lifespan 或在敏感操作上强制 token 刷新。
 
 **判定:go**(本地)。阿里云测试环境复验同脚本改 `KC_BASE` 重跑。
+
+**阿里云复验(2026-06-11,ECS @ cn-hangzhou,Keycloak 26.6.2 + Postgres 16)**:同脚本经云助手在实例上执行,三段全 PASS——双组全路径 claim ✓;移组后 **110ms** 签发的新 token 即时反映 ✓;stale 窗口 = accessTokenLifespan = 300s ✓。与本地 compose 行为一致,**Spike A 闭环,判定 go**。

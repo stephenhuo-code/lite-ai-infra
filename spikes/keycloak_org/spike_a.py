@@ -17,12 +17,15 @@ import httpx, jwt
 KC = os.getenv("KC_BASE", "http://localhost:8080")
 REALM = "lite-ai"
 ADMIN = f"{KC}/admin/realms/{REALM}"
+# dev compose 默认 admin/admin;test 环境密码随机(deploy/test/.env),经 env 覆盖
+ADMIN_USER = os.getenv("KC_ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.getenv("KC_ADMIN_PASSWORD", "admin")
 
 
 def admin_token() -> str:
     r = httpx.post(f"{KC}/realms/master/protocol/openid-connect/token",
-                   data={"client_id": "admin-cli", "username": "admin",
-                         "password": "admin", "grant_type": "password"})
+                   data={"client_id": "admin-cli", "username": ADMIN_USER,
+                         "password": ADMIN_PASSWORD, "grant_type": "password"})
     r.raise_for_status()
     return r.json()["access_token"]
 
