@@ -24,6 +24,15 @@ def _audit_key(ev: AuditEvent) -> str:
     y, m, d = ev.ts[0:4], ev.ts[5:7], ev.ts[8:10]
     return f"audit/{y}/{m}/{d}/{ev.ts}-{uuid.uuid4().hex[:8]}.jsonl"
 
+def addressing_style(endpoint: str, explicit: str | None = None) -> str:
+    """对象存储寻址方式:MinIO 要 path-style;真阿里云 OSS 拒绝 path-style
+    (SecondLevelDomainForbidden,Spike C 2026-06-11 实测)→ 按 endpoint 自适应;
+    explicit(如 env OSS_ADDRESSING_STYLE)可显式覆盖。"""
+    if explicit:
+        return explicit
+    return "virtual" if "aliyuncs.com" in endpoint else "path"
+
+
 class AuditSink(Protocol):
     def put(self, key: str, body: bytes) -> None: ...
 

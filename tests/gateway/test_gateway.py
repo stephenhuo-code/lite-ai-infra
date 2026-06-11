@@ -57,3 +57,14 @@ def test_me_orgs_matches_contract():
     body = r.json()
     assert set(body) == {"user", "is_platform_admin", "memberships"}
     assert body["memberships"][0] == {"enterprise_id": "e-0001", "group_id": "g-0001", "role": "member"}
+
+def test_addressing_style_adapts_to_endpoint():
+    # Spike C 实测:真 OSS 拒 path-style,MinIO 需 path-style → 按 endpoint 自适应
+    from libs.audit.oss_audit import addressing_style
+    assert addressing_style("https://oss-cn-hangzhou.aliyuncs.com") == "virtual"
+    assert addressing_style("https://oss-cn-hangzhou-internal.aliyuncs.com") == "virtual"
+    assert addressing_style("http://localhost:9000") == "path"
+
+def test_addressing_style_explicit_override():
+    from libs.audit.oss_audit import addressing_style
+    assert addressing_style("https://oss-cn-hangzhou.aliyuncs.com", explicit="path") == "path"
