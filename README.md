@@ -111,6 +111,21 @@ LITEAI_JWKS_URL=http://localhost:8080/realms/lite-ai/protocol/openid-connect/cer
 
 ---
 
+## 5.5 数据准备一行命令(pipelines/data_prep)
+
+```bash
+# tar 图文包 → DJ+Ray 清洗 → Lance on OSS(企业/组隔离路径),入口经 can()+审计
+OSS_ENDPOINT=… OSS_ACCESS_KEY=… OSS_SECRET_KEY=… DATA_BUCKET=… AUDIT_BUCKET=… \
+DJ_BIN=/path/to/dj-venv/bin/dj-process \
+  uv run python -m pipelines.data_prep --tar-dir ./tars --dataset cc3m
+```
+
+要点:DJ 跑在独立 venv(`DJ_BIN`,Ray 禁瞬态环境);需 Ray head 已起;OSS/MinIO
+寻址与 commit_lock 等兼容性已在 `pipelines/data_prep/lance_writer.py` 内自适应。
+身份:CLI 态走 `LITEAI_SUB`/`LITEAI_GROUPS` env;服务化入口见 S1 Plan 4。
+
+---
+
 ## 6. 代码结构
 
 ```
