@@ -53,10 +53,8 @@ STORAGE_OPTIONS = {
 }
 if os.getenv("OSS_SESSION_TOKEN"):   # 实例 RAM 角色的 STS 临时凭据
     STORAGE_OPTIONS["session_token"] = os.environ["OSS_SESSION_TOKEN"]
-if _VIRTUAL:
-    # OSS 不支持 If-None-Match 条件写(2026-06-12 实测 NotImplemented),
-    # 关闭 conditional_put(单写者安全;多写者并发提交保护属 vN+ 课题)
-    STORAGE_OPTIONS["conditional_put"] = os.getenv("OSS_CONDITIONAL_PUT", "disabled")
+if os.getenv("OSS_CONDITIONAL_PUT"):
+    STORAGE_OPTIONS["conditional_put"] = os.environ["OSS_CONDITIONAL_PUT"]
 
 
 def _ensure_bucket():
@@ -102,8 +100,17 @@ def main():
 
     results = []
     # 1) 写
+    wkw = {}
+    if os.getenv("OSS_COMMIT_MODE") == "lock":
+        # OSS 不支持 If-None-Match(条件写)→ 用 lance 的外部 commit_lock 口子
+        # (no-op 锁:单写者场景安全;多写者需真锁,vN+ 课题)
+        import contextlib
+        @contextlib.contextmanager
+        def _noop_lock(version):
+            yield
+        wkw["commit_lock"] = _noop_lock
     results.append(_timed("write", lambda: lance.write_dataset(
-        tbl, uri, storage_options=STORAGE_OPTIONS, mode="overwrite"))[:2])
+        tbl, uri, storage_options=STORAGE_OPTIONS, mode="overwrite", **wkw))[:2])
     ds = lance.dataset(uri, storage_options=STORAGE_OPTIONS)
 
     # 2) 全列顺序扫描
