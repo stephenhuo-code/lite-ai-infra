@@ -1,0 +1,35 @@
+# 派生角色:把 Context.memberships 映射成 Cerbos derived roles
+apiVersion: api.cerbos.dev/v1
+derivedRoles:
+  name: liteai_roles
+  definitions:
+    - name: owner
+      parentRoles: ["user"]
+      condition:
+        match:
+          expr: request.resource.attr.owner == request.principal.id
+    - name: same_group_member
+      parentRoles: ["user"]
+      condition:
+        match:
+          expr: >-
+            request.principal.attr.memberships.exists(m,
+              m.enterprise_id == request.resource.attr.enterprise_id &&
+              m.group_id == request.resource.attr.group_id &&
+              m.role == "member")
+    - name: group_admin
+      parentRoles: ["user"]
+      condition:
+        match:
+          expr: >-
+            request.principal.attr.memberships.exists(m,
+              m.enterprise_id == request.resource.attr.enterprise_id &&
+              m.group_id == request.resource.attr.group_id &&
+              m.role == "group-admin")
+    - name: same_enterprise
+      parentRoles: ["user"]
+      condition:
+        match:
+          expr: >-
+            request.principal.attr.memberships.exists(m,
+              m.enterprise_id == request.resource.attr.enterprise_id)

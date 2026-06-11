@@ -140,3 +140,13 @@ Cerbos 判权所需的 `enterprise_id/group_id/scope` 从资源本身读：
 ## 附录 B：为什么 v1 选模型 B 而非 realm-per-企业
 
 即使 v1 不跨企业，模型 B 仍更优：新企业开通 = 建 Organization + 组，不 provision realm；单 realm 扛海量企业；Organizations 已提供 per-企业 SSO + 隔离；且免费保留未来跨企业的演进口子。realm-per-企业 仅当"用户库必须物理分库"的强合规需求出现时作例外。
+
+## 附录 C:Spike A 结论(2026-06-10,本地 compose 实测;阿里云复验待)
+
+Keycloak 26.6.2(`--features=organization`,docker-compose,seeded realm),脚本 `spikes/keycloak_org/spike_a.py`:
+
+1. **多组 claim 稳定**:用户同属 `g-0001`/`g-0002` 两组 → `groups` claim 带出**两条全路径**(`/e-0001/g-0001/members`, `/e-0001/g-0002/members`),full-path mapper 行为符合预期。
+2. **变更传播即时**:移出 `g-0002` 后 **98ms** 签发的新 token 已不含该组——Keycloak 在签发时实时读组成员,无缓存延迟。
+3. **token-stale 窗口 = accessTokenLifespan = 300s**(realm 配置即实测 `exp-iat`):已签发旧 token 携带 stale groups 直至过期。**含义**:成员变更后最长 5 分钟内,旧 token 仍按旧身份通过授权——v1 接受此窗口(与本 ADR"接受 token 短暂陈旧"一致);若需收紧,调小 lifespan 或在敏感操作上强制 token 刷新。
+
+**判定:go**(本地)。阿里云测试环境复验同脚本改 `KC_BASE` 重跑。

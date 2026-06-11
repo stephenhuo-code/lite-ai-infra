@@ -1,0 +1,19 @@
+# job 资源策略:AC-1(owner 可删自己的 job)/ AC-2(非 owner member 不可)
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: job
+  version: default
+  importDerivedRoles: [liteai_roles]
+  rules:
+    - actions: ["job.delete"]
+      effect: EFFECT_ALLOW
+      derivedRoles: [group_admin]
+    - actions: ["job.delete"]
+      effect: EFFECT_ALLOW
+      derivedRoles: [owner]
+      condition:
+        match:
+          # owner 还得是本组 member(企业/组隔离前置)
+          expr: >-
+            request.principal.attr.memberships.exists(m,
+              m.enterprise_id == request.resource.attr.enterprise_id)

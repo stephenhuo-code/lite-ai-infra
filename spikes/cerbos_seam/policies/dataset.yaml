@@ -1,0 +1,10 @@
+# dataset 资源策略:AC-6(跨企业读 → 默认拒;同企业成员可读)
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: dataset
+  version: default
+  importDerivedRoles: [liteai_roles]
+  rules:
+    - actions: ["dataset.read"]
+      effect: EFFECT_ALLOW
+      derivedRoles: [same_enterprise]

@@ -139,3 +139,13 @@ resourcePolicy:
 ```
 
 > `P`/`R` = `request.principal`/`request.resource`。principal 的 `roles` 与 `attr`（enterprise_id/group_ids）由 PEP 从 token 的 `groups` claim 解析后填入。
+
+## 附录:Spike B 结论(2026-06-10,本地 Cerbos 容器实测)
+
+`ghcr.io/cerbos/cerbos:latest` + `spikes/cerbos_seam/`(policies: derived_roles/job/dataset;脚本 `spike_b.py`):
+
+- **同一 `can(ctx, action, resource)` 签名**实现了 Cerbos 后端(`cerbos_can`),与 v1 薄引擎在 AC-1/AC-2/AC-6/AC-9 四条上**逐条一致**(allow/deny 完全相同)。
+- **`services/gateway/app.py` 零改成立**:gateway 只 import `libs.authz.engine.can`;v2 切换 = 替换 engine 内部实现(in-code 规则 → Cerbos HTTP check),handler 与签名均不动。
+- Context.memberships → Cerbos principal.attr 映射直接(数组 + `exists()` CEL 表达式),derived roles 可表达 owner/同组成员/组管理员/同企业四类语义。
+
+**判定:go** —— ADR-011 的 seam 设计验证成立,v2 接 Cerbos 无架构风险。
