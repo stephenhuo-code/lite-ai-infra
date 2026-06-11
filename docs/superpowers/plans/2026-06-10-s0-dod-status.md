@@ -1,12 +1,14 @@
-# S0 DoD 状态 / go-no-go 证据底稿（2026-06-10）
+# S0 DoD 状态 / go-no-go 证据底稿（2026-06-10,06-11 按 ADR-014 更新）
 
 > 给团队签字用。原则:证据先于断言(宪法 §3.2),每条附实测输出。
-> 分支:`s0-foundation` @ `fc5dbb4`。
+> 分支:`s0-foundation`。
 
 ## 一句话现状
 
-**本地可完成的工作全部闭环并过 code review;唯一未决=出口①(数据 Spike,硬依赖阿里云)。**
-按 DoD 硬阈值("出口任一 fail → 不验收"),**当前不能签 go**——不是质量问题,是出口① 未执行。
+**S0 按 [ADR-014](../../adr/ADR-014-s0-exit1-carryover-to-s1.md) 以 "closed with carry-over" 关闭**:
+出口②③④ PASS + 全部本地工作闭环并过 code review;出口①(数据 Spike,被云环境/100GB
+数据集两个外部前置卡住)**移交 S1 第一周入口门禁**(S1 第 3 工作日硬时限,详见 ADR-014)。
+签认 ADR-014 = 签认本次关闭。
 
 ## 出口对照(design §5.3)
 
@@ -52,17 +54,18 @@ Plan 级教训(反馈给 S1 计划):seam 默认开、str 型 ID 两个坑都是 
 | Spike B(Cerbos seam)| ✅ PASS(同 can() 签名调 Cerbos,AC-1/2/6/9 与 v1 逐条一致,app.py 零改);结论已回写 ADR-011 附录 |
 | Spike C(真 OSS+STS)| 逻辑已被任务 9 MinIO 集成覆盖;真 OSS 待跑(IaC 已备:deploy/test/terraform) |
 
-## 签字前剩余路径
+## 关闭路径(ADR-014)
 
-1. 阿里云最小环境(runbook `docs/ops/2026-06-09-test-env-aliyun-keycloak-oss.md`,IaC 已 validate)
-2. 跑数据 Spike 1/2(harness 零改,改 env + 放大规模)+ Spike A/B/C,结论回写 ADR-010/011
-3. 回填 DoD 前三项 checkbox → 团队 go/no-go 签字
+1. 团队签认 ADR-014(Proposed → Accepted)→ **S0 即关闭(carry-over)**
+2. 移交 S1 第一周门禁:数据 Spike 1/2 + Spike A 阿里云复验 + Spike C 真 OSS
+   (前置:阿里云最小环境开通 + 100GB 数据集落位 OSS;S1 第 3 工作日内出结论,
+   否则触发 design §5.4 原动作,不得二次顺延)
 
-## DoD 清单镜像(plan §F)
+## DoD 清单镜像(plan §F,按 ADR-014 口径)
 
-- [ ] B + C 全部命令实测通过 —— B ✅;C 的②③ ✅,**①待阿里云**
-- [ ] 出口①②③④ 全 PASS —— ②③④ ✅,**①待执行**
-- [ ] Spike 结论回写 ADR —— 待 Spike 执行
+- [ ] B + C 全部命令实测通过 —— B ✅;C 的②③ ✅;**① 按 ADR-014 移交 S1**
+- [ ] 出口①②③④ 全 PASS —— ②③④ ✅;**① carry-over(非 PASS,见 ADR-014)**
+- [x] Spike A/B 结论已回写 ADR —— A→ADR-010 附录 C(本地;云复验随 S1)、B→ADR-011 附录;数据 Spike 结论随 S1 门禁回写
 - [x] code review 过
 - [x] plan 任务 1–10 checkbox 全 `[x]`、commit 齐
-- [ ] 团队 go/no-go 签字 —— **本文档即签字底稿**
+- [ ] 团队 go/no-go 签字 —— **= 签认 ADR-014**
