@@ -1,9 +1,10 @@
 # Lite AI Infra Platform 设计文档
 
-> **状态**：Draft（多公司 SaaS 架构；v1 起多企业 + 版本递增 v1/v2/v4）
-> **作者**：平台团队（3 人）
-> **日期**：2026-05-08
-> **目标上线**：v1 ≈2026-07-11 起递增上线；**GA（v5 完成）≈2026-11-28**
+> **状态**：Draft（多公司 SaaS 架构；v1 起多企业 + 版本递增 v1/v2/v4)
+> **作者**：平台团队(原按 3 人编制;**2026-06 起实际为一人 + Claude**,见文末修订记录)
+> **日期**：2026-05-08(修订 2026-06-12)
+> **目标上线**：v1 原 ≈2026-07-11(**将后移**,S2 计划时走 ADR 重排,宪法 §7.4);GA 原 ≈2026-11-28
+> **执行现状**:S0 已关闭(ADR-014 carry-over);S1 进行中,出口①③ 已验收 —— 见 §5.3 各 sprint 内的修订块与文末"修订记录(2026-06-12)"
 
 ---
 
@@ -1422,6 +1423,8 @@ Lineage 边（v1 手工）：
 
 **出口**：两个数据 Spike PASS；Keycloak 26.6.2 可登录拿带 `groups` claim 的 token；Gateway 能解析 enterprise_id/group_id；contracts 代码生成跑通。
 
+> **✅ 执行结果(2026-06-11 关闭,closed with carry-over,[ADR-014](../../adr/ADR-014-s0-exit1-carryover-to-s1.md))**:出口②③④ PASS(本地+真机证据见 `plans/2026-06-10-s0-dod-status.md`);出口①(数据 Spike)因云环境/数据集前置未就绪移交 S1 第一周门禁,**已于 06-12 关闭(GO,1GB 档)**——规模(100GB+)验证移交 S2a。Spike A/B/C 全部 PASS 并回写 ADR-010/011。P1/P3 的 ACK/Gravitino/MLflow 部署轨未执行(一人团队,改最小云档:单 ECS + OSS,见 §8.8 修订)。
+
 ---
 
 #### Sprint 1（Week 2-3，06-14 → 06-27）：v1 数据管线 + 多模态处理 起步
@@ -1441,9 +1444,14 @@ Lineage 边（v1 手工）：
 
 **出口**：100GB → 一行命令 → 清洗（含多模态处理）→ Lance → Gravitino schema 可查；薄 `can()` 守企业隔离；Dev Workspace 可起做数据探索；契约生成的 SDK 可调。
 
+> **🔄 修订(2026-06-11,详见 [`2026-06-11-s1-data-pipeline-design.md`](2026-06-11-s1-data-pipeline-design.md))**:一人团队重排——S1 = **14 个工作日(06-12 起,≈07-01 止)**;数据规模 100GB→**1GB 档**(owner 决策,规模验证移 S2a);保留全部出口,仅 Dev Workspace 降级 docker 版;服务化(双服务+契约先行)纳入;Argo/ACK 推 S2。本表中"薄 can()"实际已由 S0 提前交付。
+> **执行进度(2026-06-12,D1)**:W1 门禁当日关闭(早于 06-17 时限);**出口① 已验收**(一行命令:15,138 条 CC3M → DJ+Ray → Lance on OSS 隔离路径,1m43s,审计落盘;`pipelines/data_prep` 包 + 39 单测/3 集成全绿);出口③ ✅(S0)。余:Plan 3(Gravitino,出口②)、Plan 4(双服务+SDK,出口⑤)、stretch ④。
+
 ---
 
 #### Sprint 2（Week 4-5，06-28 → 07-11）：**v1 交付**（10TB + 元数据 + 向量 + 数据域前端）
+
+> **🔄 修订(2026-06-11/12,见 S1 设计 spec §6/§8)**:S2 **必须分三阶段**——S2a(10TB 放大 + Gravitino HA;含 Lance 多写者 commit 方案与 100GB+ 规模边界实测,承接 ADR-014 移交项)→ S2b(Embedding/ANN + V8 斜率)→ S2c(数据域前端 + Provisioner;**低保真原型先行于 S2 spec**,部署=OSS 静态托管+CDN)。S2 起止与 v1 交付日按一人现实重排,**S2 计划时走 ADR**(宪法 §7.4)。用户自定义管线"BYO-Step 容器"的 IO 契约进 S2a 范围。
 
 | 负责 | 任务 |
 |---|---|
@@ -1544,11 +1552,13 @@ Lineage 边（v1 手工）：
 
 ### 5.4 Hard Deadlines
 
+> **🔄 本表为 2026-05-08 原版;06-12 后口径**:S0 行已按 ADR-014 关闭;S1 行改 **≈07-01**(14 工作日,1GB 档);S2 行及以后**整体后移,S2 计划时以 ADR 重排定稿**(宪法 §7.4)。下表原文保留作基线对照。
+
 | 日期 | Sprint | 版本里程碑 | 不达标后果 |
 |---|---|---|---|
-| 06-13 | S0 | 两数据 Spike PASS + Keycloak 26.6.2 可登录（带 groups claim）+ Gateway 解析 enterprise_id/group_id + 契约代码生成跑通 | 顺延 S0，可能砍 v1 范围 |
-| 06-27 | S1 | 100GB 数据管线 + **多模态处理** → Lance → Gravitino + **薄 can() 企业隔离** + Dev Workspace 骨架 + 契约 SDK | 砍数据子集量；薄 can() 滑窗 |
-| **07-11** | S2 | **【v1 交付】10TB 数据管线 PASS** + Gravitino HA + Embedding/ANN（或 V8 决策）+ **数据域前端完整** + Enterprise Provisioner 幂等 + OSS 审计 | 砍数据集量 / V8 砍 10% / 前端降级 |
+| ~~06-13~~ ✅已关闭(ADR-014) | S0 | 两数据 Spike PASS + Keycloak 26.6.2 可登录（带 groups claim）+ Gateway 解析 enterprise_id/group_id + 契约代码生成跑通 | 顺延 S0，可能砍 v1 范围 |
+| ~~06-27~~ → ≈07-01 | S1 | ~~100GB~~ 1GB 档数据管线 + **多模态处理** → Lance → Gravitino + **薄 can() 企业隔离** + Dev Workspace 骨架(降级) + 契约 SDK + 服务化 | 砍数据子集量；薄 can() 滑窗 |
+| **~~07-11~~ 待 ADR 重排** | S2(分 a/b/c) | **【v1 交付】10TB 数据管线 PASS** + Gravitino HA + Embedding/ANN（或 V8 决策）+ **数据域前端完整** + Enterprise Provisioner 幂等 + OSS 审计 | 砍数据集量 / V8 砍 10% / 前端降级 |
 | **08-22** | S5 | **【v2 交付】LLM Gateway（接 Claude/Codex/Minimax）+ Agent 平台/统一对话 + 三类内置 agent + Cerbos 43 AC 全过**（验收 10） | LiteLLM 不行→换备选；Cerbos 滑则薄 can() 先上 |
 | **09-19** | S7 | **【v3 交付】Agentic Search**：多源多模态统一检索 + 带引用 + scope 隔离（验收 11） | 检索深度降级（先单模态）/ 顺延 |
 | **10-17** | S9 | **【v4 交付】**基于现成基座 SFT/LoRA → 部署 → 推理全链路（验收 3/4/5）+ checkpoint 续训 ≤30min | 顺延 |
@@ -1949,6 +1959,8 @@ $ make prod-deploy TAG=v1.2.3   # 必须有 staging 通过的 commit
 
 ### 8.8 Sprint 中的环境工作（增量）
 
+> **🔄 06-12 实际口径**:S0 dev compose 只搭了 Keycloak+MinIO(够用);staging 形态改为**最小云档**(单 ECS `lite-ai-test` @ cn-hangzhou + OSS 两桶 + RAM 最小权限,IaC 在 `deploy/test/`,闲时停机);ACK/Helm 全栈推 S2a。远程执行经云助手(SSH 被本地代理掐,见 ops 备忘)。
+
 | Sprint | 环境工作 |
 |---|---|
 | 0 | **dev docker-compose 全栈搭起**（MinIO + PG + Keycloak + MLflow + Gravitino + code-server workspace 容器），开发者第一天就能在本地跑 |
@@ -1973,6 +1985,24 @@ $ make prod-deploy TAG=v1.2.3   # 必须有 staging 通过的 commit
 | **E5** | 跨环境配置变量遗漏（如 dev.yaml 加了 key 但 prod.yaml 漏掉） | Pydantic schema 强制校验；CI 跑 config diff |
 
 ---
+
+## 修订记录(2026-06-12)
+
+按宪法 §7.4,路线级变更均有 ADR/设计文档出处;本节是索引,各处修订块为现场注记。
+
+| 变更 | 出处 | 状态 |
+|---|---|---|
+| 团队 3 人 → 一人 + Claude;各 sprint 单线程重排 | S1 设计 spec §0 | 生效 |
+| S0 关闭(出口②③④ PASS;出口① carry-over → S1 门禁) | **ADR-014**(Accepted 06-11)+ `plans/2026-06-10-s0-dod-status.md` | 已关闭 |
+| S0 出口① 门禁关闭:数据 Spike 1/2 **GO(1GB 档)**;100GB+ 规模验证移 S2a | ADR-014 门禁关闭记录(06-12) | 已关闭 |
+| S1 重排:14 工作日(06-12→≈07-01)、1GB 档、服务化纳入、Dev Workspace 降级 | `specs/2026-06-11-s1-data-pipeline-design.md` | 进行中(D1 出口①③ 已验收) |
+| 数据 Spike 工程结论:OSS 拒 path-style / boto3≥1.36 checksum / Lance 需 commit_lock+bucket-in-endpoint / 内网 endpoint 必须 | `spikes/*/RESULTS-aliyun.md`(已固化为库代码+回归测试) | 生效 |
+| Keycloak claims:多组全路径 ✓、变更对新 token ~100ms、stale 窗口=accessTokenLifespan(300s) | ADR-010 附录 C(本地+阿里云双验) | 生效 |
+| Cerbos seam:同 can() 签名零改 handler,v2 切换无架构风险 | ADR-011 附录 | 生效 |
+| S2 分三阶段(a:10TB+HA / b:Embedding+V8 / c:前端+Provisioner);v1 交付日后移 | S1 设计 spec §6;**S2 计划时走 ADR 定稿** | 待 S2 ADR |
+| 前端:低保真原型先行于 S2 spec;部署=OSS 静态托管+CDN | S1 设计 spec §6 | 待 S2 |
+| 用户自定义管线三层开放(配方/BYO-Step 容器/自定义算子) | S1 设计 spec §8 | 层级 1 已落地 |
+| 测试环境形态:最小云档(单 ECS+OSS),ACK 推 S2a | `deploy/test/` + `docs/ops/2026-06-09-…md` | 生效 |
 
 ## 附录 A：术语表
 
