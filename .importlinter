@@ -2,10 +2,12 @@
 root_packages =
     libs
     services
+    pipelines
 
 [importlinter:contract:layers]
 name = layering
 type = layers
 layers =
     services
+    pipelines
     libs
