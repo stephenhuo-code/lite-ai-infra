@@ -53,6 +53,10 @@ STORAGE_OPTIONS = {
 }
 if os.getenv("OSS_SESSION_TOKEN"):   # 实例 RAM 角色的 STS 临时凭据
     STORAGE_OPTIONS["session_token"] = os.environ["OSS_SESSION_TOKEN"]
+if _VIRTUAL:
+    # OSS 不支持 If-None-Match 条件写(2026-06-12 实测 NotImplemented),
+    # 关闭 conditional_put(单写者安全;多写者并发提交保护属 vN+ 课题)
+    STORAGE_OPTIONS["conditional_put"] = os.getenv("OSS_CONDITIONAL_PUT", "disabled")
 
 
 def _ensure_bucket():
