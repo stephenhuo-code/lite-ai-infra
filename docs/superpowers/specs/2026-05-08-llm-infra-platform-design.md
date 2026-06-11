@@ -1409,15 +1409,15 @@ Lineage 边（v1 手工）：
 
 #### Sprint 0（Week 1，06-06 → 06-13）：地基 + Spike + 身份骨架 + API 契约
 
-| 负责 | 任务 |
-|---|---|
-| P1 | ACK 集群（GPU 节点池、网络、ACR）；Volcano + Kueue + KubeRay + Argo Helm 装 |
-| P2 | **Spike 1**：Lance on OSS 读写延迟（100GB）；有 fallback 结论 |
-| P2 | **Spike 2**：Data-Juicer + Ray 在 100GB **多模态图文**子集跑通；有 OOM 边界 |
-| P3 | **Keycloak 26.6.2 部署**（StatefulSet + RDS PG）+ 单 realm + **Organizations** + client 初始配置（IaC 入库） |
-| P3 | Gravitino + MLflow + 各自后端 Postgres 部署（Helm） |
-| P3 | **API 契约骨架（API 优先）**：`contracts/` 仓库 + OpenAPI 模板 + 代码生成流水线 + CI breaking-change 校验 |
-| P1/P3 | **Org Service v0 + API Gateway v0**：token 校验中间件 + 从 `groups` claim 解析 enterprise_id/group_id/role（首企业 e-0001/g-0001 兜底） |
+| 负责 | 任务 | 状态(2026-06-12) |
+|---|---|---|
+| P1 | ACK 集群（GPU 节点池、网络、ACR）；Volcano + Kueue + KubeRay + Argo Helm 装 | ❌ → **S2a**(改最小云档:单 ECS+OSS) |
+| P2 | **Spike 1**：Lance on OSS 读写延迟（100GB）；有 fallback 结论 | ✅ **GO,1GB 档**(内网 98–212MB/s,无需 fallback;100GB→S2a,ADR-014) |
+| P2 | **Spike 2**：Data-Juicer + Ray 在 100GB **多模态图文**子集跑通；有 OOM 边界 | ✅ **GO 机制级,1GB 档**(15,138 条真图文;OOM 边界→S2a) |
+| P3 | **Keycloak 26.6.2 部署**（StatefulSet + RDS PG）+ 单 realm + **Organizations** + client 初始配置（IaC 入库） | ✅(形态:ECS compose+PG 容器,符合 ADR-002 单副本;IaC=`deploy/test/`) |
+| P3 | Gravitino + MLflow + 各自后端 Postgres 部署（Helm） | ❌ Gravitino → **S1 Plan 3**;MLflow → S2+ |
+| P3 | **API 契约骨架（API 优先）**：`contracts/` 仓库 + OpenAPI 模板 + 代码生成流水线 + CI breaking-change 校验 | ✅ 完整(oasdiff + codegen freshness 双门禁) |
+| P1/P3 | **Org Service v0 + API Gateway v0**：token 校验中间件 + 从 `groups` claim 解析 enterprise_id/group_id/role（首企业 e-0001/g-0001 兜底） | ✅ 完整+加固(JWKS 真验签/issuer 校验/seam 默认关) |
 
 > Sprint 0 是 1 周，不做 spec-kit plan/tasks（推到 Sprint 1 第一天）。constitution.md 由全员在 Sprint 1 前完成。
 
@@ -1429,18 +1429,18 @@ Lineage 边（v1 手工）：
 
 #### Sprint 1（Week 2-3，06-14 → 06-27）：v1 数据管线 + 多模态处理 起步
 
-| 负责 | 任务 |
-|---|---|
-| P2 | **Argo data-prep DAG**（load / juicer / write / stats；按 enterprise_id/group_id 隔离 ns） |
-| P2 | **多模态数据处理**：图文对齐 / 切分 / 过滤 / 去重，多模态特征落 Lance |
-| P2 | Lance 读写 helper（OSS 流式 + 本地 cache） |
-| P1 | **微服务脚手架**（统一 FastAPI 模板 / CI / 可观测埋点）+ data-pipeline-service / metadata-service 骨架 |
-| P1 | **OSS 审计追加写地基**（`@audited` → `oss://audit/...`）+ **外部副作用走 outbox/reconcile** 地基 |
-| P3 | **薄 `can()` v1**：认证 + **企业隔离硬检查**（`resource.enterprise_id == ctx.enterprise_id`）+ 基本角色门槛；"隔离 + owner + 角色门槛"子集单测 |
-| P3 | metadata-service：Gravitino 注册（schema `e_0001_g_0001` / `e_0001_shared`）+ MLflow experiment tag |
-| P3 | SDK/CLI v0：由 OpenAPI **生成 client** + `laictl data prepare/list/describe`（OIDC device flow） |
-| P3 | **Dev Workspace 骨架**（code-server Pod + PVC；数据探索用；OIDC ingress Sprint 2 补） |
-| 全员 | constitution.md 定稿；spec-kit `/plan` `/tasks` |
+| 负责 | 任务 | 状态(2026-06-12) |
+|---|---|---|
+| P2 | **Argo data-prep DAG**（load / juicer / write / stats；按 enterprise_id/group_id 隔离 ns） | → **S2a**(S1 用 `runner.py` 进程内编排;`dj_fn` seam 留好换 Argo 的口) |
+| P2 | **多模态数据处理**：图文对齐 / 切分 / 过滤 / 去重，多模态特征落 Lance | ✅ 核心已做(Plan 2 过滤管线);去重/CLIP 对齐=配方扩展,随 S2a 加 |
+| P2 | Lance 读写 helper（OSS 流式 + 本地 cache） | ✅ 写侧(`lance_writer.py`);读侧/cache → **S2b**(消费者是 Embedding/DataLoader) |
+| P1 | **微服务脚手架**（统一 FastAPI 模板 / CI / 可观测埋点）+ data-pipeline-service / metadata-service 骨架 | ⏳ **S1 Plan 4**(待做) |
+| P1 | **OSS 审计追加写地基**（`@audited` → `oss://audit/...`）+ **外部副作用走 outbox/reconcile** 地基 | ✅ 审计地基 S0 提前交付;outbox → S2(有真外部副作用时) |
+| P3 | **薄 `can()` v1**：认证 + **企业隔离硬检查**（`resource.enterprise_id == ctx.enterprise_id`）+ 基本角色门槛；"隔离 + owner + 角色门槛"子集单测 | ✅ **S0 提前交付**(管线已接入) |
+| P3 | metadata-service：Gravitino 注册（schema `e_0001_g_0001` / `e_0001_shared`）+ MLflow experiment tag | ⏳ Gravitino = **S1 Plan 3**(下一个);MLflow tag → S2+ |
+| P3 | SDK/CLI v0：由 OpenAPI **生成 client** + `laictl data prepare/list/describe`（OIDC device flow） | ⏳ **S1 Plan 4**(待做) |
+| P3 | **Dev Workspace 骨架**（code-server Pod + PVC；数据探索用；OIDC ingress Sprint 2 补） | 🔻 降级:docker 版 stretch;Pod 版 → S2 |
+| 全员 | constitution.md 定稿；spec-kit `/plan` `/tasks` | ✅ constitution 已定稿;spec-kit 弃用(owner 06-11 决策,改 superpowers 流程) |
 
 **出口**：100GB → 一行命令 → 清洗（含多模态处理）→ Lance → Gravitino schema 可查；薄 `can()` 守企业隔离；Dev Workspace 可起做数据探索；契约生成的 SDK 可调。
 
