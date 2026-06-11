@@ -52,7 +52,7 @@ Plan 级教训(反馈给 S1 计划):seam 默认开、str 型 ID 两个坑都是 
 | 数据 Spike 2(DJ+Ray)| 本地 harness ✅(8 进 4 出,坏样本全滤,幂等);**阿里云待跑**;两个上云坑已写进 spikes/README |
 | Spike A(Organizations claim)| 本地 ✅ PASS(双组全路径 ✓;变更 98ms 反映 ✓;stale 窗口=300s);结论已回写 ADR-010 附录 C;**阿里云复验待** |
 | Spike B(Cerbos seam)| ✅ PASS(同 can() 签名调 Cerbos,AC-1/2/6/9 与 v1 逐条一致,app.py 零改);结论已回写 ADR-011 附录 |
-| Spike C(真 OSS+STS)| 逻辑已被任务 9 MinIO 集成覆盖;真 OSS 待跑(IaC 已备:deploy/test/terraform) |
+| Spike C(真 OSS+STS)| ✅ PASS(2026-06-11 真 OSS:审计写读 ✓ / processed/ 越权 AccessDenied ✓ / STS 实例角色数据路径 ✓ / 范围外 ListBuckets 拒 ✓)。**两条真发现已修**:OSS 拒 path-style;boto3≥1.36 流式 checksum 不兼容 → `oss_boto3_config` 收敛 |
 
 ## 关闭路径(ADR-014)
 
