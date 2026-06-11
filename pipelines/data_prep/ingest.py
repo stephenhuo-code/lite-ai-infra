@@ -1,23 +1,18 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = []
-# ///
-"""webdataset tar(.tar 内 <key>.jpg + <key>.txt)→ Data-Juicer 多模态 jsonl。
-
-注意:生产版已迁至 pipelines/data_prep/ingest.py(本文件仅留 spike 历史用)。
-
-用法:python wds_to_jsonl.py <tar_dir> <out_dir>
-产物:<out_dir>/images/*.<ext> + <out_dir>/data.jsonl(每行 {"text":…,"images":[abs_path]})
-Spike 2 真跑与后续 pipelines/data_prep 共用此格式(与本地彩排 schema 一致)。
-"""
+# pipelines/data_prep/ingest.py
+"""webdataset tar(<key>.jpg + <key>.txt 配对)→ Data-Juicer 多模态 jsonl。
+源自 spikes/datajuicer_ray/wds_to_jsonl.py(云上 15,138 条实证),生产化为可 import 函数。"""
 from __future__ import annotations
-import json, sys, tarfile
+
+import json
+import tarfile
 from pathlib import Path
 
 _IMG_EXT = ("jpg", "jpeg", "png", "webp")
 
 
-def convert(tar_dir: str, out_dir: str) -> int:
+def wds_to_jsonl(tar_dir: str, out_dir: str) -> int:
+    """解包 tar_dir 下全部 .tar,配对图文写 out_dir/{images/, data.jsonl}。
+    孤图(无配对 .txt)丢弃。返回样本数。"""
     out = Path(out_dir)
     img_dir = out / "images"
     img_dir.mkdir(parents=True, exist_ok=True)
@@ -44,10 +39,3 @@ def convert(tar_dir: str, out_dir: str) -> int:
                     fh.write(json.dumps({"text": texts[key], "images": [str(p.resolve())]}) + "\n")
                     n += 1
     return n
-
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        sys.exit("usage: wds_to_jsonl.py <tar_dir> <out_dir>")
-    n = convert(sys.argv[1], sys.argv[2])
-    print(f"wrote {n} samples → {Path(sys.argv[2]) / 'data.jsonl'}")
