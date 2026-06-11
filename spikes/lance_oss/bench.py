@@ -37,21 +37,27 @@ DIM = int(os.getenv("SPIKE_DIM", "256"))
 TAKE_N = int(os.getenv("SPIKE_TAKE_N", "1000"))
 
 _HTTP = ENDPOINT.startswith("http://")
+# Spike C 实测:真 OSS 拒 path-style → aliyuncs.com 用 virtual-hosted;MinIO 用 path
+_VIRTUAL = "aliyuncs.com" in ENDPOINT
 STORAGE_OPTIONS = {
     "access_key_id": ACCESS,
     "secret_access_key": SECRET,
     "endpoint": ENDPOINT,
     "region": REGION,
     "allow_http": "true" if _HTTP else "false",
-    # MinIO 走 path-style;OSS 两者皆可,这里统一 path-style 最稳
-    "virtual_hosted_style_request": "false",
+    "virtual_hosted_style_request": "true" if _VIRTUAL else "false",
 }
+if os.getenv("OSS_SESSION_TOKEN"):   # 实例 RAM 角色的 STS 临时凭据
+    STORAGE_OPTIONS["session_token"] = os.environ["OSS_SESSION_TOKEN"]
 
 
 def _ensure_bucket():
     s3 = boto3.client("s3", endpoint_url=ENDPOINT, aws_access_key_id=ACCESS,
                       aws_secret_access_key=SECRET, region_name=REGION,
-                      config=Config(s3={"addressing_style": "path"}))
+                      aws_session_token=os.getenv("OSS_SESSION_TOKEN"),
+                      config=Config(s3={"addressing_style": "virtual" if _VIRTUAL else "path"},
+                                    request_checksum_calculation="when_required",
+                                    response_checksum_validation="when_required"))
     try:
         s3.create_bucket(Bucket=BUCKET)
     except Exception:
