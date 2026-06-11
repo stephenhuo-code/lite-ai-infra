@@ -1,6 +1,6 @@
 # tests/conftest.py
 import socket, uuid, boto3, httpx, pytest
-from botocore.config import Config
+from libs.audit.oss_audit import oss_boto3_config
 
 
 def _reachable(host, port):
@@ -18,7 +18,7 @@ def minio_s3():
     return boto3.client("s3", endpoint_url="http://localhost:9000",
                         aws_access_key_id="minio", aws_secret_access_key="minio123",
                         region_name="us-east-1",
-                        config=Config(s3={"addressing_style": "path"}))  # MinIO/OSS 需 path-style
+                        config=oss_boto3_config("http://localhost:9000"))
 
 
 @pytest.fixture

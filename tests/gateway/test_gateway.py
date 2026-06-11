@@ -68,3 +68,10 @@ def test_addressing_style_adapts_to_endpoint():
 def test_addressing_style_explicit_override():
     from libs.audit.oss_audit import addressing_style
     assert addressing_style("https://oss-cn-hangzhou.aliyuncs.com", explicit="path") == "path"
+
+def test_oss_boto3_config_checksum_when_required():
+    # Spike C:boto3>=1.36 默认 checksum 真 OSS 报 NotImplemented → when_required
+    from libs.audit.oss_audit import oss_boto3_config
+    cfg = oss_boto3_config("https://oss-cn-hangzhou.aliyuncs.com")
+    assert cfg.request_checksum_calculation == "when_required"
+    assert cfg.s3["addressing_style"] == "virtual"

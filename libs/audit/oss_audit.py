@@ -33,6 +33,20 @@ def addressing_style(endpoint: str, explicit: str | None = None) -> str:
     return "virtual" if "aliyuncs.com" in endpoint else "path"
 
 
+def oss_boto3_config(endpoint: str, explicit_style: str | None = None):
+    """OSS 兼容存储的 boto3 Config(Spike C 2026-06-11 两条实测):
+    1) 寻址方式按 endpoint 自适应(见 addressing_style);
+    2) checksum 设 when_required —— boto3>=1.36 默认的
+       STREAMING-UNSIGNED-PAYLOAD-TRAILER 真 OSS 报 NotImplemented(新 MinIO 支持,
+       本地集成测不出来)。"""
+    from botocore.config import Config
+    return Config(
+        s3={"addressing_style": addressing_style(endpoint, explicit_style)},
+        request_checksum_calculation="when_required",
+        response_checksum_validation="when_required",
+    )
+
+
 class AuditSink(Protocol):
     def put(self, key: str, body: bytes) -> None: ...
 
