@@ -100,3 +100,15 @@ SDK(生成) ──┘        │
 - [ ] code review 过
 - [ ] CI 远端绿
 - [ ] go/no-go 签字
+
+## 8. 补遗:用户自定义管线的三层开放路线(2026-06-12,owner 问答沉淀)
+
+**原则:用户代码永不进平台进程;平台握住"信封"(can() 授权、审计、隔离路径、Lance 产物格式)。**
+
+| 层级 | 形态 | 时点 | 安全边界 |
+|---|---|---|---|
+| 1. 配方自定义 | API 请求体传 DJ `process` 算子列表(100+ 内置算子,配方是数据非代码) | **Plan 2/4 已支持**(`build_recipe(process=…)` 注入口) | 无代码执行,天然多租户安全 |
+| 2. BYO-Step 容器 | 用户代码打容器镜像,作为平台 DAG 中一步;平台定 IO 契约(挂载 jsonl/图片目录进出);跑在企业隔离 ns,只挂本组 raw/ | **S2a(配 Argo)**;`runner` 的 `dj_fn` seam 从 subprocess 换 Argo 提交即可 | 容器隔离 + ns 隔离 + 路径最小挂载;Lance 写入仍平台执行 |
+| 3. 自定义 DJ 算子 / 全自定义 DAG | 用户上传 Python 算子 / 自编排 DAG | **vN+**(需逐企业 Ray 集群、镜像扫描、配额硬限的沙箱方案) | 待设计;开发环境=Dev Workspace(S2c) |
+
+S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范围;层级 3 仅记 backlog。
