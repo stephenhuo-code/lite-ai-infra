@@ -1156,8 +1156,8 @@ curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $TOKE
 - [x] **Spike A —— Keycloak Organizations token（ADR-010/011，go/no-go）｜本地 compose + 阿里云复验**：26.6.2 开 `--features=organization`，建一个用户属**两个**组，确认 `groups` claim 带出两条全路径；改用户子组成员，测多久后**新签发**的 token 反映变更（token-stale 窗口）。本地 compose 先验，**阿里云测试环境复验一次**。结论写回 ADR-010。
 - [x] **Spike B —— Cerbos can() seam（ADR-011）｜本地**：起 Cerbos 容器，写 1 条 `job` 的 resource policy + derived role，确认**同一** `can(ctx, action, resource)` 签名能调 Cerbos 并复现 AC-1/AC-6，且 **`services/gateway/app.py` 零改**。结论写回 ADR-011。
 - [x] **Spike C —— 真 OSS 审计 + STS（阿里云）**：把审计 sink 换成 **`OssAuditSink` + 指向阿里云 OSS 的 boto3**（S3 兼容 endpoint）/oss2 适配器，验证追加写 + 路径前缀隔离 + STS 受限凭据（数据路径）。本地 MinIO 已覆盖逻辑（任务 9）；此步验真 OSS 兼容性。
-- [ ] **数据 Spike 1（S0 出口 ①·必做→按 ADR-014 移交 S1 门禁;本地 harness 已彩排 `spikes/lance_oss/`）—— Lance on OSS 读写延迟｜阿里云**：100GB 子集在**阿里云 OSS** 上读写 Lance，测延迟（顺序/随机/列裁剪），判断能否满足训练 DataLoader 吞吐；**有 fallback 结论**（如 JindoFS/本地缓存）。验收：有延迟数据 + 通过/降级结论。
-- [ ] **数据 Spike 2（S0 出口 ①·必做→按 ADR-014 移交 S1 门禁;本地 harness 已彩排 `spikes/datajuicer_ray/`）—— Data-Juicer + Ray 多模态｜阿里云**：100GB **图文多模态**子集跑通 Data-Juicer + Ray 清洗，记录 **OOM 边界 + 分片/spill 兜底**结论。验收：跑通 + 资源边界数据。
+- [x] **数据 Spike 1（S0 出口 ①·必做→按 ADR-014 移交 S1 门禁;本地 harness 已彩排 `spikes/lance_oss/`）—— Lance on OSS 读写延迟｜阿里云**：100GB 子集在**阿里云 OSS** 上读写 Lance，测延迟（顺序/随机/列裁剪），判断能否满足训练 DataLoader 吞吐；**有 fallback 结论**（如 JindoFS/本地缓存）。验收：有延迟数据 + 通过/降级结论。
+- [x] **数据 Spike 2（S0 出口 ①·必做→按 ADR-014 移交 S1 门禁;本地 harness 已彩排 `spikes/datajuicer_ray/`）—— Data-Juicer + Ray 多模态｜阿里云**：100GB **图文多模态**子集跑通 Data-Juicer + Ray 清洗，记录 **OOM 边界 + 分片/spill 兜底**结论。验收：跑通 + 资源边界数据。
 
 > 这两个数据 spike 依赖阿里云 ACK + OSS + 数据栈（Ray/Data-Juicer/Lance），属测试环境；ops 前置就绪后执行（见文末"本计划外的前置"）。它们是 **S0 出口硬条件**，不达标触发 §5 滑窗。
 

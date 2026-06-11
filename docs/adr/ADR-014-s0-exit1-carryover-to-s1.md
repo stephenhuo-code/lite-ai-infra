@@ -44,3 +44,14 @@ design §5.4 对 06-13 未达的预设动作是"**顺延 S0,可能砍 v1 范围*
 | spike 在 S1 内继续被云/数据前置拖延 | 第 3 工作日硬时限 + 触发 §5.4 原动作(本 ADR 决策 3) |
 | 降级结论冲击 S1 排期 | S1 滑窗动作已预设"砍数据子集量"(design §5.4 S1 行) |
 | carry-over 先例被滥用 | 仅此一次;后续 sprint 出口移交一律重新走 ADR |
+
+## 门禁关闭记录(2026-06-12)
+
+S1 第 1 个工作日内完成(早于第 3 工作日硬时限):
+
+- **数据 Spike 1(Lance on OSS):GO** —— 真 OSS 内网扫描 98–212MB/s、随机访问 0.28–0.39ms/行,达预设阈值,无需 JindoFS 降级;3 条工程约束(commit_lock 写提交 / 内网 endpoint / virtual-hosted+bucket-in-endpoint)已修进 harness 与 libs。详见 `spikes/lance_oss/RESULTS-aliyun.md`。
+- **数据 Spike 2(DJ+Ray):GO(机制级)** —— 15,138 条真实图文(CC3M 1.39GB)在 Ray 上 np=2/3/4 全通过,无 OOM、spill 兜底在位。详见 `spikes/datajuicer_ray/RESULTS-aliyun.md`。
+- **范围修订(owner 决策 2026-06-11)**:数据规模由 100GB 降为 **1GB 档**;故本门禁判定为**机制与兼容性级 GO**,**100GB+ 规模边界(持续吞吐 / 真实 OOM)正式移交 S2a** 的 10TB 放大阶段,作为其第一项工作。
+- 附带闭环:Spike A 阿里云复验 PASS(ADR-010 附录 C)、Spike C PASS(真 OSS 审计 + STS,两条兼容性发现修复:path-style 禁用 / boto3≥1.36 checksum)。
+
+**出口① 状态:门禁关闭,GO(1GB 档)。** S1 管线实现(Plan 2)解除封锁。

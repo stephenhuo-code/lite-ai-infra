@@ -48,9 +48,9 @@ Plan 级教训(反馈给 S1 计划):seam 默认开、str 型 ID 两个坑都是 
 
 | Spike | 状态 |
 |---|---|
-| 数据 Spike 1(Lance)| 本地 harness ✅(MinIO 基线:写 40.5MB/s、列裁剪 0.004s vs 全扫 0.089s);**阿里云待跑** |
-| 数据 Spike 2(DJ+Ray)| 本地 harness ✅(8 进 4 出,坏样本全滤,幂等);**阿里云待跑**;两个上云坑已写进 spikes/README |
-| Spike A(Organizations claim)| 本地 ✅ PASS(双组全路径 ✓;变更 98ms 反映 ✓;stale 窗口=300s);结论已回写 ADR-010 附录 C;**阿里云复验待** |
+| 数据 Spike 1(Lance)| ✅ **GO**(真 OSS 内网:扫 98–212MB/s、随机 0.3ms/行,达预设阈值;3 条工程约束已修,`spikes/lance_oss/RESULTS-aliyun.md`)|
+| 数据 Spike 2(DJ+Ray)| ✅ **GO**(15,138 条真图文 ×np2/3/4 全过、无 OOM、spill 在位;规模边界移 S2a,`spikes/datajuicer_ray/RESULTS-aliyun.md`)|
+| Spike A(Organizations claim)| ✅ 全闭环:本地 + **阿里云复验 PASS**(110ms 反映,stale=300s,ADR-010 附录 C)|
 | Spike B(Cerbos seam)| ✅ PASS(同 can() 签名调 Cerbos,AC-1/2/6/9 与 v1 逐条一致,app.py 零改);结论已回写 ADR-011 附录 |
 | Spike C(真 OSS+STS)| ✅ PASS(2026-06-11 真 OSS:审计写读 ✓ / processed/ 越权 AccessDenied ✓ / STS 实例角色数据路径 ✓ / 范围外 ListBuckets 拒 ✓)。**两条真发现已修**:OSS 拒 path-style;boto3≥1.36 流式 checksum 不兼容 → `oss_boto3_config` 收敛 |
 
