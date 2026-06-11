@@ -1,6 +1,6 @@
 # ADR-014: S0 出口①(数据 Spike)移交 S1 第一周入口门禁 — S0 以 carry-over 关闭
 
-- 状态：Proposed(团队签认后改 Accepted)
+- 状态：Accepted(2026-06-11 签认)
 - 日期：2026-06-11
 - 决策人：平台团队
 - 相关：design §5.3(Sprint 0 出口)/ §5.4(里程碑表 06-13 行)/ §5.6(滑窗策略);constitution §7.4(改路线走 ADR);`docs/superpowers/plans/2026-06-08-s0-foundation.md`(DoD §F);`docs/superpowers/plans/2026-06-10-s0-dod-status.md`(证据底稿)

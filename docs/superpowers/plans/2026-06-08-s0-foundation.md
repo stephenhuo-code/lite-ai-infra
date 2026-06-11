@@ -1147,7 +1147,7 @@ curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "Authorization: Bearer $TOKE
 - [ ] Spike A/B + 数据 Spike 结论已回写 ADR/文档
 - [x] code review 过（`superpowers:requesting-code-review`）
 - [x] plan 任务 1–10 checkbox 全 `- [x]`、commit 齐
-- [ ] 团队 go/no-go 签字
+- [x] 团队 go/no-go 签字（= 签认 ADR-014,Accepted 2026-06-11;S0 closed with carry-over）
 
 ---
 

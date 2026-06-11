@@ -68,4 +68,4 @@ Plan 级教训(反馈给 S1 计划):seam 默认开、str 型 ID 两个坑都是 
 - [x] Spike A/B 结论已回写 ADR —— A→ADR-010 附录 C(本地;云复验随 S1)、B→ADR-011 附录;数据 Spike 结论随 S1 门禁回写
 - [x] code review 过
 - [x] plan 任务 1–10 checkbox 全 `[x]`、commit 齐
-- [ ] 团队 go/no-go 签字 —— **= 签认 ADR-014**
+- [x] 团队 go/no-go 签字 —— ADR-014 已签认 Accepted(2026-06-11),**S0 正式关闭(carry-over)**
