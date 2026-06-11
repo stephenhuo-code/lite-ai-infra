@@ -39,10 +39,14 @@ TAKE_N = int(os.getenv("SPIKE_TAKE_N", "1000"))
 _HTTP = ENDPOINT.startswith("http://")
 # Spike C 实测:真 OSS 拒 path-style → aliyuncs.com 用 virtual-hosted;MinIO 用 path
 _VIRTUAL = "aliyuncs.com" in ENDPOINT
+# rust object_store 怪癖:virtual-hosted 模式下 endpoint 必须自带 bucket 域名,
+# 否则 list 等请求打到根域被 OSS 当成 ListBuckets → 403(2026-06-12 实测)
+_scheme, _host = ENDPOINT.split("://", 1)
+_LANCE_ENDPOINT = f"{_scheme}://{BUCKET}.{_host}" if _VIRTUAL else ENDPOINT
 STORAGE_OPTIONS = {
     "access_key_id": ACCESS,
     "secret_access_key": SECRET,
-    "endpoint": ENDPOINT,
+    "endpoint": _LANCE_ENDPOINT,
     "region": REGION,
     "allow_http": "true" if _HTTP else "false",
     "virtual_hosted_style_request": "true" if _VIRTUAL else "false",
