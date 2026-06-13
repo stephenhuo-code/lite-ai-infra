@@ -266,6 +266,7 @@
 | 服务 | 职责 | 语言/栈 |
 |---|---|---|
 | **api-gateway / BFF** | 前端/SDK/CLI 入口、路由、token 校验、聚合 | Python FastAPI（或 Envoy + 薄 BFF） |
+<!-- 06-13:反代分两层。内层 gateway(BFF)用**应用内 httpx 反代**(`services/_scaffold/proxy.py`)——因转发前后要做 JWKS 验签/审计/Context 注入,属 Python 应用逻辑,不用 nginx。外层 L7 LB(TLS 终止/负载均衡/静态限流)用阿里云 ALB/SLB,摆在 gateway 前面,S2a 引入。两层职责不同、不冲突:`客户端 → ALB → gateway(BFF 应用内反代) → 下游服务`。 -->
 | **identity-org-service** | Keycloak-facing：Organization/Group/成员；解析 groups claim | Python FastAPI |
 | **authz (Cerbos)** | PDP，策略 in git（ADR-011） | Cerbos（Go，sidecar/服务） |
 | **data-pipeline-service** | 数据管线 + 多模态处理（Ray Data / Data-Juicer / Argo 编排） | Python |
