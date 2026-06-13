@@ -1,0 +1,68 @@
+openapi: 3.1.0
+info: {title: metadata, version: 0.1.0}
+paths:
+  /v1/catalogs:
+    get:
+      summary: 列出本企业(token 推导)的 catalog
+      responses:
+        '200': {description: catalogs, content: {application/json: {schema: {$ref: '#/components/schemas/NameList'}}}}
+        '401': {description: unauthenticated}
+  /v1/catalogs/{catalog}/schemas:
+    get:
+      parameters: [{name: catalog, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: schemas, content: {application/json: {schema: {$ref: '#/components/schemas/NameList'}}}}
+  /v1/catalogs/{catalog}/schemas/{schema}/datasets:
+    parameters:
+      - {name: catalog, in: path, required: true, schema: {type: string}}
+      - {name: schema, in: path, required: true, schema: {type: string}}
+    get:
+      summary: 列出数据集(can() 按 group 过滤)
+      responses:
+        '200': {description: datasets, content: {application/json: {schema: {$ref: '#/components/schemas/DatasetList'}}}}
+    post:
+      summary: 注册数据集
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RegisterDataset'}}}}
+      responses:
+        '201': {description: created, content: {application/json: {schema: {$ref: '#/components/schemas/Dataset'}}}}
+        '403': {description: forbidden}
+  /v1/catalogs/{catalog}/schemas/{schema}/datasets/{name}:
+    get:
+      parameters:
+        - {name: catalog, in: path, required: true, schema: {type: string}}
+        - {name: schema, in: path, required: true, schema: {type: string}}
+        - {name: name, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: dataset, content: {application/json: {schema: {$ref: '#/components/schemas/Dataset'}}}}
+        '403': {description: forbidden}
+        '404': {description: not found}
+components:
+  schemas:
+    NameList:
+      type: object
+      properties: {names: {type: array, items: {type: string}}}
+    Dataset:
+      type: object
+      required: [name, enterprise_id, group_id, scope, location]
+      properties:
+        name: {type: string}
+        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
+        owner: {type: [string, 'null']}
+        scope: {type: string, enum: [private, shared]}
+        location: {type: string}
+        comment: {type: [string, 'null']}
+        created_at: {type: [string, 'null']}
+        created_by: {type: [string, 'null']}
+    DatasetList:
+      type: object
+      properties: {datasets: {type: array, items: {$ref: '#/components/schemas/Dataset'}}}
+    RegisterDataset:
+      type: object
+      required: [name, group_id, location]
+      properties:
+        name: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
+        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
+        location: {type: string}
+        scope: {type: string, enum: [private, shared], default: private}
+        comment: {type: [string, 'null']}

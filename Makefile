@@ -1,6 +1,6 @@
 .PHONY: test test-integration lint contract-check dev-up dev-down sync gen up down ps api-docs api-docs-down
 sync:             ; uv sync --extra dev
-gen:              ; uv run datamodel-codegen --disable-timestamp --input contracts/openapi/identity-org.yaml --input-file-type openapi --output libs/contracts_gen/identity_org_models.py
+gen:              ; uv run datamodel-codegen --disable-timestamp --input contracts/openapi/identity-org.yaml --input-file-type openapi --output libs/contracts_gen/identity_org_models.py && uv run datamodel-codegen --disable-timestamp --input contracts/openapi/metadata.yaml --input-file-type openapi --output libs/contracts_gen/metadata_models.py
 test:             ; uv run pytest -q
 test-integration: ; uv run pytest -q -m integration
 lint:             ; uv run lint-imports && bash scripts/ci_guards.sh
