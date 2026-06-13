@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from libs.authz.engine import can
 from libs.authz.types import Resource
+from libs.contracts_gen.metadata_models import RegisterDataset
 from libs.identity.context import Context
 from libs.identity.ids import EnterpriseId, GroupId
 from services._scaffold.app import make_service_app
@@ -16,9 +17,21 @@ def _metalake(ent: str) -> str:
 
 
 def _enterprise(ctx: Context) -> str:
-    if not ctx.memberships:
+    """v1 单企业:从 token 推导调用者企业。属多个企业时显式拒绝(不静默挑第一个,宪法 §3.7)。"""
+    ents = []
+    for m in ctx.memberships:
+        if m.enterprise_id not in ents:
+            ents.append(m.enterprise_id)
+    if not ents:
         raise HTTPException(status_code=403, detail="no enterprise membership")
-    return ctx.memberships[0].enterprise_id  # v1 单企业
+    if len(ents) > 1:
+        raise HTTPException(status_code=400, detail="ambiguous enterprise membership; v1 single-enterprise only")
+    return ents[0]
+
+
+def _scope_value(scope) -> str:
+    # RegisterDataset.scope 可能是 Scope 枚举(显式传)或默认字符串 'private'(未传)
+    return getattr(scope, "value", scope) or "private"
 
 
 def _resource(ent: str, fs: dict) -> Resource:
@@ -72,18 +85,20 @@ def build_app(gravitino):
         return _dataset(ent, fs)
 
     @app.post("/v1/catalogs/{catalog}/schemas/{schema}/datasets", status_code=201)
-    def register(catalog: str, schema: str, body: dict, ctx: Context = Depends(context_from_request)):
+    def register(catalog: str, schema: str, body: RegisterDataset,
+                 ctx: Context = Depends(context_from_request)):
         ent = _enterprise(ctx)
         ml = _metalake(ent)
+        scope = _scope_value(body.scope)
         res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent),
-                       group_id=GroupId(body["group_id"]), scope=body.get("scope", "private"), owner=ctx.user)
+                       group_id=GroupId(body.group_id), scope=scope, owner=ctx.user)
         d = can(ctx, "dataset.register", res)
         if not d.allow:
             return JSONResponse(status_code=403, content={"reason": d.reason})
-        fs = gravitino.create_fileset(ml, catalog, schema, body["name"], body["location"],
-                                      comment=body.get("comment", ""),
-                                      properties={"owner_group": body["group_id"], "owner_user": ctx.user,
-                                                  "scope": body.get("scope", "private")})
+        fs = gravitino.create_fileset(ml, catalog, schema, body.name, body.location,
+                                      comment=body.comment or "",
+                                      properties={"owner_group": body.group_id, "owner_user": ctx.user,
+                                                  "scope": scope})
         return _dataset(ent, fs)
 
     return app

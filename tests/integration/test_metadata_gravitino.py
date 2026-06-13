@@ -1,8 +1,11 @@
 # tests/integration/test_metadata_gravitino.py
+import json
 import uuid
 
 import pytest
+from fastapi.testclient import TestClient
 
+from services.metadata_service.app import build_app
 from services.metadata_service.gravitino import GravitinoClient
 
 pytestmark = pytest.mark.integration
@@ -45,3 +48,24 @@ def test_real_gravitino_crud(gravitino_url, minio_s3):
     assert fs["properties"]["owner_group"] == "g-0001"
     assert fs["storageLocation"] == loc
     assert fs["audit"]["createTime"]  # audit 字段确实回传
+
+
+def test_real_gravitino_cross_group_isolation(gravitino_url, minio_s3, monkeypatch):
+    """PEP 的核心:对真 Gravitino,g-0001 成员既看不到也读不到 g-0002 的 dataset。"""
+    monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
+    g = GravitinoClient(base_url=gravitino_url)
+    _ensure_tree(g, minio_s3)
+
+    # 直接在 Gravitino 落一个 g-0002 私有 fileset
+    n = f"sec_{uuid.uuid4().hex[:6]}"
+    g.create_fileset("e_0001", "data", "datasets", n,
+                     location=f"s3a://{_CATALOG_BUCKET}/e-0001/g-0002/processed/{n}.lance",
+                     properties={"owner_group": "g-0002", "owner_user": "u-bob", "scope": "private"})
+
+    client = TestClient(build_app(gravitino=g))
+    base = "/v1/catalogs/data/schemas/datasets/datasets"
+    alice = {"x-test-claims": json.dumps({"sub": "u-alice", "groups": ["/e-0001/g-0001/members"]})}
+
+    listed = [d["name"] for d in client.get(base, headers=alice).json()["datasets"]]
+    assert n not in listed  # can() 过滤掉跨组
+    assert client.get(f"{base}/{n}", headers=alice).status_code == 403  # 直查跨组拒绝

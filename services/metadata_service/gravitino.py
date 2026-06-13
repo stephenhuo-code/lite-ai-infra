@@ -6,10 +6,14 @@ import httpx
 class GravitinoError(RuntimeError):
     """Gravitino REST 非 2xx 响应(携带 status + body)。"""
 
+    def __init__(self, message: str, status: int | None = None):
+        super().__init__(message)
+        self.status = status
+
 
 def _is_conflict(e: GravitinoError) -> bool:
-    s = str(e)
-    return "409" in s or "exist" in s.lower()
+    # 按 HTTP 状态码判定(409),不靠字符串匹配——避免把 404"does not exist"误判为冲突。
+    return e.status == 409
 
 
 class GravitinoClient:
@@ -27,16 +31,19 @@ class GravitinoClient:
     def __init__(self, base_url: str, transport: httpx.BaseTransport | None = None):
         self._c = httpx.Client(base_url=base_url, timeout=15, transport=transport)
 
+    def close(self):
+        self._c.close()
+
     def _get(self, p):
         r = self._c.get(p)
         if r.status_code >= 300:
-            raise GravitinoError(f"{r.status_code} {r.text}")
+            raise GravitinoError(f"{r.status_code} {r.text}", status=r.status_code)
         return r.json()
 
     def _post(self, p, body):
         r = self._c.post(p, json=body)
         if r.status_code >= 300:
-            raise GravitinoError(f"{r.status_code} {r.text}")
+            raise GravitinoError(f"{r.status_code} {r.text}", status=r.status_code)
         return r.json()
 
     @staticmethod

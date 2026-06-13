@@ -30,10 +30,13 @@ def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
 
     # 反代前缀处的集合端点(如 metadata 的 /v1/catalogs):无子路径,需单独匹配,
     # 否则只注册 prefix+"/{path:path}" 会让裸前缀 307/404(子路径仍走下面那条)。
-    @app.api_route(prefix, methods=_METHODS)
+    # include_in_schema=False:gateway 是纯反代壳,通配路由不进自身 openapi
+    # (真契约由各服务 contracts/openapi 经聚合 Swagger 暴露);同时消除多方法
+    # 通配路由的 Duplicate Operation ID 告警。
+    @app.api_route(prefix, methods=_METHODS, include_in_schema=False)
     async def _forward_root(request: Request):
         return await _do_forward(request)
 
-    @app.api_route(prefix + "/{path:path}", methods=_METHODS)
+    @app.api_route(prefix + "/{path:path}", methods=_METHODS, include_in_schema=False)
     async def _forward(path: str, request: Request):
         return await _do_forward(request)

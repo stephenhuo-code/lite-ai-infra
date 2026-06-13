@@ -101,6 +101,25 @@ def test_register_other_group_403():
                                                      "location": "s3a://b/x.lance"}).status_code == 403
 
 
+def test_register_missing_field_422():
+    # 契约模型校验:缺 group_id/location → 422(不是 500)
+    r = _client().post(_DS, headers=_ALICE, json={"name": "x"})
+    assert r.status_code == 422
+
+
+def test_register_invalid_name_422():
+    # name 违反契约 pattern → 422
+    r = _client().post(_DS, headers=_ALICE,
+                       json={"name": "Bad Name!", "group_id": "g-0001", "location": "s3a://b/x.lance"})
+    assert r.status_code == 422
+
+
+def test_ambiguous_enterprise_400():
+    # v1 单企业:同时属多个企业 → 拒绝(不静默挑第一个,宪法 §3.7)
+    h = _h("u-multi", ["/e-0001/g-0001/members", "/e-0002/g-0002/members"])
+    assert _client().get("/v1/catalogs", headers=h).status_code == 400
+
+
 def test_unauth_401(monkeypatch):
     monkeypatch.delenv("LITEAI_ALLOW_TEST_CLAIMS", raising=False)
     assert _client().get("/v1/catalogs").status_code == 401

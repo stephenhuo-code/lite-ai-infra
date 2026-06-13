@@ -60,10 +60,28 @@ def test_error_raises_gravitino_error():
         _c(h).get_fileset("e_0001", "data", "datasets", "nope")
 
 
+def test_gravitino_error_carries_status():
+    def h(req):
+        return httpx.Response(404, json={"message": "Fileset does not exist"})
+    try:
+        _c(h).get_fileset("e_0001", "data", "datasets", "nope")
+        assert False, "should raise"
+    except GravitinoError as e:
+        assert e.status == 404
+
+
 def test_ensure_metalake_tolerates_conflict():
     def h(req):
         return httpx.Response(409, json={"code": 1004, "type": "MetalakeAlreadyExistsException", "message": "exists"})
     _c(h).ensure_metalake("e_0001")  # 不抛
+
+
+def test_ensure_metalake_reraises_non_conflict():
+    # 非 409(如 404"does not exist")不得被当作冲突吞掉(状态码判定,非字符串)
+    def h(req):
+        return httpx.Response(404, json={"message": "parent does not exist"})
+    with pytest.raises(GravitinoError):
+        _c(h).ensure_metalake("e_0001")
 
 
 def test_ensure_catalog_sends_fileset_and_path_style():
