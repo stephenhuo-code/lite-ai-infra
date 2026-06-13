@@ -1,45 +1,63 @@
 #!/usr/bin/env bash
-# 本地多进程服务的一键起停(后台 + PID 跟踪)。
-# 真微服务:每服务独立 uvicorn 进程;deps(Keycloak/MinIO)由 docker compose 管,见 Makefile up/down。
-# 日常开发改单个服务时用 `make run-<svc>`(前台 + --reload);本脚本用于"全起/全停"。
-set -euo pipefail
+# 本地多进程服务的一键起停。真微服务:每服务独立 uvicorn 进程;
+# deps(Keycloak/MinIO)由 docker compose 管(见 Makefile up/down)。
+# 日常改单个服务用 `make run-<svc>`(前台 + --reload);本脚本用于"全起/全停"。
+#
+# 服务登记表:name|port|uvicorn-target  (新增服务在此加一行,make up/down/ps 自动覆盖)
+SERVICES=(
+  "identity|8001|services.identity_org_service.main:app"
+  "gateway|8090|services.gateway.main:app"
+  # Plan 4/5:"metadata|8002|services.metadata_service.main:app" / "data-pipeline|8003|..."
+)
+set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PIDDIR="$ROOT/.dev"
-mkdir -p "$PIDDIR"
+PIDDIR="$ROOT/.dev"; mkdir -p "$PIDDIR"
 JWKS="${JWKS:-http://localhost:8080/realms/lite-ai/protocol/openid-connect/certs}"
 
-start_one() {
-  local name="$1" port="$2"; shift 2
-  if [ -f "$PIDDIR/$name.pid" ] && kill -0 "$(cat "$PIDDIR/$name.pid")" 2>/dev/null; then
-    echo "  $name 已在跑 (pid $(cat "$PIDDIR/$name.pid"))"; return
-  fi
-  ( cd "$ROOT" && "$@" ) >"$PIDDIR/$name.log" 2>&1 &
-  echo $! > "$PIDDIR/$name.pid"
-  echo "  $name → :$port  (pid $!, 日志 .dev/$name.log)"
+_env_for() {  # 各服务启动 env
+  case "$1" in
+    identity) echo "LITEAI_JWKS_URL=$JWKS" ;;
+    gateway)  echo "IDENTITY_ORG_URL=http://localhost:8001" ;;
+    *)        echo "" ;;
+  esac
+}
+
+_kill_target() {  # 按 uvicorn target 精确杀(连 uv run 子进程一起);再按端口兜底
+  local target="$1" port="$2"
+  pkill -f "uvicorn $target" 2>/dev/null
+  lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | xargs -r kill 2>/dev/null
 }
 
 case "${1:-}" in
   up)
-    start_one identity 8001 env LITEAI_JWKS_URL="$JWKS" \
-      uv run uvicorn services.identity_org_service.main:app --port 8001
-    start_one gateway 8090 env IDENTITY_ORG_URL=http://localhost:8001 \
-      uv run uvicorn services.gateway.main:app --port 8090
-    # Plan 4/5 追加:metadata 8002 / data-pipeline 8003
+    for row in "${SERVICES[@]}"; do
+      IFS='|' read -r name port target <<<"$row"
+      if lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+        echo "  $name 已在 :$port(跳过)"; continue
+      fi
+      ( cd "$ROOT" && env $(_env_for "$name") uv run uvicorn "$target" --port "$port" ) \
+        >"$PIDDIR/$name.log" 2>&1 &
+      echo $! > "$PIDDIR/$name.pid"
+      echo "  $name → :$port  (日志 .dev/$name.log)"
+    done
     echo "  入口:gateway http://localhost:8090  (/docs, /v1/me/orgs)"
     ;;
   down)
-    shopt -s nullglob
-    for f in "$PIDDIR"/*.pid; do
-      pid=$(cat "$f"); name=$(basename "$f" .pid)
-      kill "$pid" 2>/dev/null && echo "  停 $name (pid $pid)" || echo "  $name 已停"
-      rm -f "$f"
+    for row in "${SERVICES[@]}"; do
+      IFS='|' read -r name port target <<<"$row"
+      _kill_target "$target" "$port"
+      rm -f "$PIDDIR/$name.pid"
+      echo "  停 $name(:$port)"
     done
     ;;
   ps)
-    shopt -s nullglob
-    for f in "$PIDDIR"/*.pid; do
-      pid=$(cat "$f"); name=$(basename "$f" .pid)
-      kill -0 "$pid" 2>/dev/null && echo "  $name: 运行中 (pid $pid)" || echo "  $name: 已死(残留 pid 文件)"
+    for row in "${SERVICES[@]}"; do
+      IFS='|' read -r name port target <<<"$row"
+      if lsof -nP -iTCP:"$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+        echo "  $name: 运行中(:$port)"
+      else
+        echo "  $name: 未运行"
+      fi
     done
     ;;
   *) echo "usage: dev_services.sh up|down|ps"; exit 1;;
