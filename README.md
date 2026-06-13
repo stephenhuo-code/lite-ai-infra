@@ -89,6 +89,42 @@ uv run python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signatur
 
 ---
 
+## 4.5 微服务本地运行(S1 Plan 3 起,真·多进程)
+
+架构 = 真微服务:每服务独立 uvicorn 进程,gateway 应用内 httpx 反代(非 nginx)。
+
+| 服务 | 端口 | 启动 |
+|---|---|---|
+| dev Keycloak / MinIO | 8080 / 9000 | `make dev-up` |
+| **api-gateway**(反代壳) | **8090** | `make run-gateway` |
+| identity-org-service | 8001 | `make run-identity` |
+| metadata-service | 8002 | (Plan 4) |
+| data-pipeline-service | 8003 | (Plan 5) |
+
+```bash
+make dev-up                 # 终端 A:Keycloak + MinIO
+make run-identity           # 终端 B:identity-org @ 8001
+make run-gateway            # 终端 C:gateway @ 8090 → 反代到 8001
+```
+
+**看 API(两种视图)**:
+- 契约(设计时,不必起服务):`make api-docs` → http://localhost:8088
+- 运行时(每服务自带):`http://localhost:8001/docs`、gateway `http://localhost:8090/docs`
+
+**端到端验证**(经 gateway 反代拿到真 token 解析):
+```bash
+TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret -d username=alice \
+  -d password=alice -d grant_type=password \
+  http://localhost:8080/realms/lite-ai/protocol/openid-connect/token \
+  | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/me/orgs
+# 期望:gateway(8090) 反代到 identity-org(8001) → 返回 alice 的 memberships
+```
+
+> 契约一致性由漂移守卫 CI 保证(运行时路由 ⊆ 契约);新增服务套脚手架 `services/_scaffold` 即自带 /docs + 守卫。
+
+---
+
 ## 5. 网关服务 / 集成测试（任务 9，已落地）
 
 S0 交付**库 + 网关 + 契约 + 真依赖集成层**。单元层用 `x-test-claims` seam 和内存审计 double（无需真依赖）；集成层打真 Keycloak/MinIO：
