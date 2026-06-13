@@ -32,6 +32,13 @@ def minio_bucket(minio_s3):
 
 
 @pytest.fixture(scope="session")
+def gravitino_url():
+    if not _reachable("localhost", 8091):
+        pytest.skip("Gravitino 未启动（先 `make up` 或 `docker compose -f deploy/dev/gravitino.yml up -d`）")
+    return "http://localhost:8091"
+
+
+@pytest.fixture(scope="session")
 def kc_token():
     if not _reachable("localhost", 8080):
         pytest.skip("Keycloak 未启动（先 `make dev-up`）")
