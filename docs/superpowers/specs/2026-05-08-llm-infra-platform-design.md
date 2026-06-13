@@ -300,27 +300,39 @@
 
 #### 3.0.4 仓库组织（monorepo，按服务分包）
 
+> **命名口径(2026-06-13 修正)**:Python 包名不能含连字符,故服务目录用**下划线 + `_service` 后缀**(如 `services/identity_org_service/`);对外契约名/URL 仍可用连字符(如 `contracts/openapi/identity-org.yaml`)。`✅/⏳` 标实际状态,`(Plan N / vX)` 标建于哪一步。
+
 ```
 lite-ai-infra/
-├── contracts/              # API 优先：OpenAPI / protobuf 契约（真相源，先于实现）
-├── services/
-│   ├── gateway/            # BFF / API Gateway
-│   ├── identity-org/
-│   ├── data-pipeline/      # v1
-│   ├── metadata/           # v1
-│   ├── llm-gateway/        # ⑮ v2：统一 LLM 接入（LiteLLM 待选型）
-│   ├── agent-platform/     # ⑯ v2：Agent 框架/运行时 + 统一对话后端
-│   ├── agentic-search/     # ⑰ v3：多源多模态统一检索 agent
-│   ├── training/           # v4 微调 / v5 1B
-│   ├── inference/          # v4
-│   ├── workspace/          # Go operator
-│   └── provisioner/        # Go controller
-├── authz/                  # Cerbos 策略（YAML, in git）
-├── frontend/               # Next.js 完整前端
-├── sdk/  cli/              # 由 contracts 生成 + 薄封装
-├── deploy/                 # Helm / ArgoCD / Crossplane
-└── docs/
+├── contracts/                      # ✅ API 优先：OpenAPI 契约（真相源，先于实现）
+│   └── openapi/identity-org.yaml   # ✅ identity-org 契约
+├── services/                       # 各服务：契约 → 生成模型 → FastAPI app(/docs) → 实现
+│   ├── gateway/                    # ✅ BFF / API Gateway（token 校验 + 路由 + 聚合）
+│   ├── identity_org_service/       # ⏳ Plan 4（/v1/me/orgs 从 gateway 迁出，独立）
+│   ├── data_pipeline_service/      # ⏳ Plan 6（包 pipelines/data_prep）
+│   ├── metadata_service/           # ⏳ Plan 5（Gravitino 后端）
+│   ├── llm_gateway_service/        # ⏳ v2：统一 LLM 接入（LiteLLM 待选型）
+│   ├── agent_platform_service/     # ⏳ v2：Agent 框架/运行时 + 统一对话后端
+│   ├── agentic_search_service/     # ⏳ v3：多源多模态统一检索 agent
+│   ├── training_service/           # ⏳ v4 微调 / v5 1B
+│   ├── inference_service/          # ⏳ v4
+│   ├── workspace/                  # ⏳ S2c：Go operator（非 Python，无 _service 后缀）
+│   └── provisioner/                # ⏳ S2c：Go controller（同上）
+├── pipelines/                      # ✅ 实现层：批处理逻辑（服务背后；非常驻服务）
+│   └── data_prep/                  # ✅ tar→DJ/Ray→Lance（data_pipeline_service 的内部实现）
+├── libs/                           # ✅ 共享层：identity / authz / audit / contracts_gen
+├── authz/                          # ⏳ v2：Cerbos 策略（YAML, in git；现暂存 spikes/cerbos_seam/）
+├── frontend/                       # ⏳ S2c：Next.js 完整前端
+├── sdk/  cli/                      # ⏳ Plan 7：由 contracts 生成 + 薄封装（laictl）
+├── deploy/                         # ✅ dev compose + test IaC（Helm/ArgoCD → S2a）
+│   ├── dev/                        # ✅ docker-compose（Keycloak + MinIO）
+│   └── test/                       # ✅ 阿里云测试环境 IaC（ECS compose + terraform）
+├── spikes/                         # ✅ spike harness（lance_oss / datajuicer_ray / cerbos_seam / keycloak_org）
+├── scripts/  tests/                # ✅ CI 护栏脚本 / 两层测试
+└── docs/                           # ✅ specs / adr / plans / ops / user-stories
 ```
+
+> **分层纪律(import-linter 强制)**:`services → pipelines → libs` 单向;`libs`/`pipelines` 不得反向 import `services`。`pipelines`/`libs` 是 §3.0.1 服务表之外的**实现层**——服务是部署/契约单位,实现层是它们的共享内部代码(2026-06-13 补;原 spec 只画到服务颗粒度)。
 
 **关键**：各服务**独立可部署**；服务间只通过 `contracts/`（生成的 client）调用，**不共享 DB session**。数据一致性见 **ADR-013**：**v1 外部副作用走 reconcile**（声明式，无需 PG 事务）；PG 回归后单服务内 outbox + 跨服务 saga（**非分布式同事务**）。禁止把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步链路阻塞主流程。
 
@@ -2055,3 +2067,4 @@ $ make prod-deploy TAG=v1.2.3   # 必须有 staging 通过的 commit
 | v1 交付日草案 ≈08-12(S2a/b/c 各约 2 周) | §5.4 草案列;**S2 ADR 定稿** | 草案 |
 | API 优先纠偏:S1 剩余按「服务 + 契约优先」重拆为 Plan 3–7(脚手架 / identity-org / metadata / data-pipeline / SDK);Plan 2 库+CLI 先行序为偏差,代码作服务内部实现复用(非返工) | S1 设计 spec §9(owner 06-13) | 生效 |
 | identity-org-service 严格独立拆分(不折叠 gateway);手写 CLI 降级 ops 后门,产品 CLI 契约生成 | S1 设计 spec §9.1 | 生效 |
+| §3.0.4 目录树补全:加 `libs/`/`pipelines/` 实现层 + `spikes/`;服务目录命名改下划线 `_service`(Python 包约束);各目录标 ✅/⏳ 与建于哪个 Plan | §3.0.4(06-13) | 生效 |
