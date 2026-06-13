@@ -10,12 +10,13 @@ dev-down:         ; docker compose -f deploy/dev/docker-compose.yml down -v
 data-prep:        ; uv run python -m pipelines.data_prep $(ARGS)
 JWKS ?= http://localhost:8080/realms/lite-ai/protocol/openid-connect/certs
 # 一键起停全部(deps 容器 + 全部服务进程)
-up:               ; docker compose -f deploy/dev/docker-compose.yml up -d && JWKS=$(JWKS) bash scripts/dev_services.sh up
-down:             ; bash scripts/dev_services.sh down; docker compose -f deploy/dev/docker-compose.yml down
+up:               ; docker compose -f deploy/dev/docker-compose.yml up -d && docker compose -f deploy/dev/gravitino.yml up -d && JWKS=$(JWKS) bash scripts/dev_services.sh up
+down:             ; bash scripts/dev_services.sh down; docker compose -f deploy/dev/gravitino.yml down; docker compose -f deploy/dev/docker-compose.yml down
 ps:               ; bash scripts/dev_services.sh ps
 # 聚合 Swagger:自动发现 contracts/openapi/*.yaml(一个页面下拉看全部 API)
 api-docs:         ; URLS=$$(uv run python scripts/swagger_urls.py) docker compose -f deploy/dev/swagger-ui.yml up -d && echo "Swagger UI(全部契约): http://localhost:8088"
 api-docs-down:    ; docker compose -f deploy/dev/swagger-ui.yml down
 # 单服务前台(开发热重载用)
 run-identity:     ; LITEAI_JWKS_URL=$(JWKS) uv run uvicorn services.identity_org_service.main:app --port 8001 --reload
-run-gateway:      ; IDENTITY_ORG_URL=http://localhost:8001 uv run uvicorn services.gateway.main:app --port 8090 --reload
+run-metadata:     ; LITEAI_JWKS_URL=$(JWKS) GRAVITINO_URL=http://localhost:8091 uv run uvicorn services.metadata_service.main:app --port 8002 --reload
+run-gateway:      ; IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 uv run uvicorn services.gateway.main:app --port 8090 --reload

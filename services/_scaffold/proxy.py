@@ -16,8 +16,9 @@ def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
             return client_factory()
         return httpx.AsyncClient(base_url=base_url, timeout=30)
 
-    @app.api_route(prefix + "/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-    async def _forward(path: str, request: Request):
+    _METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"]
+
+    async def _do_forward(request: Request) -> Response:
         fwd_headers = {h: request.headers[h] for h in _FWD_HEADERS if h in request.headers}
         body = await request.body()
         async with _factory() as client:
@@ -26,3 +27,13 @@ def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
                                       headers=fwd_headers, content=body)
         return Response(content=up.content, status_code=up.status_code,
                         media_type=up.headers.get("content-type"))
+
+    # 反代前缀处的集合端点(如 metadata 的 /v1/catalogs):无子路径,需单独匹配,
+    # 否则只注册 prefix+"/{path:path}" 会让裸前缀 307/404(子路径仍走下面那条)。
+    @app.api_route(prefix, methods=_METHODS)
+    async def _forward_root(request: Request):
+        return await _do_forward(request)
+
+    @app.api_route(prefix + "/{path:path}", methods=_METHODS)
+    async def _forward(path: str, request: Request):
+        return await _do_forward(request)
