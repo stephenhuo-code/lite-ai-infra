@@ -4,7 +4,7 @@
 
 **Goal:** 交付 metadata-service —— 契约先行的 FastAPI 服务,经 httpx 调 Gravitino REST 注册/查询数据集(fileset),按 ADR-016 映射(enterprise=metalake、catalog=数据源、schema=数据域、group/owner/scope=fileset 属性),读写经 `can()`,套脚手架自带 /docs,达成 S1 出口②"Gravitino schema 可查"。
 
-**Architecture:** 契约 `contracts/openapi/metadata.yaml` → datamodel-codegen 模型 → metadata-service(`services/metadata_service/`,端口 8002,套 `services/_scaffold`)→ service-internal Gravitino httpx 客户端(`services/metadata_service/gravitino.py`)。授权 = `can()`(读 fileset 的 `owner_group/scope` 属性判 group 隔离;ADR-011/016)。dev:Gravitino docker + fileset catalog 指向 **MinIO**(复用 dev compose);真 OSS 留 test/cloud。gateway 反代 `/v1/datasets`、`/v1/schemas` → metadata。
+**Architecture:** 契约 `contracts/openapi/metadata.yaml` → datamodel-codegen 模型 → metadata-service(`services/metadata_service/`,端口 8002,套 `services/_scaffold`)→ service-internal Gravitino httpx 客户端(`services/metadata_service/gravitino.py`)。授权 = `can()`(读 fileset 的 `owner_group/scope` 属性判 group 隔离;ADR-011/016)。dev:Gravitino docker + fileset catalog 指向 **MinIO**(复用 dev compose);真 OSS 留 test/cloud。gateway 反代 `/v1/datasets` → metadata。
 
 **Tech Stack:** FastAPI、httpx、datamodel-codegen、Gravitino docker(版本 Task 1 钉)、pytest 两层、脚手架(/docs + 漂移守卫 + 共享鉴权)。
 
