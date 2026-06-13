@@ -112,3 +112,39 @@ SDK(生成) ──┘        │
 | 3. 自定义 DJ 算子 / 全自定义 DAG | 用户上传 Python 算子 / 自编排 DAG | **vN+**(需逐企业 Ray 集群、镜像扫描、配额硬限的沙箱方案) | 待设计;开发环境=Dev Workspace(S2c) |
 
 S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范围;层级 3 仅记 backlog。
+
+## 9. 服务化拆解修订(2026-06-13,owner 决策)
+
+**起因**:Plan 2 采用了"库 + 手写 CLI 先行,契约/服务后补"的序——与 API 优先(§3.0.2 契约先行)相悖。`pipelines/data_prep` 作为**服务内部实现**完全复用(已云上验收),需纠正的是拆解单位与顺序:**按服务拆,每服务契约优先**。
+
+**owner 决策**:
+1. **identity-org-service 严格独立拆分**(不折叠进 gateway);gateway 回归纯 BFF(token 校验 + 路由/聚合)。
+2. **手写 `python -m pipelines.data_prep` 降级为 ops/debug 后门**;产品级 CLI/SDK 由契约生成、经 HTTP 调服务。
+
+### 9.1 服务职责边界(契约即边界)
+
+| 服务 | 契约 | 拥有 endpoint | 后端实现 | 包路径 |
+|---|---|---|---|---|
+| api-gateway / BFF | (聚合) | token 校验 + 路由 + 聚合 | — | `services/gateway/` ✅ |
+| identity-org-service | `identity-org.yaml` | `GET /v1/me/orgs` | Keycloak claim 解析(`libs/identity`) | `services/identity_org_service/`(新,从 gateway 迁出) |
+| metadata-service | `metadata.yaml`(新) | `GET /v1/datasets`、`/v1/datasets/{name}`、`/v1/schemas` | Gravitino(docker) | `services/metadata_service/`(新) |
+| data-pipeline-service | `data-pipeline.yaml`(新) | `POST /v1/data/prepare`、`GET /v1/data/jobs/{id}` | `pipelines/data_prep.run_prepare`(✅已建) | `services/data_pipeline_service/`(新) |
+
+边界铁律:**"列/查数据集"归 metadata-service(它拥有 catalog);"跑管线"归 data-pipeline-service**。v1 可同进程共部署,但契约/包/`/docs` 各自独立。`pipelines/data_prep` 与 `libs/` 保持为实现层(分层 `services → pipelines → libs` 不变)。
+
+### 9.2 每服务的契约优先全循环
+
+`契约(OpenAPI 3.1)→ datamodel-codegen 生成模型 → FastAPI app(模块级 app + /docs)→ 实现(包 libs/pipelines)→ 挂 gateway 后 → 漂移守卫(运行时 openapi.json ⊆ 契约,CI)`。
+
+### 9.3 重排后的计划序(取代原 Plan 3/4)
+
+| 计划 | 内容 | 出口 | Swagger |
+|---|---|---|---|
+| **Plan 3:服务脚手架 + 契约渲染** | 统一 FastAPI 模板(模块级 app + /docs 约定)+ `make api-docs`(渲染全部契约)+ 漂移守卫 CI;gateway 补 `/v1/jobs` 契约对齐(或移除示例路由) | swagger 能力(L1+2+3) | 内建 |
+| **Plan 4:identity-org-service** | `/v1/me/orgs` 从 gateway 迁出为独立服务(契约已存在,先行)+ gateway 改为路由到它 | 服务化① | 自带 |
+| **Plan 5:metadata-service** | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成测试 | **出口②** | 自带 |
+| **Plan 6:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(同步 submit→job_id + 查状态)+ 集成 | 服务化 | 自带 |
+| **Plan 7:生成式 SDK/CLI** | 由契约生成 client + `laictl data prepare/list/describe`(调服务 API,OIDC device flow) | **出口⑤** | — |
+| stretch | Dev Workspace docker 版 | ④降级 | — |
+
+> 原 Plan 3(Gravitino 集成)并入 Plan 5;原 Plan 4(服务化+SDK)拆为 Plan 4/6/7。手写 CLI 留作 ops 后门(`pipelines/data_prep/__main__.py` 加注释标明非产品入口)。

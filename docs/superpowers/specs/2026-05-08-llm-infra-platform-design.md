@@ -1433,9 +1433,14 @@ Lineage 边（v1 手工）：
 |---|---|---|---|
 | Plan 1:W1 门禁(ADR-014) | 云最小环境 + 1GB 数据集落位 + 数据 Spike 1/2 + Spike A 复验/C | 出口① 前置 | ✅ **D1 当日关闭**(早于 06-17 时限) |
 | Plan 2:`pipelines/data_prep` | 一行命令:tar → DJ+Ray 清洗 → Lance on OSS 隔离路径;can()+审计入口;三层自定义开放(配方层已落地) | **①** | ✅ **已验收**(15,138 条 CC3M 真 E2E,1m43s;39 单测/3 集成) |
-| Plan 3:Gravitino 元数据 | docker 单容器部署 + schema `e_0001_g_0001` 注册/查询 + 集成测试 | **②** | ⏳ 下一个(计划待写待审) |
-| Plan 4:服务化 + SDK/CLI | 契约先行(data-pipeline / metadata 两份 OpenAPI → codegen)→ 双 FastAPI 服务(薄壳包 `run_prepare`)→ 生成 client + `laictl` 三命令 | **⑤ + 服务化** | ⏳ 待 Plan 3 后 |
-| stretch:Dev Workspace | docker code-server 半天版(Pod 版 → S2) | ④(降级) | ⏳ 最后,不阻塞 DoD |
+| Plan 3:服务脚手架 + 契约渲染 | 统一 FastAPI 模板(模块级 app + /docs)+ `make api-docs` 渲染全部契约 + 漂移守卫 CI;gateway 契约对齐 | swagger 能力内建 | ⏳ 下一个(待写待审) |
+| Plan 4:identity-org-service | `/v1/me/orgs` 从 gateway 迁出为独立服务(严格拆分,owner 06-13 决策) | 服务化① | ⏳ |
+| Plan 5:metadata-service | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **②** | ⏳ |
+| Plan 6:data-pipeline-service | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id+查状态) | 服务化 | ⏳ |
+| Plan 7:生成式 SDK/CLI | 契约生成 client + `laictl`(调服务 API);手写 CLI 降级 ops 后门 | **⑤** | ⏳ |
+| stretch:Dev Workspace | docker code-server 半天版(Pod 版 → S2) | ④(降级) | ⏳ 不阻塞 DoD |
+
+> **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。原"Plan 3 Gravitino / Plan 4 服务化"按此重排为 Plan 3–7。
 
 **出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino schema 可查;③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);⑤ 契约 SDK/CLI 可调;DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。
 
