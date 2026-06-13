@@ -34,16 +34,21 @@ def _scope_value(scope) -> str:
     return getattr(scope, "value", scope) or "private"
 
 
+def _owner_group(fs: dict) -> str | None:
+    """fileset 的归属组。缺失 = 不可归属(带外/未治理 fileset)→ 调用方按 fail-closed 处理。"""
+    return fs.get("properties", {}).get("owner_group")
+
+
 def _resource(ent: str, fs: dict) -> Resource:
     p = fs.get("properties", {})
     return Resource(kind="dataset", enterprise_id=EnterpriseId(ent),
-                    group_id=GroupId(p["owner_group"]), scope=p.get("scope", "private"),
+                    group_id=GroupId(p.get("owner_group", "")), scope=p.get("scope", "private"),
                     owner=p.get("owner_user"))
 
 
 def _dataset(ent: str, fs: dict) -> dict:
     p, a = fs.get("properties", {}), fs.get("audit", {})
-    return {"name": fs["name"], "enterprise_id": ent, "group_id": p["owner_group"],
+    return {"name": fs["name"], "enterprise_id": ent, "group_id": p.get("owner_group"),
             "owner": p.get("owner_user"), "scope": p.get("scope", "private"),
             "location": fs.get("storageLocation", ""), "comment": fs.get("comment") or None,
             "created_at": a.get("createTime"), "created_by": a.get("creator")}
@@ -65,8 +70,10 @@ def build_app(gravitino):
         ent = _enterprise(ctx)
         ml = _metalake(ent)
         out = []
-        for name in gravitino.list_filesets(ml, catalog, schema):
+        for name in gravitino.list_filesets(ml, catalog, schema):  # N+1:list 仅返回名,逐个 get(ADR-016 规模可忽略)
             fs = gravitino.get_fileset(ml, catalog, schema, name)
+            if not _owner_group(fs):       # 不可归属 → fail-closed,不列出
+                continue
             if can(ctx, "dataset.read", _resource(ent, fs)).allow:
                 out.append(_dataset(ent, fs))
         return {"datasets": out}
@@ -79,6 +86,8 @@ def build_app(gravitino):
             fs = gravitino.get_fileset(ml, catalog, schema, name)
         except Exception:
             raise HTTPException(status_code=404, detail="not found")
+        if not _owner_group(fs):           # 不可归属 → fail-closed deny(不崩成 500)
+            return JSONResponse(status_code=403, content={"reason": "unattributed resource"})
         d = can(ctx, "dataset.read", _resource(ent, fs))
         if not d.allow:
             return JSONResponse(status_code=403, content={"reason": d.reason})

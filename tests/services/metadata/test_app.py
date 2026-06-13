@@ -89,6 +89,19 @@ def test_get_missing_404():
     assert _client().get(f"{_DS}/nope", headers=_ALICE).status_code == 404
 
 
+def test_unattributed_fileset_fail_closed_not_500():
+    # 缺 owner_group 的带外/未治理 fileset:PEP 必须 fail-closed(deny/不列出),绝不崩成 500
+    g = FakeG()
+    g._fs["orphan"] = {"name": "orphan", "comment": "", "storageLocation": "s3a://b/x.lance",
+                       "properties": {"scope": "private"}, "audit": {}}     # 无 owner_group
+    c = _client(g)
+    # get → 403(非 500)
+    assert c.get(f"{_DS}/orphan", headers=_ALICE).status_code == 403
+    # list → 不抛、不含 orphan(只剩可归属且 can() 允许的 cc3m)
+    r = c.get(_DS, headers=_ALICE)
+    assert r.status_code == 200 and "orphan" not in [d["name"] for d in r.json()["datasets"]]
+
+
 def test_register_own_group_201():
     g = FakeG()
     r = _client(g).post(_DS, headers=_ALICE, json={"name": "newds", "group_id": "g-0001",
