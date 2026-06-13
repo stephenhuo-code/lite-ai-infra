@@ -33,7 +33,7 @@
 1. **API 优先（API-first）**：任何服务 / 接口**先定契约（OpenAPI/proto）再实现**；**契约是接口的唯一真相源**，入 git、CI 校验 breaking、client 全生成（具体见 §4.2）。
 2. **测试驱动（TDD）**：实现任何 feature / bugfix **先写测试**（红 → 绿 → 重构）；**无测试不合并**。授权 / 隔离 / 契约等关键路径必须有测试（如 AC-1~43）。
 3. **完成前必验证**：声称"完成 / 修复 / 通过"前**必须跑验证命令并给出证据**；**证据先于断言**，禁止仅凭口头声称（superpowers: verification-before-completion）。
-4. **计划先行**：多步任务**先出实现计划**（brainstorming → writing-plans → execute）再写代码；大改动设 review 检查点。
+4. **计划先行**：多步任务**先出实现计划**（brainstorming → writing-plans → execute）再写代码；大改动设 review 检查点。**每份计划必须含"手动验收 runbook"**——给出可照抄的命令序列(起服务/调接口/看 Swagger 等)及每步的期望证据,让人不读代码也能手动复现验收;无 runbook 的计划不算完成（ADR-015）。
 5. **隔离 + 评审**：功能在**独立分支 / worktree** 开发；**合并前过 code review**；不向 `main` 直接堆未评审改动。
 6. **系统化调试**：遇 bug / 失败**先定位根因再改**，禁止猜测式打补丁（superpowers: systematic-debugging）。
 7. **不静默砍范围**：任何降级 / 截断 / 抽样 / 跳过**必须显式记录**（日志 / PR 说明），不得让"覆盖了一部分"看起来像"全覆盖"。
