@@ -1,77 +1,34 @@
 # tests/gateway/test_gateway.py
-import json
-import pytest
+import httpx
 from fastapi.testclient import TestClient
-from libs.audit.oss_audit import AuditWriter
+from services._scaffold.app import make_service_app
+from services.gateway.app import build_gateway
 
-class MemoryAuditSink:                       # 测试 double（零依赖，不用 moto/MinIO）
-    def __init__(self): self.items = []
-    def put(self, key, body): self.items.append((key, body))
 
-@pytest.fixture(autouse=True)
-def _enable_test_claims(monkeypatch):
-    # 测试 seam 默认关闭(default-deny);单测显式开启
-    monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
+def _identity_stub():
+    app = make_service_app("identity-stub", "0.1.0")
+    @app.get("/v1/me/orgs")
+    def me():
+        return {"user": "u-proxied", "is_platform_admin": False, "memberships": []}
+    return app
 
-def _client(sink):
-    from services.gateway.app import build_app
-    return TestClient(build_app(audit=AuditWriter(sink)))
 
-def _hdr(sub, groups):
-    return {"x-test-claims": json.dumps({"sub": sub, "groups": groups})}
+def _gw():
+    stub = _identity_stub()
+    transport = httpx.ASGITransport(app=stub)
+    return build_gateway(routes={
+        "/v1/me": ("http://identity", lambda: httpx.AsyncClient(transport=transport, base_url="http://identity")),
+    })
 
-def test_unauthenticated_returns_401():
-    client = _client(MemoryAuditSink())
-    assert client.request("DELETE", "/v1/jobs/abc").status_code == 401     # AC-18
 
-def test_seam_disabled_by_default_rejects_test_claims(monkeypatch):
-    # 回归锁:不显式开 seam 时,x-test-claims 必须被无视 → 401(生产 default-deny)
-    monkeypatch.delenv("LITEAI_ALLOW_TEST_CLAIMS", raising=False)
-    client = _client(MemoryAuditSink())
-    r = client.request("DELETE", "/v1/jobs/job-1", headers=_hdr("u-mallory", ["/e-0001/admins"]))
-    assert r.status_code == 401
+def test_gateway_proxies_identity_route():
+    r = TestClient(_gw()).get("/v1/me/orgs")
+    assert r.status_code == 200 and r.json()["user"] == "u-proxied"
 
-def test_seam_malformed_claims_return_401_not_500():
-    client = _client(MemoryAuditSink())
-    r = client.request("DELETE", "/v1/jobs/job-1", headers={"x-test-claims": "{not json"})
-    assert r.status_code == 401
 
-def test_allowed_request_passes_and_audits():
-    sink = MemoryAuditSink(); client = _client(sink)
-    r = client.request("DELETE", "/v1/jobs/job-1", headers=_hdr("u-alice", ["/e-0001/g-0001/members"]))
-    assert r.status_code == 200                              # AC-1
-    assert len(sink.items) == 1 and sink.items[0][0].startswith("audit/")
+def test_gateway_healthz():
+    assert TestClient(_gw()).get("/healthz").json() == {"status": "ok"}
 
-def test_cross_enterprise_denied_403_and_audited():
-    sink = MemoryAuditSink(); client = _client(sink)
-    r = client.request("DELETE", "/v1/jobs/e-0099:job-9", headers=_hdr("u-alice", ["/e-0001/g-0001/members"]))
-    assert r.status_code == 403                              # AC-6/15
-    assert "cross-enterprise" in r.json()["reason"]
-    assert len(sink.items) == 1                              # deny 也审计
-    assert json.loads(sink.items[0][1])["decision"] == "deny"
 
-def test_me_orgs_matches_contract():
-    client = _client(MemoryAuditSink())
-    r = client.get("/v1/me/orgs", headers=_hdr("u-alice", ["/e-0001/g-0001/members"]))
-    assert r.status_code == 200
-    body = r.json()
-    assert set(body) == {"user", "is_platform_admin", "memberships"}
-    assert body["memberships"][0] == {"enterprise_id": "e-0001", "group_id": "g-0001", "role": "member"}
-
-def test_addressing_style_adapts_to_endpoint():
-    # Spike C 实测:真 OSS 拒 path-style,MinIO 需 path-style → 按 endpoint 自适应
-    from libs.audit.oss_audit import addressing_style
-    assert addressing_style("https://oss-cn-hangzhou.aliyuncs.com") == "virtual"
-    assert addressing_style("https://oss-cn-hangzhou-internal.aliyuncs.com") == "virtual"
-    assert addressing_style("http://localhost:9000") == "path"
-
-def test_addressing_style_explicit_override():
-    from libs.audit.oss_audit import addressing_style
-    assert addressing_style("https://oss-cn-hangzhou.aliyuncs.com", explicit="path") == "path"
-
-def test_oss_boto3_config_checksum_when_required():
-    # Spike C:boto3>=1.36 默认 checksum 真 OSS 报 NotImplemented → when_required
-    from libs.audit.oss_audit import oss_boto3_config
-    cfg = oss_boto3_config("https://oss-cn-hangzhou.aliyuncs.com")
-    assert cfg.request_checksum_calculation == "when_required"
-    assert cfg.s3["addressing_style"] == "virtual"
+def test_gateway_unknown_route_404():
+    assert TestClient(_gw()).get("/v1/nope").status_code == 404

@@ -1,47 +1,18 @@
 # services/gateway/app.py
-from datetime import datetime, timezone
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from libs.authz.engine import can
-from libs.authz.types import Resource
-from libs.audit.oss_audit import AuditWriter, AuditEvent
-from services.gateway.deps import context_from_request
+from __future__ import annotations
 
-def _parse_job_ref(ref: str) -> Resource:
-    # S0 stub（非生产逻辑）：用硬编码归属把请求映射成 Resource，仅为驱动 can() 链路演示。
-    # vN+ 必须替换为真实的 job 查询（从元数据/服务读取 enterprise_id/group_id/owner）。
-    # "e-0099:job-9" -> 跨企业；"job-1" -> 默认本企业 e-0001/g-0001
-    if ":" in ref:
-        eid, _ = ref.split(":", 1)
-        return Resource(kind="job", enterprise_id=eid, group_id=None, owner="someone")
-    return Resource(kind="job", enterprise_id="e-0001", group_id="g-0001", owner="u-alice",
-                    attrs={"state": "running"})
+from fastapi import FastAPI
 
-def build_app(audit: AuditWriter) -> FastAPI:
-    """audit 由调用方注入（AuditWriter）：dev/集成传 OssAuditSink+MinIO/OSS；单测传 MemoryAuditSink。"""
-    app = FastAPI()
+from services._scaffold.app import make_service_app
+from services._scaffold.proxy import mount_proxy
 
-    @app.delete("/v1/jobs/{ref}")
-    def delete_job(ref: str, request: Request):
-        ctx = context_from_request(request)            # 未认证 → 401
-        resource = _parse_job_ref(ref)
-        d = can(ctx, "job.delete", resource)            # 唯一出入口
-        role = ctx.role_in(resource.enterprise_id, resource.group_id) or "none"
-        audit.write(AuditEvent(
-            ts=datetime.now(timezone.utc).isoformat(), enterprise_id=resource.enterprise_id,
-            group_id=resource.group_id, actor_user=ctx.user, actor_role=role,
-            action="job.delete", resource_uri=f"job/{ref}",
-            decision="allow" if d.allow else "deny", override=False, reason=d.reason,
-            metadata={"ip": request.client.host if request.client else ""}))
-        if not d.allow:
-            return JSONResponse(status_code=403, content={"reason": d.reason})
-        return {"status": "deleted", "ref": ref}
 
-    @app.get("/v1/me/orgs")
-    def me_orgs(request: Request):
-        ctx = context_from_request(request)
-        return {"user": ctx.user, "is_platform_admin": ctx.is_platform_admin,
-                "memberships": [{"enterprise_id": m.enterprise_id, "group_id": m.group_id,
-                                 "role": m.role} for m in ctx.memberships]}
-
+def build_gateway(routes: dict) -> FastAPI:
+    """gateway = 纯反代壳(BFF)。routes: {prefix: base_url | (base_url, client_factory)}。
+    /docs + /healthz 来自脚手架;业务路由全部转发到下游服务(透传 bearer,下游各自验签)。
+    v2 可在此加边缘预校验 / 限流 / 聚合。"""
+    app = make_service_app(title="api-gateway", version="0.1.0")
+    for prefix, spec in routes.items():
+        base_url, factory = spec if isinstance(spec, tuple) else (spec, None)
+        mount_proxy(app, prefix=prefix, base_url=base_url, client_factory=factory)
     return app
