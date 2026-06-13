@@ -1,0 +1,13 @@
+# deploy/dev/gravitino.yml —— dev Gravitino(fileset catalog → dev MinIO)
+# 端口:Gravitino server 容器内 8090 → 宿主 8091(避让 gateway 8090)
+services:
+  gravitino:
+    image: apache/gravitino:1.1.0          # Task 1 验证;不可用则换最新 tag 并记 RESULTS
+    ports: ["8091:8090"]
+    environment:
+      GRAVITINO_MEMORY: "-Xms512m -Xmx1g"
+    networks: [dev_default]
+networks:
+  dev_default:
+    external: true
+    name: dev_default
