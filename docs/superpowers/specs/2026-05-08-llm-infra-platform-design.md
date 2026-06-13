@@ -2053,3 +2053,5 @@ $ make prod-deploy TAG=v1.2.3   # 必须有 staging 通过的 commit
 
 | §5.3/§5.4 正文重写为当前版(S0 关闭摘要 / S1 五计划表 / S2 三阶段表 / 时间线草案列) | 本次提交(06-12);原 3 人版见 git 历史 | 生效 |
 | v1 交付日草案 ≈08-12(S2a/b/c 各约 2 周) | §5.4 草案列;**S2 ADR 定稿** | 草案 |
+| API 优先纠偏:S1 剩余按「服务 + 契约优先」重拆为 Plan 3–7(脚手架 / identity-org / metadata / data-pipeline / SDK);Plan 2 库+CLI 先行序为偏差,代码作服务内部实现复用(非返工) | S1 设计 spec §9(owner 06-13) | 生效 |
+| identity-org-service 严格独立拆分(不折叠 gateway);手写 CLI 降级 ops 后门,产品 CLI 契约生成 | S1 设计 spec §9.1 | 生效 |
