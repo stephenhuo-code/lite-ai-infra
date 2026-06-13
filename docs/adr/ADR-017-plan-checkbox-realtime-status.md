@@ -1,4 +1,4 @@
-# ADR-017: 计划任务用 checkbox 拆分 + 执行时实时更新完成状态
+# ADR-017: 计划执行纪律 — checkbox 拆分 + 实时状态 + 完成后隔离审查
 
 - 状态：Accepted（2026-06-14,owner)
 - 决策人：owner
@@ -17,6 +17,11 @@
 1. **计划必须按 checkbox 拆分**:每个任务/步骤用 `- [ ]`,粒度到"可单独勾选/验证"(配合 writing-plans 的 bite-sized 步骤)。
 2. **执行时必须实时更新完成状态**:每完成一步即勾 `- [x]`,并用 TodoWrite 同步 `in_progress`/`completed`;**不得做完一批才补勾、不得全程不更新**。
 3. 目的:进度随时可见、可中断可续、状态与实际一致(证据先于断言的过程版)。
+
+4. **完成后必须做"隔离审查"(独立于实现者)**,两项缺一不可:
+   - **(a) spec 完成度检查(人)**:owner 逐 task 对照实际产物核对、跑验收 runbook,确认计划要求真兑现(不是 checkbox 勾了就算)。
+   - **(b) code review(独立 reviewer)**:用 superpowers:requesting-code-review 派**独立子代理**(非实现者)审 `main..HEAD`,按 Critical/Important/Minor 分级;Critical/Important 修完才可合并。
+   - **headless / 自主执行尤其适用**:机器实现 + 机器自评不构成审查;隔离审查(人 + 独立 reviewer)是合并前的硬门禁。理由:实现者(无论人或 agent)对自己的盲点不可见;隔离视角才抓得住 tenancy-bypass、套套测试、spec 偏离。
 
 ## Consequences
 
