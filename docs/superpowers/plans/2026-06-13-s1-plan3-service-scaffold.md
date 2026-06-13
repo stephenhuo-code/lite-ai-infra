@@ -530,3 +530,44 @@ metadata-service = Plan 4(出口②);data-pipeline-service = Plan 5;SDK/CLI = Pl
 - 类型一致:`make_service_app`/`context_from_request`/`mount_proxy`/`build_gateway`/`assert_openapi_subset_of_contract` 签名在各 Task 调用处一致
 - 迁移完整性:gateway `deps.py` 逻辑迁 `_scaffold/auth.py`(Task 2)后删除(Task 6);`libs/audit` 寻址测试从 gateway 测试文件迁回 `tests/audit/`(Task 6 步骤 5)
 - 分层:`_scaffold` 在 services 层内,import `libs` 合法;不被 pipelines/libs 反向 import
+
+---
+
+## 手动验收 runbook(实现完成后照此验证)
+
+> 原则(宪法 §3.2):证据先于断言。前置:`make dev-up`(Keycloak 8080 + MinIO)。
+
+**一次性:开 3 个终端**
+```bash
+make dev-up        # A:依赖(已在跑可跳过)
+make run-identity  # B:identity-org @ 8001
+make run-gateway   # C:gateway 反代壳 @ 8090
+```
+
+**验收 1 — Swagger 两视图**
+- 运行时 /docs:浏览器开 http://localhost:8090/docs(gateway)、http://localhost:8001/docs(identity,可见 `GET /v1/me/orgs`)
+- 契约视图:`make api-docs` → http://localhost:8088(渲染 contracts/,不依赖服务)
+
+**验收 2 — 端到端(经 gateway 反代,真 token 解析)**
+```bash
+TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret -d username=alice \
+  -d password=alice -d grant_type=password \
+  http://localhost:8080/realms/lite-ai/protocol/openid-connect/token \
+  | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/me/orgs; echo   # A
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8090/v1/me/orgs            # B 无 token
+curl -s http://localhost:8090/healthz -w " gw\n"; curl -s http://localhost:8001/healthz -w " id\n"  # C
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8090/v1/nope               # D 未知路由
+```
+期望:A=alice 的 memberships(`e-0001/g-0001/member`);B=`401`;C=两个 `{"status":"ok"}`;D=`404`。
+**关键:请求打 gateway 8090,结果由 identity-org 8001 产生 → 反代通。**
+
+**验收 3 — 漂移守卫**
+```bash
+uv run pytest tests/scaffold/ tests/services/identity_org/ -q   # 期望全 passed
+```
+`test_runtime_matches_contract` = "运行时路由 ⊆ 契约"活样例(防有路由无契约)。
+
+**收尾**:终端 B/C `Ctrl+C`;`docker compose -f deploy/dev/swagger-ui.yml down`。
+
+> 此 runbook 是各服务 Plan 的模板:Plan 4/5 新服务套脚手架后,加各自 `make run-*` + /docs 端口 + 端到端 curl 即可。
