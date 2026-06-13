@@ -89,6 +89,7 @@ storage_grant     { enterprise_id, group_id, prefix }   # OSS 凭据申请作为
 ### 升级路径
 - 中央元数据 PG 回归后，PIP 的 resource 属性改从 PG 读（接口不变）。
 - 关系型授权成主导 / 规模大 → OpenFGA / SpiceDB（仍藏 `can()` 后）。
+- **v2 评估:per-user / per-resource grant 作为 group 之上的叠加层**(owner 06-13 决策,见下)。当前模型保留 group 为默认协作/grantee 单元(宪法 §1.2);资源已带 `owner`(user)+`scope`,v2 用 Cerbos 派生角色把"个人/角色级 grant、跨组共享"做成 group 之上的**叠加授权**,而非替换 group。即:user/role 授权是增量层,group 隔离不拆(不重开 S0 地基)。
 
 ### 行动项
 - **Sprint 0 spike（半天）**：Cerbos Python SDK + derived roles + 从 token `groups` 解析 principal，跑通 2–3 个典型 AC；SDK/版本现状以 spike 为准。

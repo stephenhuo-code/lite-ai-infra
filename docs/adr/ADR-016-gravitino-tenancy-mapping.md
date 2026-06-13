@@ -24,6 +24,12 @@ metadata-service(S1,出口②)用 Gravitino 编目数据集。需定 ADR-010 两
 | **数据组织** | 数据源 / 命名空间 | **Catalog** = 数据源(`data` 类型 FILESET→OSS;将来 `models` 等,企业内可多个);**Schema** = 数据域(v1 用 `datasets`),**不是 group** |
 | **group / owner / scope** | 访问维度(身份) | **Fileset properties**(`owner_group`、`owner_user`、`scope=private\|shared`)+ OSS 物理路径 `e-XXXX/g-YYYY/...` |
 
+**三属性的语义角色(2026-06-13 澄清,owner 决策"保留 group、不拆地基"):**
+- `owner_user` = **owner 真相源**(谁创建/拥有;owner 专属删改权,engine 已判)
+- `owner_group` = **默认 grantee / 隔离单元**(宪法 §1.2 私有资源归属单元;同组默认可见)
+- `scope` = **共享开关**(private | shared=企业级)
+- **v2 演进**(见 ADR-011 升级路径):per-user / per-resource grant 作 **group 之上的叠加层**(Cerbos 派生角色),**不拆 group**;v1 不交付细粒度 grant。
+
 ```
 Metalake: e_0001                          ← 企业(硬边界)
 └─ Catalog: data (FILESET, S3→OSS/MinIO)  ← 数据源(企业内可多个: data/models/…)
