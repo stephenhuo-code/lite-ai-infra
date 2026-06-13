@@ -101,15 +101,17 @@ uv run python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signatur
 | metadata-service | 8002 | (Plan 4) |
 | data-pipeline-service | 8003 | (Plan 5) |
 
+**一键起停全部(deps 容器 + 全部服务进程):**
 ```bash
-make dev-up                 # 终端 A:Keycloak + MinIO
-make run-identity           # 终端 B:identity-org @ 8001
-make run-gateway            # 终端 C:gateway @ 8090 → 反代到 8001
+make up      # 起 Keycloak/MinIO + identity-org(8001) + gateway(8090)
+make ps      # 看各服务状态
+make down    # 全停
 ```
+> 日常只改单个服务时,用 `make run-identity` / `make run-gateway`(前台 + 热重载)。
 
 **看 API(两种视图)**:
-- 契约(设计时,不必起服务):`make api-docs` → http://localhost:8088
-- 运行时(每服务自带):`http://localhost:8001/docs`、gateway `http://localhost:8090/docs`
+- **聚合契约(一个页面看全部服务)**:`make api-docs` → http://localhost:8088 顶部下拉切换(自动发现 `contracts/openapi/*.yaml`,新服务零配置纳入);`make api-docs-down` 关
+- 运行时(每服务自带):gateway `http://localhost:8090/docs`、identity `http://localhost:8001/docs`
 
 **端到端验证**(经 gateway 反代拿到真 token 解析):
 ```bash

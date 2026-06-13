@@ -28,3 +28,6 @@ spikes/*/out/
 .terraform/
 *.tfvars
 !*.tfvars.example
+
+# 本地服务 PID/日志
+.dev/
