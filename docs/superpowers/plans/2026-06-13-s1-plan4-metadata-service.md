@@ -113,12 +113,6 @@ paths:
         '200': {description: dataset, content: {application/json: {schema: {$ref: '#/components/schemas/Dataset'}}}}
         '403': {description: forbidden}
         '404': {description: not found}
-  /v1/schemas:
-    get:
-      summary: 列出本企业 catalog 下的数据域 schema
-      responses:
-        '200': {description: schemas, content: {application/json: {schema: {$ref: '#/components/schemas/SchemaList'}}}}
-        '401': {description: unauthenticated}
 components:
   schemas:
     Dataset:
@@ -142,10 +136,9 @@ components:
         group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
         location: {type: string}
         scope: {type: string, enum: [private, shared], default: private}
-    SchemaList:
-      type: object
-      properties: {schemas: {type: array, items: {type: string}}}
 ```
+
+> **不做 `/v1/schemas`**(owner 06-13):ADR-016 下 schema=固定数据域(v1 仅 `datasets`),列它无意义;Gravitino 结构上要求 schema,故**内部保留 `datasets`**,但不暴露列表 API。多数据域/多 catalog 出现时再加 `/v1/catalogs` 或 `/v1/schemas`(YAGNI)。
 
 - [ ] **步骤 2:Makefile `gen` 追加 metadata 模型**
 
@@ -404,11 +397,6 @@ def build_app(gravitino):
                                        "scope": body.get("scope", "private")})
         return _to_dataset(ent, fs)
 
-    @app.get("/v1/schemas")
-    def list_schemas(ctx: Context = Depends(context_from_request)):
-        _caller_enterprise(ctx)                       # 认证即可
-        return {"schemas": [_SCHEMA]}
-
     return app
 ```
 
@@ -434,7 +422,6 @@ app = build_app(gravitino=GravitinoClient(base_url=os.environ.get("GRAVITINO_URL
 ```python
 # services/gateway/main.py 的 routes 追加
     "/v1/datasets": os.environ.get("METADATA_URL", "http://localhost:8002"),
-    "/v1/schemas":  os.environ.get("METADATA_URL", "http://localhost:8002"),
 ```
 
 - [ ] **步骤 2:dev_services.sh SERVICES 加一行 + env**
@@ -477,8 +464,47 @@ def test_register_and_read_back_real_gravitino(gravitino_url):
     assert fs["properties"]["owner_group"] == "g-0001"
 ```
 
-- [ ] **步骤 3:跑** `make up`(含 gravitino)→ `uv run pytest -q -m integration` 全绿(既有 + 新)
-- [ ] **步骤 4:提交** `test(metadata): real Gravitino integration (register/list/get on MinIO fileset)`
+- [ ] **步骤 3:端到端场景测试 —— Lance 建真数据集 → 经 metadata-service 注册 → 查回 + 验证 location 指向真 Lance**(集成,串起 Plan 2 与 Plan 4)
+
+```python
+# tests/integration/test_lance_register_e2e.py
+import os, uuid, json
+import lance, pyarrow as pa, pytest
+from fastapi.testclient import TestClient
+from pipelines.data_prep.lance_writer import lance_storage_options
+from services.metadata_service.gravitino import GravitinoClient
+from services.metadata_service.app import build_app
+pytestmark = pytest.mark.integration
+
+def test_create_lance_then_register_and_read_back(minio_bucket, gravitino_url, monkeypatch):
+    monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
+    name = f"ds_{uuid.uuid4().hex[:6]}"
+    # 1) 在 MinIO 上建一个真 Lance 数据集(lance 用 s3:// scheme)
+    ep = "http://localhost:9000"
+    opts = lance_storage_options(ep, minio_bucket, "minio", "minio123", region="us-east-1")
+    uri_s3 = f"s3://{minio_bucket}/e-0001/g-0001/processed/{name}.lance"
+    lance.write_dataset(pa.table({"text": ["a", "b", "c"]}), uri_s3, storage_options=opts, mode="overwrite")
+    # 2) 经 metadata-service 注册(Gravitino 记 s3a:// 同一物理路径;EXTERNAL fileset)
+    g = GravitinoClient(base_url=gravitino_url)
+    g.ensure_metalake("e_0001")  # ensure_catalog/schema 见 Task 3(FILESET+MinIO props)
+    client = TestClient(build_app(gravitino=g))
+    loc_s3a = f"s3a://{minio_bucket}/e-0001/g-0001/processed/{name}.lance"
+    r = client.post("/v1/datasets",
+                    headers={"x-test-claims": json.dumps({"sub": "u-alice", "groups": ["/e-0001/g-0001/members"]})},
+                    json={"name": name, "group_id": "g-0001", "location": loc_s3a})
+    assert r.status_code == 201 and r.json()["location"] == loc_s3a
+    # 3) 查回
+    got = client.get(f"/v1/datasets/{name}",
+                     headers={"x-test-claims": json.dumps({"sub": "u-alice", "groups": ["/e-0001/g-0001/members"]})})
+    assert got.status_code == 200 and got.json()["group_id"] == "g-0001"
+    # 4) 验证注册的 location 确实是真 Lance(用 s3:// 等价路径读回)
+    ds = lance.dataset(uri_s3, storage_options=opts)
+    assert ds.count_rows() == 3
+```
+> **scheme 二元性**(实现要点):同一物理对象,**lance 读写用 `s3://`**(object_store→MinIO),**Gravitino fileset location 记 `s3a://`**(HCFS,EXTERNAL 只记字符串不读)。同 bucket/key,仅 scheme 不同。
+
+- [ ] **步骤 4:跑** `make up`(含 gravitino)→ `uv run pytest -q -m integration` 全绿(既有 + 新 client 测 + Lance 端到端)
+- [ ] **步骤 5:提交** `test(metadata): real Gravitino integration + Lance-create→register e2e`
 
 ---
 
@@ -506,23 +532,31 @@ TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret -d username=a
   -d grant_type=password http://localhost:8080/realms/lite-ai/protocol/openid-connect/token \
   | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
 
-# 3) 注册一个数据集(经 gateway 8090 反代 → metadata 8002 → Gravitino)
+# 3) 先在 Lance 建一个真测试数据集(写进 MinIO 的隔离路径;lance 用 s3://)
+uv run python - <<'PY'
+import lance, pyarrow as pa
+from pipelines.data_prep.lance_writer import lance_storage_options
+opts = lance_storage_options("http://localhost:9000", "lite-ai-dev", "minio", "minio123", region="us-east-1")
+lance.write_dataset(pa.table({"text": ["hello", "world", "lite-ai"]}),
+                    "s3://lite-ai-dev/e-0001/g-0001/processed/cc3m.lance",
+                    storage_options=opts, mode="overwrite")
+print("lance dataset written: 3 rows")
+PY
+# (注:lite-ai-dev bucket 需先在 MinIO 建;make up 后 `aws --endpoint http://localhost:9000 s3 mb` 或 mc)
+
+# 4) 经 gateway 反代注册到 Gravitino(location 记 s3a:// 同一物理路径)
 curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   http://localhost:8090/v1/datasets \
   -d '{"name":"cc3m","group_id":"g-0001","location":"s3a://lite-ai-dev/e-0001/g-0001/processed/cc3m.lance"}'; echo
 
-# 4) 查询(出口② 核心:schema/dataset 可查)
+# 5) 查询(出口② 核心:数据集可查)
 curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/datasets; echo      # 列出(can() 过滤)
-curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/datasets/cc3m; echo # 单查
-curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/schemas; echo       # schema
-
-# 5) 隔离验证:跨组数据集应 403(需先以 g-0002 身份注册一个,或直接构造)
-curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/datasets/<别组的>
+curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/datasets/cc3m; echo # 单查 → location 指向上面的真 Lance
 
 # 6) 直接看 Gravitino 里的 fileset(证明真落库)
 curl -fsS http://localhost:8091/api/metalakes/e_0001/catalogs/data/schemas/datasets/filesets; echo
 ```
-**期望**:3=201 + 返回 dataset;4=列出含 cc3m / 单查 group_id=g-0001 / schemas=["datasets"];5=403;6=Gravitino 真有该 fileset。
+**期望**:3=写入 3 行;4=201 + 返回 dataset;5=列出含 cc3m / 单查 group_id=g-0001 且 location 指向真 Lance;6=Gravitino 真有该 fileset。
 **收尾**:`make down`(含停 gravitino)、`make api-docs-down`。
 
 > Plan 5/6 的 runbook 复用此结构。
