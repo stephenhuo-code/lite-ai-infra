@@ -535,18 +535,18 @@ metadata-service = Plan 4(出口②);data-pipeline-service = Plan 5;SDK/CLI = Pl
 
 ## 手动验收 runbook(实现完成后照此验证)
 
-> 原则(宪法 §3.2):证据先于断言。前置:`make dev-up`(Keycloak 8080 + MinIO)。
+> 原则(宪法 §3.2):证据先于断言。
 
-**一次性:开 3 个终端**
+**一键起全部(deps 容器 + 全服务进程):**
 ```bash
-make dev-up        # A:依赖(已在跑可跳过)
-make run-identity  # B:identity-org @ 8001
-make run-gateway   # C:gateway 反代壳 @ 8090
+make up      # Keycloak/MinIO + identity-org(8001) + gateway(8090) 一条命令全起
+make ps      # 确认 gateway/identity 都"运行中"
 ```
+> 首次或刚 `make down` 后,Keycloak 需 ~25s 导入 realm;`make ps` 显示服务起来即可,token 步骤前确认 `curl -fsS http://localhost:8080/realms/lite-ai/.well-known/openid-configuration` 返回 200。
 
-**验收 1 — Swagger 两视图**
-- 运行时 /docs:浏览器开 http://localhost:8090/docs(gateway)、http://localhost:8001/docs(identity,可见 `GET /v1/me/orgs`)
-- 契约视图:`make api-docs` → http://localhost:8088(渲染 contracts/,不依赖服务)
+**验收 1 — Swagger**
+- 聚合契约(一个页面看全部 API):`make api-docs` → http://localhost:8088 顶部下拉(自动发现 contracts/;现 1 个 identity-org,Plan 4/5 后变多)
+- 运行时 /docs:http://localhost:8090/docs(gateway)、http://localhost:8001/docs(identity,见 `GET /v1/me/orgs`)
 
 **验收 2 — 端到端(经 gateway 反代,真 token 解析)**
 ```bash
@@ -568,6 +568,7 @@ uv run pytest tests/scaffold/ tests/services/identity_org/ -q   # 期望全 pass
 ```
 `test_runtime_matches_contract` = "运行时路由 ⊆ 契约"活样例(防有路由无契约)。
 
-**收尾**:终端 B/C `Ctrl+C`;`docker compose -f deploy/dev/swagger-ui.yml down`。
+**收尾**:`make down`(停全部服务 + deps);`make api-docs-down`(停 Swagger UI)。
+> 单服务调试用 `make run-identity`/`make run-gateway`(前台 + 热重载),不必走 `make up`。
 
-> 此 runbook 是各服务 Plan 的模板:Plan 4/5 新服务套脚手架后,加各自 `make run-*` + /docs 端口 + 端到端 curl 即可。
+> 此 runbook 是各服务 Plan 的模板:Plan 4/5 新服务套脚手架后,`make up` 自动带起(在 `scripts/dev_services.sh` 加一行)、契约自动进 `make api-docs` 下拉、加各自端到端 curl 即可。
