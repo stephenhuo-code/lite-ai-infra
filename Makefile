@@ -8,3 +8,4 @@ contract-check:   ; oasdiff breaking contracts/openapi/identity-org.yaml@HEAD~1 
 dev-up:           ; docker compose -f deploy/dev/docker-compose.yml up -d
 dev-down:         ; docker compose -f deploy/dev/docker-compose.yml down -v
 data-prep:        ; uv run python -m pipelines.data_prep $(ARGS)
+api-docs:         ; docker compose -f deploy/dev/swagger-ui.yml up -d && echo "Swagger UI: http://localhost:8088"
