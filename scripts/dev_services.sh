@@ -19,8 +19,9 @@ _env_for() {  # 各服务启动 env
   case "$1" in
     identity) echo "LITEAI_JWKS_URL=$JWKS" ;;
     metadata) echo "LITEAI_JWKS_URL=$JWKS GRAVITINO_URL=http://localhost:8091" ;;
-    # data-pipeline:JOBS_DIR 状态文件根 + 本地 MinIO 凭据/桶(worker 传给 run_prepare)+ 验签
-    data-pipeline) echo "LITEAI_JWKS_URL=$JWKS JOBS_DIR=$ROOT/.dev/jobs OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 OSS_REGION=us-east-1 DATA_BUCKET=lite-ai AUDIT_BUCKET=lite-ai" ;;
+    # data-pipeline:JOBS_DIR 状态文件根 + 本地 MinIO 凭据/桶(worker 传给 run_prepare)+ 验签 +
+    # DJ_BIN 默认指向 .dj-venv 的真 Data-Juicer(dev/prod parity;先 `make dj-setup` 建好)。
+    data-pipeline) echo "LITEAI_JWKS_URL=$JWKS JOBS_DIR=$ROOT/.dev/jobs OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 OSS_REGION=us-east-1 DATA_BUCKET=lite-ai AUDIT_BUCKET=lite-ai DJ_BIN=$ROOT/.dj-venv/bin/dj-process" ;;
     gateway)  echo "IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 DATA_PIPELINE_URL=http://localhost:8003" ;;
     *)        echo "" ;;
   esac

@@ -508,6 +508,8 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pyjwt", extra = ["crypto"] },
+    { name = "pylance" },
+    { name = "pyyaml" },
     { name = "uvicorn" },
 ]
 
@@ -515,10 +517,8 @@ dependencies = [
 dev = [
     { name = "datamodel-code-generator" },
     { name = "import-linter" },
-    { name = "pylance" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -529,10 +529,10 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.1" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.9" },
-    { name = "pylance", marker = "extra == 'dev'", specifier = ">=0.18" },
+    { name = "pylance", specifier = ">=0.18" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
-    { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "uvicorn", specifier = ">=0.32" },
 ]
 provides-extras = ["dev"]

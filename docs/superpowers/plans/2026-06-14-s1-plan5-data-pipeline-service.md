@@ -744,6 +744,22 @@ def test_prepare_job_to_lance_on_minio(tmp_path, minio_s3, minio_bucket, monkeyp
 
 ---
 
+### Task 9:dev/prod parity 收尾(手动验收暴露 + owner 决策 2026-06-15)
+
+> 手动验收发现:本地 `make up` 提交作业 `failed`,因 dev 没有 Data-Juicer、且 `pylance`/`pyyaml` 被误放 `dev` extras。owner 定 parity 纪律(spec §2 决策6):dev 含与云上同套依赖与功能,仅数据量/部署不同;桩仅限 CI。
+
+**Files:** 修改:`pyproject.toml`、`Makefile`、`scripts/dev_services.sh`、`.gitignore`、`pipelines/data_prep/runner.py`(`_run_dj` 剥 uv 上下文)、`docs/superpowers/specs/2026-06-11-s1-data-pipeline-design.md`(§2 决策6);创建:`scripts/dj_setup.sh`
+
+- [x] **步骤 1:修运行时依赖归属** —— `pylance`/`pyyaml` 从 `dev` extras 移入 `[project].dependencies`(它们是 data-pipeline worker 运行时 import);`uv lock && make sync` 后 `uv run pytest` 仍绿。
+- [x] **步骤 2:`make dj-setup`** —— `scripts/dj_setup.sh` 建独立 `.dj-venv`(`py-data-juicer ray[default] pillow`,镜像云上 `/opt/dj-venv`;沿用 spike run.sh 配方);`.gitignore` 加 `.dj-venv/`。
+- [x] **步骤 3:dev 默认 `DJ_BIN` 指真 DJ** —— `scripts/dev_services.sh` 与 `Makefile run-data-pipeline` 默认 `DJ_BIN=<repo>/.dj-venv/bin/dj-process`;passthrough 桩降级为**仅集成测试** test double(`tests/integration` conftest),不再是 dev 运行时默认。
+- [x] **步骤 4:spec 落 parity 纪律** —— S1 spec §2 决策6(dev/prod parity)。
+- [x] **步骤 5:本地真 DJ 端到端复验** —— `make dj-setup` + 本地 Ray head + `make up`(DJ_BIN 指真 `.dj-venv`),经 gateway 提交 → **真 Data-Juicer** 清洗 → `succeeded`、`rows_in/written=2`、`lance_uri` 落 OSS(真 Lance 可读)。**复验中发现并修**:新版 Ray 的 "uv run" worker 模式在 uv 项目里绑主 `.venv`(无 ray)→ worker 崩;`_run_dj` 改为剥 `UV_*` + 设 `RAY_ENABLE_UV_RUN_RUNTIME_ENV=0` + `VIRTUAL_ENV`/`PATH` 指 `.dj-venv`(spike "Ray 禁瞬态 uv 环境"教训在 service 链上的再现)。
+- [ ] **步骤 6:提交** `feat(data-pipeline): dev/prod parity — runtime deps + make dj-setup + real DJ default`
+  > 注:本地真 DJ 需先 `make dj-setup` + 起 Ray head(`.dj-venv/bin/ray start --head`);make up 是否自动起 Ray head 列为后续 dev-UX 改进(本轮 runbook 注明手动起)。
+
+---
+
 ## 验收对照
 
 | 目标 | 任务 |
@@ -781,6 +797,8 @@ SDK/CLI(出口⑤)= Plan 6(由本契约生成)。
 ## 手动验收 runbook(实现完成后照此验证)
 
 > 原则(宪法 §3.2):证据先于断言。本服务套脚手架后,`make up` 自动带起、契约自动进 `make api-docs` 下拉(spec §9.2 runbook 模板)。
+>
+> **粘贴前两条注意(zsh)**:① 整段粘贴若报 `parse error near '#'` —— zsh 默认不把 `#` 当注释,先执行一次 `setopt interactivecomments`。② 改过服务路由/代码后,`make up` 会**跳过已在端口上的旧进程**(陈旧路由表)→ 先 `make down` 再 `make up`,否则会撞到老 gateway 的 404。
 
 **前置:本地凭据用 MinIO**(dev compose 已起 MinIO);`make up` 后确认 4 服务运行(identity 8001 / metadata 8002 / data-pipeline 8003 / gateway 8090)。
 
@@ -799,19 +817,21 @@ TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret -d username=a
   -d password=alice -d grant_type=password \
   http://localhost:8080/realms/lite-ai/protocol/openid-connect/token \
   | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-# 提交作业(tar_dir 用宿主机上一个小 tar 目录;DJ_BIN 桩或真 dj-venv 见下)
+# A — 提交作业(tar_dir 用宿主机上一个小 tar 目录;DJ_BIN 桩或真 dj-venv 见下)
 JOB=$(curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' \
-  http://localhost:8090/v1/data/prepare | uv run python -c 'import sys,json;print(json.load(sys.stdin)["id"])')   # A
+  http://localhost:8090/v1/data/prepare | uv run python -c 'import sys,json;print(json.load(sys.stdin)["id"])')
 echo "job=$JOB"
-# 轮询直到 terminal(按派生布尔判终态,非字符串匹配 → S2a 加新终态不破坏此脚本)
+# B — 轮询直到 terminal(按派生布尔判终态,非字符串匹配 → S2a 加新终态不破坏此脚本)
 for i in $(seq 1 30); do
   J=$(curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/data/jobs/$JOB)
   echo "  $(echo "$J" | uv run python -c 'import sys,json;print(json.load(sys.stdin)["status"])')"
   echo "$J" | uv run python -c 'import sys,json;sys.exit(0 if json.load(sys.stdin)["terminal"] else 1)' && break
   sleep 2
-done                                                                                                              # B
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8090/v1/data/prepare                                   # C 无 token
+done
+# C — 无 token:必须 POST(GET /prepare 只会得 405 Method Not Allowed,到不了鉴权)→ 期望 401
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'content-type: application/json' \
+  -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' http://localhost:8090/v1/data/prepare
 ```
 期望:A=返回 `202` + 含 `id`/`status`(queued|running)/`enterprise_id=e-0001`;B=数轮后 `succeeded`,`GET` 返回含 `rows_written`/`lance_uri`(`s3://…/e-0001/g-0001/processed/cc3m.lance`);C=`401`。
 > 本地无真 DJ:`make run-data-pipeline` 前 `export DJ_BIN=<passthrough 桩>`(Task 8 fixture 同款),或在云上 spike-ECS 用 `/opt/dj-venv/bin/dj-process` 真跑。
