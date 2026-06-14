@@ -1446,14 +1446,13 @@ Lineage 边（v1 手工）：
 |---|---|---|---|
 | Plan 1:W1 门禁(ADR-014) | 云最小环境 + 1GB 数据集落位 + 数据 Spike 1/2 + Spike A 复验/C | 出口① 前置 | ✅ **D1 当日关闭**(早于 06-17 时限) |
 | Plan 2:`pipelines/data_prep` | 一行命令:tar → DJ+Ray 清洗 → Lance on OSS 隔离路径;can()+审计入口;三层自定义开放(配方层已落地) | **①** | ✅ **已验收**(15,138 条 CC3M 真 E2E,1m43s;39 单测/3 集成) |
-| Plan 3:服务脚手架 + 契约渲染 | 统一 FastAPI 模板(模块级 app + /docs)+ `make api-docs` 渲染全部契约 + 漂移守卫 CI;gateway 反代壳 | swagger 能力内建 | ✅ 已合并 |
-| Plan 4:identity-org-service | `/v1/me/orgs` 从 gateway 迁出为独立服务(严格拆分,owner 06-13 决策) | 服务化① | ✅ 已合并(随 Plan 3 doc 一并交付)|
-| Plan 5:metadata-service | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **②** | ✅ **已合并**(层级 API/can() 过滤/fileset→Dataset;80 单元+7 集成;人工 runbook 验收)|
-| Plan 6:data-pipeline-service | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id+查状态) | 服务化 | ⏳ 下一个 |
-| Plan 7:生成式 SDK/CLI | 契约生成 client + `laictl`(调服务 API);手写 CLI 降级 ops 后门 | **⑤** | ⏳ |
+| Plan 3:脚手架 + identity-org-service + gateway 反代壳 | 统一 FastAPI 模板(/docs)+ `make api-docs` + 漂移守卫 CI;identity-org 迁出独立;gateway 改纯反代壳 | swagger 能力 + 服务化① | ✅ 已合并 |
+| Plan 4:metadata-service | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **②** | ✅ **已合并**(层级 API/can() 过滤/fileset→Dataset;80 单元+7 集成;人工 runbook 验收)|
+| Plan 5:data-pipeline-service | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id+查状态) | 服务化 | ⏳ 下一个 |
+| Plan 6:生成式 SDK/CLI | 契约生成 client + `laictl`(调服务 API);手写 CLI 降级 ops 后门 | **⑤** | ⏳ |
 | stretch:Dev Workspace | docker code-server 半天版(Pod 版 → S2) | ④(降级) | ⏳ 不阻塞 DoD |
 
-> **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。原"Plan 3 Gravitino / Plan 4 服务化"按此重排为 Plan 3–7。
+> **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。编号以实际计划文档为准(owner 06-14 口径 A):Plan 3=脚手架+identity-org+反代壳、Plan 4=metadata、Plan 5=data-pipeline、Plan 6=SDK。
 
 **出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino 元数据可查 ✅(metadata-service,Plan 5 已合并);③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);⑤ 契约 SDK/CLI 可调 ⏳(Plan 7);DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。**S1 进度:出口①②③ ✅,余 ⑤(Plan 6/7)+ stretch ④。**
 
@@ -2068,4 +2067,5 @@ $ make prod-deploy TAG=v1.2.3   # 必须有 staging 通过的 commit
 | v1 交付日草案 ≈08-12(S2a/b/c 各约 2 周) | §5.4 草案列;**S2 ADR 定稿** | 草案 |
 | API 优先纠偏:S1 剩余按「服务 + 契约优先」重拆为 Plan 3–7(脚手架 / identity-org / metadata / data-pipeline / SDK);Plan 2 库+CLI 先行序为偏差,代码作服务内部实现复用(非返工) | S1 设计 spec §9(owner 06-13) | 生效 |
 | identity-org-service 严格独立拆分(不折叠 gateway);手写 CLI 降级 ops 后门,产品 CLI 契约生成 | S1 设计 spec §9.1 | 生效 |
+| 计划编号统一口径 A:以实际计划文档为准(Plan 3=脚手架+identity-org+反代壳、4=metadata、5=data-pipeline、6=SDK);早先草拟的 5 计划序中 Plan 3+4 被实际 Plan 3 文档合并交付,整体回退一位 | S1 设计 spec §9.3(owner 06-14) | 生效 |
 | §3.0.4 目录树补全:加 `libs/`/`pipelines/` 实现层 + `spikes/`;服务目录命名改下划线 `_service`(Python 包约束);各目录标 ✅/⏳ 与建于哪个 Plan | §3.0.4(06-13) | 生效 |

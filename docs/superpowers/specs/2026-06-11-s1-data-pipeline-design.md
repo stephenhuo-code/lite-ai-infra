@@ -107,7 +107,7 @@ SDK(生成) ──┘        │
 
 | 层级 | 形态 | 时点 | 安全边界 |
 |---|---|---|---|
-| 1. 配方自定义 | API 请求体传 DJ `process` 算子列表(100+ 内置算子,配方是数据非代码) | **Plan 2/4 已支持**(`build_recipe(process=…)` 注入口) | 无代码执行,天然多租户安全 |
+| 1. 配方自定义 | API 请求体传 DJ `process` 算子列表(100+ 内置算子,配方是数据非代码) | **Plan 2 已支持**(`build_recipe(process=…)` 注入口;服务化暴露 = Plan 5) | 无代码执行,天然多租户安全 |
 | 2. BYO-Step 容器 | 用户代码打容器镜像,作为平台 DAG 中一步;平台定 IO 契约(挂载 jsonl/图片目录进出);跑在企业隔离 ns,只挂本组 raw/ | **S2a(配 Argo)**;`runner` 的 `dj_fn` seam 从 subprocess 换 Argo 提交即可 | 容器隔离 + ns 隔离 + 路径最小挂载;Lance 写入仍平台执行 |
 | 3. 自定义 DJ 算子 / 全自定义 DAG | 用户上传 Python 算子 / 自编排 DAG | **vN+**(需逐企业 Ray 集群、镜像扫描、配额硬限的沙箱方案) | 待设计;开发环境=Dev Workspace(S2c) |
 
@@ -136,15 +136,16 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 
 `契约(OpenAPI 3.1)→ datamodel-codegen 生成模型 → FastAPI app(模块级 app + /docs)→ 实现(包 libs/pipelines)→ 挂 gateway 后 → 漂移守卫(运行时 openapi.json ⊆ 契约,CI)`。
 
-### 9.3 重排后的计划序(取代原 Plan 3/4)
+### 9.3 计划序(编号 = 实际计划文档,owner 06-14 统一口径 A)
 
-| 计划 | 内容 | 出口 | Swagger |
+> 编号以 `docs/superpowers/plans/` 里**实际文档**为准(可数、文件名一致)。早先草拟的"5 个计划"序里 Plan 3(脚手架)+ Plan 4(identity-org)被**实际 Plan 3 文档合并交付**,故整体回退一位。
+
+| 计划(=实际文档) | 内容 | 出口 | 状态 |
 |---|---|---|---|
-| **Plan 3:服务脚手架 + 契约渲染** | 统一 FastAPI 模板(模块级 app + /docs 约定)+ `make api-docs`(渲染全部契约)+ 漂移守卫 CI;gateway 补 `/v1/jobs` 契约对齐(或移除示例路由) | swagger 能力(L1+2+3) | 内建 |
-| **Plan 4:identity-org-service** | `/v1/me/orgs` 从 gateway 迁出为独立服务(契约已存在,先行)+ gateway 改为路由到它 | 服务化① | 自带 |
-| **Plan 5:metadata-service ✅** | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成测试 | **出口② ✅** | 自带 |
-| **Plan 6:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(同步 submit→job_id + 查状态)+ 集成 | 服务化 | 自带 |
-| **Plan 7:生成式 SDK/CLI** | 由契约生成 client + `laictl data prepare/list/describe`(调服务 API,OIDC device flow) | **出口⑤** | — |
-| stretch | Dev Workspace docker 版 | ④降级 | — |
+| **Plan 3:服务脚手架 + identity-org-service + gateway 反代壳** | 统一 FastAPI 模板(/docs)+ `make api-docs` + 漂移守卫 CI;identity-org 从 gateway 迁出独立;gateway 改纯反代壳 | swagger 能力 + 服务化① | ✅ 已合并 |
+| **Plan 4:metadata-service** | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **出口②** | ✅ 已合并 |
+| **Plan 5:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id + 查状态)+ 集成 | 服务化 | ⏳ 下一个 |
+| **Plan 6:生成式 SDK/CLI** | 由契约生成 client + `laictl data prepare/list/describe`(调服务 API,OIDC device flow) | **出口⑤** | ⏳ |
+| stretch | Dev Workspace docker 版 | ④降级 | ⏳ |
 
-> 原 Plan 3(Gravitino 集成)并入 Plan 5;原 Plan 4(服务化+SDK)拆为 Plan 4/6/7。手写 CLI 留作 ops 后门(`pipelines/data_prep/__main__.py` 加注释标明非产品入口)。
+> 手写 CLI 留作 ops 后门(`pipelines/data_prep/__main__.py` 标注非产品入口);产品 CLI 由 Plan 6 契约生成。
