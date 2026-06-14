@@ -40,9 +40,9 @@
 <div class="lead"><b>一句话:</b>让 AI 高速产出,用<b>"隔离验证"</b>兜底正确性。AI 写得快、覆盖广,但<b>对自己的盲点不可见</b>;流程的价值不在让 AI 更聪明,而在每一步都有<b>独立于实现者</b>的闸门(契约、测试门禁、人工 runbook、独立 reviewer)。</div>
 
 <h2>1. 整体流程</h2>
-<p>两层:<b>项目级一次性</b>(brainstorm → 整体设计文档,含 sprint 分期与时间建议)+ <b>单 Sprint 开发循环</b>(每个 plan 重复,sprint 完进下一 sprint)。</p>
-<svg viewBox="0 0 780 720" width="100%" role="img" aria-label="AI 开发流程图(两层:项目级 + 单 sprint 循环)"
-     style="max-width:780px;display:block;margin:8px auto;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+<p>三层嵌套:<b>项目级</b>(一次性,出整体设计文档)→ <b>每个 Sprint</b>(出 2 周规划,拆成多个 plan)→ <b>每个 Plan</b>(③④⑤⑥ 循环)。</p>
+<svg viewBox="0 0 820 760" width="100%" role="img" aria-label="AI 开发流程图(三层:项目级 / Sprint / Plan)"
+     style="max-width:820px;display:block;margin:8px auto;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#2f6feb"/></marker>
@@ -50,55 +50,70 @@
       <path d="M0 0 L10 5 L0 10 z" fill="#b4541a"/></marker>
     <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#7a52c7"/></marker>
+    <marker id="arrT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#0d9488"/></marker>
   </defs>
 
   <!-- ===== 项目级(一次性)===== -->
-  <text x="40" y="16" font-size="12" font-weight="700" fill="#2f6feb">项目级 · 一次性</text>
-  <rect x="120" y="26" width="540" height="56" rx="10" fill="#eef3ff" stroke="#2f6feb"/>
-  <text x="140" y="50" font-size="15" font-weight="700" fill="#1a1f26">① brainstorming(整体)</text>
-  <text x="140" y="70" font-size="12.5" fill="#5b6573">意图 / 方案,先发散;关键技术选型 → 关键 ADR</text>
+  <text x="36" y="16" font-size="12" font-weight="700" fill="#2f6feb">项目级 · 一次性</text>
+  <rect x="150" y="24" width="520" height="52" rx="10" fill="#eef3ff" stroke="#2f6feb"/>
+  <text x="170" y="46" font-size="14.5" font-weight="700" fill="#1a1f26">① brainstorming(整体)</text>
+  <text x="170" y="65" font-size="12" fill="#5b6573">意图/方案,先发散;关键技术选型 → 关键 ADR</text>
 
-  <rect x="120" y="110" width="540" height="74" rx="10" fill="#eef3ff" stroke="#2f6feb"/>
-  <text x="140" y="134" font-size="15" font-weight="700" fill="#1a1f26">② 整体设计文档(产出)</text>
-  <text x="140" y="154" font-size="12.5" fill="#5b6573">整体 spec + 关键 ADR(架构/租户/授权…)</text>
-  <text x="140" y="172" font-size="12.5" fill="#5b6573"><tspan font-weight="700" fill="#b4541a">+ Sprint 分期建议 + 时间建议</tspan></text>
+  <rect x="150" y="100" width="520" height="68" rx="10" fill="#eef3ff" stroke="#2f6feb"/>
+  <text x="170" y="122" font-size="14.5" font-weight="700" fill="#1a1f26">② 整体设计文档(产出)</text>
+  <text x="170" y="141" font-size="12" fill="#5b6573">整体 spec + 关键 ADR(架构/租户/授权…)</text>
+  <text x="170" y="159" font-size="12" font-weight="700" fill="#b4541a">+ Sprint 分期建议 + 时间建议</text>
 
-  <line x1="390" y1="82"  x2="390" y2="110" stroke="#2f6feb" stroke-width="2" marker-end="url(#arr)"/>
-  <line x1="390" y1="184" x2="390" y2="214" stroke="#2f6feb" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="410" y1="76"  x2="410" y2="100" stroke="#2f6feb" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="410" y1="168" x2="410" y2="196" stroke="#2f6feb" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- ===== 单 Sprint 开发循环 ===== -->
-  <rect x="44" y="214" width="692" height="430" rx="14" fill="none" stroke="#7a52c7" stroke-width="1.5" stroke-dasharray="2 4"/>
-  <text x="60" y="234" font-size="12" font-weight="700" fill="#7a52c7">单 Sprint 开发循环 ↻(每个 plan 重复;sprint 完 → 下一 sprint)</text>
+  <!-- ===== Sprint 循环(外层)===== -->
+  <rect x="28" y="196" width="764" height="510" rx="16" fill="none" stroke="#0d9488" stroke-width="1.5" stroke-dasharray="2 4"/>
+  <text x="44" y="216" font-size="12" font-weight="700" fill="#0d9488">每个 Sprint ↻(2 周)</text>
 
-  <rect x="120" y="248" width="540" height="58" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
-  <text x="140" y="272" font-size="15" font-weight="700" fill="#1a1f26">③ writing-plans(本 sprint 的单个 plan)</text>
-  <text x="140" y="292" font-size="12.5" fill="#5b6573">任务级 checkbox · 每步 TDD · 必含 runbook · 未知依赖先探针 · 争议补 ADR</text>
+  <rect x="150" y="228" width="520" height="56" rx="10" fill="#e7faf7" stroke="#0d9488"/>
+  <text x="170" y="251" font-size="14.5" font-weight="700" fill="#0d6b63">③ Sprint 规划文档</text>
+  <text x="170" y="270" font-size="12" fill="#46776f">本 sprint 2 周开发计划 → 拆成多个 plan(有序)</text>
 
-  <rect x="120" y="332" width="540" height="58" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
-  <text x="140" y="356" font-size="15" font-weight="700" fill="#1a1f26">④ execute</text>
-  <text x="140" y="376" font-size="12.5" fill="#5b6573">交互 / headless · 实时勾选 · 全绿门禁才进下一步</text>
+  <line x1="410" y1="284" x2="410" y2="312" stroke="#0d9488" stroke-width="2" marker-end="url(#arrT)"/>
 
-  <rect x="120" y="416" width="540" height="58" rx="10" fill="#fff7ed" stroke="#b4541a" stroke-width="2"/>
-  <text x="140" y="440" font-size="15" font-weight="700" fill="#b4541a">⑤ 隔离审查 ★关键闸门</text>
-  <text x="140" y="460" font-size="12.5" fill="#7c4a1e">人跑 spec/runbook + 独立 reviewer(机器自评不算数)</text>
+  <!-- ===== Plan 循环(内层)===== -->
+  <rect x="60" y="312" width="700" height="350" rx="14" fill="none" stroke="#7a52c7" stroke-width="1.5" stroke-dasharray="2 4"/>
+  <text x="76" y="331" font-size="12" font-weight="700" fill="#7a52c7">每个 Plan ↻</text>
 
-  <rect x="120" y="500" width="540" height="58" rx="10" fill="#eafaf0" stroke="#1a7f4b"/>
-  <text x="140" y="524" font-size="15" font-weight="700" fill="#1a7f4b">⑥ 合并</text>
-  <text x="140" y="544" font-size="12.5" fill="#3a6b52">CI 绿 · owner 确认 · 回标 spec/计划 checkbox</text>
+  <rect x="150" y="342" width="520" height="52" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
+  <text x="170" y="363" font-size="14" font-weight="700" fill="#1a1f26">④ writing-plans(单个 plan)</text>
+  <text x="170" y="381" font-size="11.5" fill="#5b6573">任务级 checkbox · 每步 TDD · 必含 runbook · 未知先探针 · 争议补 ADR</text>
+
+  <rect x="150" y="414" width="520" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
+  <text x="170" y="434" font-size="14" font-weight="700" fill="#1a1f26">⑤ execute</text>
+  <text x="170" y="451" font-size="11.5" fill="#5b6573">交互 / headless · 实时勾选 · 全绿门禁才进下一步</text>
+
+  <rect x="150" y="482" width="520" height="52" rx="10" fill="#fff7ed" stroke="#b4541a" stroke-width="2"/>
+  <text x="170" y="503" font-size="14" font-weight="700" fill="#b4541a">⑥ 隔离审查 ★关键闸门</text>
+  <text x="170" y="521" font-size="11.5" fill="#7c4a1e">人跑 spec/runbook + 独立 reviewer(机器自评不算数)</text>
+
+  <rect x="150" y="554" width="520" height="48" rx="10" fill="#eafaf0" stroke="#1a7f4b"/>
+  <text x="170" y="574" font-size="14" font-weight="700" fill="#1a7f4b">⑦ 合并</text>
+  <text x="170" y="591" font-size="11.5" fill="#3a6b52">CI 绿 · owner 确认 · 回标 spec/计划 checkbox</text>
 
   <g stroke="#2f6feb" stroke-width="2" marker-end="url(#arr)">
-    <line x1="390" y1="306" x2="390" y2="332"/>
-    <line x1="390" y1="390" x2="390" y2="416"/>
-    <line x1="390" y1="474" x2="390" y2="500"/>
+    <line x1="410" y1="394" x2="410" y2="414"/>
+    <line x1="410" y1="462" x2="410" y2="482"/>
+    <line x1="410" y1="534" x2="410" y2="554"/>
   </g>
-  <!-- inner loop: 隔离审查 → execute(修 Critical/Important) -->
-  <path d="M660 445 H700 V361 H660" fill="none" stroke="#b4541a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrW)"/>
-  <text x="704" y="403" font-size="10.5" fill="#b4541a" transform="rotate(90 704 403)">Critical/Important → 修后重验</text>
-  <!-- outer loop: 合并 → 下一个 plan(回 ③) -->
-  <path d="M120 529 H80 V277 H120" fill="none" stroke="#7a52c7" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
-  <text x="76" y="403" font-size="10.5" fill="#7a52c7" transform="rotate(-90 76 403)" text-anchor="middle">下一个 plan / 下一 Sprint</text>
+  <!-- 内环:隔离审查 → execute(修 Critical/Important)-->
+  <path d="M670 508 H712 V438 H670" fill="none" stroke="#b4541a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrW)"/>
+  <text x="716" y="473" font-size="10" fill="#b4541a" transform="rotate(90 716 473)">C/I → 修后重验</text>
+  <!-- Plan 环:合并 → 下一个 plan(回 ④)-->
+  <path d="M150 578 H108 V368 H150" fill="none" stroke="#7a52c7" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
+  <text x="104" y="473" font-size="10" fill="#7a52c7" transform="rotate(-90 104 473)" text-anchor="middle">下一个 plan</text>
+  <!-- Sprint 环:plan 全完 → 下一 sprint(回 ③)-->
+  <path d="M150 628 H44 V256 H150" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrT)"/>
+  <text x="40" y="445" font-size="10" fill="#0d9488" transform="rotate(-90 40 445)" text-anchor="middle">plan 全完 → 下一 Sprint</text>
 
-  <text x="390" y="680" font-size="12.5" fill="#5b6573" text-anchor="middle">每个箭头都是一道闸 — 不跳步、不假绿(证据先于断言)</text>
+  <text x="410" y="734" font-size="12" fill="#5b6573" text-anchor="middle">每个箭头都是一道闸 — 不跳步、不假绿(证据先于断言)</text>
 </svg>
 
 <h2>2. 实战最大的一条:机器自评 ≠ 验证</h2>
