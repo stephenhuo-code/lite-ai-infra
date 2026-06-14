@@ -31,6 +31,7 @@ class PrepareRequest:
     secret_key: str
     session_token: str | None = None
     region: str = "cn-hangzhou"
+    process: list[dict] | None = None   # Layer 1 DJ 算子自定义;None → build_recipe 用默认集
 
 def _run_dj(recipe_path: str, log_path: str) -> int:
     """DJ 经外部 venv 子进程(spike 教训:Ray 禁瞬态 uv 环境)。DJ_BIN 指 dj-process。"""
@@ -66,7 +67,8 @@ def run_prepare(ctx: Context, req: PrepareRequest, audit: AuditWriter, *,
 
     n_in = convert_fn(req.tar_dir, str(jsonl_dir))
     recipe_path = work / "recipe.yaml"
-    recipe_path.write_text(build_recipe(str(jsonl_dir / "data.jsonl"), str(cleaned_dir), req.np))
+    recipe_path.write_text(build_recipe(str(jsonl_dir / "data.jsonl"), str(cleaned_dir), req.np,
+                                        process=req.process))
     rc = dj_fn(str(recipe_path), str(work / "dj.log"))
     if rc != 0:
         _audit(audit, ctx, req, "data.prepare.failed", "allow", f"dj exit={rc}")

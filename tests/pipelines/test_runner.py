@@ -46,3 +46,14 @@ def test_dj_failure_audited_and_raises(tmp_path):
     with pytest.raises(RuntimeError):
         run_prepare(ctx, _req(tmp_path), AuditWriter(sink), **fakes)
     assert any(json.loads(b)["action"] == "data.prepare.failed" for _, b in sink.items)
+
+def test_process_override_passed_to_recipe(tmp_path, monkeypatch):
+    seen = {}
+    import pipelines.data_prep.runner as R
+    monkeypatch.setattr(R, "build_recipe",
+                        lambda inp, out, np, process=None: seen.update(process=process) or "x: 1")
+    sink = MemoryAuditSink(); calls = []
+    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    req = _req(tmp_path, process=[{"text_length_filter": {"min_len": 9}}])
+    run_prepare(ctx, req, AuditWriter(sink), **_ok_fakes(calls))
+    assert seen["process"] == [{"text_length_filter": {"min_len": 9}}]
