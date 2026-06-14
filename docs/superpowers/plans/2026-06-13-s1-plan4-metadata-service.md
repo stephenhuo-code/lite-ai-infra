@@ -508,8 +508,8 @@ def test_lance_create_then_register(minio_bucket, gravitino_url, monkeypatch):
 
 - [x] **步骤 1:全量** `uv run pytest -q && uv run pytest -q -m integration && uv run lint-imports && bash scripts/ci_guards.sh && make gen && git diff --exit-code libs/contracts_gen/`
 - [x] **步骤 2:code review**(requesting-code-review,范围=本计划 commit)
-- [ ] **步骤 3:push → CI 绿 → 合并 main → 删分支**
-- [ ] **步骤 4:S1 spec §9.3 标 Plan 5(metadata)✅;主 spec S1 表出口② → ✅**
+- [x] **步骤 3:push → CI 绿 → 合并 main → 删分支**
+- [x] **步骤 4:S1 spec §9.3 标 Plan 5(metadata)✅;主 spec S1 表出口② → ✅**
 
 ---
 

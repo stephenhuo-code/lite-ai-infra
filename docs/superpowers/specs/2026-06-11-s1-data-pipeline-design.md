@@ -142,7 +142,7 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 |---|---|---|---|
 | **Plan 3:服务脚手架 + 契约渲染** | 统一 FastAPI 模板(模块级 app + /docs 约定)+ `make api-docs`(渲染全部契约)+ 漂移守卫 CI;gateway 补 `/v1/jobs` 契约对齐(或移除示例路由) | swagger 能力(L1+2+3) | 内建 |
 | **Plan 4:identity-org-service** | `/v1/me/orgs` 从 gateway 迁出为独立服务(契约已存在,先行)+ gateway 改为路由到它 | 服务化① | 自带 |
-| **Plan 5:metadata-service** | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成测试 | **出口②** | 自带 |
+| **Plan 5:metadata-service ✅** | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成测试 | **出口② ✅** | 自带 |
 | **Plan 6:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(同步 submit→job_id + 查状态)+ 集成 | 服务化 | 自带 |
 | **Plan 7:生成式 SDK/CLI** | 由契约生成 client + `laictl data prepare/list/describe`(调服务 API,OIDC device flow) | **出口⑤** | — |
 | stretch | Dev Workspace docker 版 | ④降级 | — |
