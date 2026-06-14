@@ -1,5 +1,7 @@
 # S1 Plan 3:服务脚手架 + Swagger 能力 + gateway 反代壳 + identity-org-service 抽取
 
+> **✅ 状态(2026-06-14 补勾对齐):全部任务已完成并合并,真·多进程微服务拓扑跑通(脚手架 + 漂移守卫 + gateway 反代 + identity-org 抽取)。** gateway 端口已就地修正为 **8090**(避让 Keycloak 8080)。代码见 `services/_scaffold/`、`services/identity_org_service/`、`services/gateway/`(commit 区间 `0f88683`→`23ebe96`)。下方 checkbox 为事后补勾(执行期未实时回写,违反 ADR-017,已知);文末"手动验收 runbook"为人工执行环节(ADR-015),非 checkbox。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 立起所有后续服务复用的脚手架(契约优先全循环 + Swagger 三层 + 漂移守卫),并用 identity-org-service 抽取 + gateway 反代壳验证它跑通真·多进程微服务形态。
@@ -19,7 +21,7 @@
 **Files:**
 - 创建:`services/_scaffold/__init__.py`、`services/_scaffold/app.py`、`tests/scaffold/__init__.py`、`tests/scaffold/test_app.py`
 
-- [ ] **步骤 1:写失败测试**
+- [x] **步骤 1:写失败测试**
 
 ```python
 # tests/scaffold/test_app.py
@@ -45,9 +47,9 @@ def test_request_id_generated_when_absent():
     assert len(r.headers["x-request-id"]) >= 8
 ```
 
-- [ ] **步骤 2:跑红** `uv run pytest tests/scaffold/test_app.py -q` → ModuleNotFoundError
+- [x] **步骤 2:跑红** `uv run pytest tests/scaffold/test_app.py -q` → ModuleNotFoundError
 
-- [ ] **步骤 3:实现**
+- [x] **步骤 3:实现**
 
 ```python
 # services/_scaffold/app.py
@@ -77,7 +79,7 @@ def make_service_app(title: str, version: str) -> FastAPI:
     return app
 ```
 
-- [ ] **步骤 4:跑绿** → 3 passed;**步骤 5:提交** `feat(scaffold): service app factory (/docs, /healthz, request-id)`
+- [x] **步骤 4:跑绿** → 3 passed;**步骤 5:提交** `feat(scaffold): service app factory (/docs, /healthz, request-id)`
 
 ---
 
@@ -87,7 +89,7 @@ def make_service_app(title: str, version: str) -> FastAPI:
 - 创建:`services/_scaffold/auth.py`、`tests/scaffold/test_auth.py`
 - 删除(迁移后):`services/gateway/deps.py` 的 `context_from_request`(Task 6 改 gateway 时清理)
 
-- [ ] **步骤 1:写失败测试**(沿用 gateway 现有 seam 行为:默认关、坏 JSON→401、无 token→401)
+- [x] **步骤 1:写失败测试**(沿用 gateway 现有 seam 行为:默认关、坏 JSON→401、无 token→401)
 
 ```python
 # tests/scaffold/test_auth.py
@@ -121,7 +123,7 @@ def test_no_bearer_401(monkeypatch):
     assert TestClient(_app()).get("/who").status_code == 401
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(把 `services/gateway/deps.py` 的逻辑原样迁来,保持 issuer/audience env 校验)
+- [x] **步骤 2:跑红**;**步骤 3:实现**(把 `services/gateway/deps.py` 的逻辑原样迁来,保持 issuer/audience env 校验)
 
 ```python
 # services/_scaffold/auth.py
@@ -151,7 +153,7 @@ def context_from_request(request: Request) -> Context:
     return parse_context(sub=claims["sub"], groups=claims.get("groups", []))
 ```
 
-- [ ] **步骤 4:跑绿** → 3 passed;**步骤 5:提交** `feat(scaffold): shared auth dependency (JWKS + test-claims seam, default-off)`
+- [x] **步骤 4:跑绿** → 3 passed;**步骤 5:提交** `feat(scaffold): shared auth dependency (JWKS + test-claims seam, default-off)`
 
 ---
 
@@ -161,7 +163,7 @@ def context_from_request(request: Request) -> Context:
 - 创建:`services/_scaffold/drift.py`、`tests/scaffold/test_drift.py`、`deploy/dev/swagger-ui.yml`
 - 修改:`Makefile`(`api-docs` 目标)
 
-- [ ] **步骤 1:写失败测试**(守卫:运行时 openapi 的 path+method 必须 ⊆ 契约)
+- [x] **步骤 1:写失败测试**(守卫:运行时 openapi 的 path+method 必须 ⊆ 契约)
 
 ```python
 # tests/scaffold/test_drift.py
@@ -184,7 +186,7 @@ def test_ignores_builtin_paths():
     assert_openapi_subset_of_contract(runtime, _CONTRACT)  # 内建路径豁免
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**
+- [x] **步骤 2:跑红**;**步骤 3:实现**
 
 ```python
 # services/_scaffold/drift.py
@@ -206,8 +208,8 @@ def assert_openapi_subset_of_contract(runtime: dict, contract: dict) -> None:
     assert not offenders, f"运行时路由未在契约声明: {offenders}"
 ```
 
-- [ ] **步骤 4:跑绿** → 3 passed
-- [ ] **步骤 5:`make api-docs`(Swagger L1:渲染全部契约,不依赖起服务)**
+- [x] **步骤 4:跑绿** → 3 passed
+- [x] **步骤 5:`make api-docs`(Swagger L1:渲染全部契约,不依赖起服务)**
 
 `deploy/dev/swagger-ui.yml`:
 ```yaml
@@ -226,7 +228,7 @@ api-docs:         ; docker compose -f deploy/dev/swagger-ui.yml up -d && echo "S
 ```
 (新增契约时在 `URLS` 加一行;Plan 4/5 各自补。)
 
-- [ ] **步骤 6:提交** `feat(scaffold): openapi drift guard + make api-docs (contract swagger)`
+- [x] **步骤 6:提交** `feat(scaffold): openapi drift guard + make api-docs (contract swagger)`
 
 ---
 
@@ -235,7 +237,7 @@ api-docs:         ; docker compose -f deploy/dev/swagger-ui.yml up -d && echo "S
 **Files:**
 - 创建:`services/identity_org_service/__init__.py`、`services/identity_org_service/app.py`、`services/identity_org_service/main.py`、`tests/services/identity_org/__init__.py`、`tests/services/identity_org/test_me_orgs.py`
 
-- [ ] **步骤 1:写失败测试**(/v1/me/orgs 行为 = 现 gateway 同款;seam 开启下)
+- [x] **步骤 1:写失败测试**(/v1/me/orgs 行为 = 现 gateway 同款;seam 开启下)
 
 ```python
 # tests/services/identity_org/test_me_orgs.py
@@ -266,7 +268,7 @@ def test_docs_available():
     assert _client().get("/docs").status_code == 200
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(用脚手架工厂 + 共享鉴权;模块级 `app`)
+- [x] **步骤 2:跑红**;**步骤 3:实现**(用脚手架工厂 + 共享鉴权;模块级 `app`)
 
 ```python
 # services/identity_org_service/app.py
@@ -289,8 +291,8 @@ def me_orgs(ctx: Context = Depends(context_from_request)):
 from services.identity_org_service.app import app  # noqa: F401(env 在进程注入)
 ```
 
-- [ ] **步骤 4:跑绿** → 3 passed
-- [ ] **步骤 5:漂移守卫接入此服务**(测试断言其 openapi ⊆ identity-org.yaml)
+- [x] **步骤 4:跑绿** → 3 passed
+- [x] **步骤 5:漂移守卫接入此服务**(测试断言其 openapi ⊆ identity-org.yaml)
 
 ```python
 # 追加到 tests/services/identity_org/test_me_orgs.py
@@ -304,7 +306,7 @@ def test_runtime_matches_contract():
 ```
 （若 `/healthz` 等触发,确认 drift 的 `_BUILTIN` 已豁免;此测试就是 L3 漂移守卫的活样例。）
 
-- [ ] **步骤 6:`make api-docs` 的 URLS 不变(契约同名);提交** `feat(identity-org-service): extract /v1/me/orgs onto scaffold (+drift guard)`
+- [x] **步骤 6:`make api-docs` 的 URLS 不变(契约同名);提交** `feat(identity-org-service): extract /v1/me/orgs onto scaffold (+drift guard)`
 
 ---
 
@@ -313,7 +315,7 @@ def test_runtime_matches_contract():
 **Files:**
 - 创建:`services/_scaffold/proxy.py`、`tests/scaffold/test_proxy.py`
 
-- [ ] **步骤 1:写失败测试**(stub 下游:一个 scaffold app;验证转发路径/方法/bearer/状态码透传)
+- [x] **步骤 1:写失败测试**(stub 下游:一个 scaffold app;验证转发路径/方法/bearer/状态码透传)
 
 ```python
 # tests/scaffold/test_proxy.py
@@ -342,7 +344,7 @@ def test_proxy_forwards_path_and_bearer():
     assert r.json()["path"] == "/v1/me/orgs"
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(httpx 转发;bearer 透传;状态码/响应体回传;`client_factory` 为测试 seam,生产默认真 httpx.Client)
+- [x] **步骤 2:跑红**;**步骤 3:实现**(httpx 转发;bearer 透传;状态码/响应体回传;`client_factory` 为测试 seam,生产默认真 httpx.Client)
 
 ```python
 # services/_scaffold/proxy.py
@@ -371,7 +373,7 @@ def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
 ```
 > 注:同步 body 读取在 v1 GET/查询足够;Plan 5 引入 POST 大 body 时改 async streaming(届时 plan 注明)。
 
-- [ ] **步骤 4:跑绿** → 1 passed;**步骤 5:提交** `feat(scaffold): reverse-proxy helper (bearer pass-through, injectable client)`
+- [x] **步骤 4:跑绿** → 1 passed;**步骤 5:提交** `feat(scaffold): reverse-proxy helper (bearer pass-through, injectable client)`
 
 ---
 
@@ -382,7 +384,7 @@ def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
 - 删除:`services/gateway/deps.py`(逻辑已迁 scaffold)、`services/gateway/app.py` 旧的 `/v1/jobs`+`/v1/me/orgs`+`_parse_job_ref`
 - 重写:`tests/gateway/test_gateway.py`(改为反代壳测试)
 
-- [ ] **步骤 1:写失败测试**(gateway 边缘验签 + 路由表转发;identity 路径代理到下游 stub)
+- [x] **步骤 1:写失败测试**(gateway 边缘验签 + 路由表转发;identity 路径代理到下游 stub)
 
 ```python
 # tests/gateway/test_gateway.py  (整体替换)
@@ -413,7 +415,7 @@ def test_gateway_unknown_route_404():
     assert TestClient(_gw()).get("/v1/nope").status_code == 404
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(gateway = scaffold app + 按路由表挂反代;真启动从 env 读下游 URL)
+- [x] **步骤 2:跑红**;**步骤 3:实现**(gateway = scaffold app + 按路由表挂反代;真启动从 env 读下游 URL)
 
 ```python
 # services/gateway/app.py  (整体替换)
@@ -443,10 +445,10 @@ app = build_gateway(routes={
 })
 ```
 
-- [ ] **步骤 4:跑绿** → 3 passed;`rm services/gateway/deps.py`
-- [ ] **步骤 5:全量 + 分层 + 护栏** `uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿
+- [x] **步骤 4:跑绿** → 3 passed;`rm services/gateway/deps.py`
+- [x] **步骤 5:全量 + 分层 + 护栏** `uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿
   - 注:原 `test_addressing_style_*`/`oss_boto3_config` 测试在 gateway 测试文件里——迁到 `tests/audit/`(它们测的是 `libs/audit`,本就该在那)。
-- [ ] **步骤 6:提交** `refactor(gateway): reverse-proxy shell (remove demo routes, deps→scaffold)`
+- [x] **步骤 6:提交** `refactor(gateway): reverse-proxy shell (remove demo routes, deps→scaffold)`
 
 ---
 
@@ -455,7 +457,7 @@ app = build_gateway(routes={
 **Files:**
 - 修改:`Makefile`(`run-all` / `run-gateway` / `run-identity`)、`README.md`(§微服务本地运行)
 
-- [ ] **步骤 1:Makefile 目标**
+- [x] **步骤 1:Makefile 目标**
 
 ```make
 run-identity:     ; LITEAI_JWKS_URL=$(JWKS) uv run uvicorn services.identity_org_service.main:app --port 8001 --reload
@@ -464,8 +466,8 @@ run-all:          ; @echo "起 Keycloak: make dev-up; 然后另开终端分别 m
 ```
 （v1 不引入 Procfile/honcho;`run-all` 给指引,各服务各终端起,日志清晰。Plan 4/5 追加 run-metadata/run-data-pipeline。）
 
-- [ ] **步骤 2:README 增"§ 微服务本地运行"**:端口表(gateway 8080 / identity 8001 / metadata 8002 / data-pipeline 8003)、`make dev-up` + 各 `make run-*`、`make api-docs` 看契约、各服务 `http://localhost:<port>/docs` 看运行时。
-- [ ] **步骤 3:手动验证(真·两进程端到端)** —— 终端 A `make dev-up`;B `make run-identity`;C `make run-gateway`;然后:
+- [x] **步骤 2:README 增"§ 微服务本地运行"**:端口表(gateway 8080 / identity 8001 / metadata 8002 / data-pipeline 8003)、`make dev-up` + 各 `make run-*`、`make api-docs` 看契约、各服务 `http://localhost:<port>/docs` 看运行时。
+- [x] **步骤 3:手动验证(真·两进程端到端)** —— 终端 A `make dev-up`;B `make run-identity`;C `make run-gateway`;然后:
   ```bash
   TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret -d username=alice -d password=alice \
     -d grant_type=password http://localhost:8080/realms/lite-ai/protocol/openid-connect/token | \
@@ -474,7 +476,7 @@ run-all:          ; @echo "起 Keycloak: make dev-up; 然后另开终端分别 m
   # 期望:经 gateway(8080)反代到 identity-org(8001)→ 返回 alice 的 memberships
   ```
   > **端口冲突修正**:Keycloak 占 8080,gateway 也想要 8080 → 本计划把 **gateway 改 8090**(env `GATEWAY_PORT`),README 端口表同步。dev Keycloak 维持 8080。
-- [ ] **步骤 4:提交** `feat(dev): make run-* multi-process orchestration + README service ports`
+- [x] **步骤 4:提交** `feat(dev): make run-* multi-process orchestration + README service ports`
 
 ---
 
@@ -484,7 +486,7 @@ run-all:          ; @echo "起 Keycloak: make dev-up; 然后另开终端分别 m
 - 修改:`.github/workflows/ci.yml`(build job 已含 pytest,确认 scaffold/services 测试被收集)
 - 创建:`tests/integration/test_gateway_proxy.py`(真起 identity-org 子进程 + gateway 代理,或 ASGI 双 app 串联)
 
-- [ ] **步骤 1:集成测试**(标 `integration`;ASGI 串联两 app,验证 gateway→identity 全链路 + 漂移守卫双服务）
+- [x] **步骤 1:集成测试**(标 `integration`;ASGI 串联两 app,验证 gateway→identity 全链路 + 漂移守卫双服务）
 
 ```python
 # tests/integration/test_gateway_proxy.py
@@ -504,8 +506,8 @@ def test_gateway_to_identity_end_to_end(monkeypatch):
 ```
 > 说明:此测试用 ASGI 串联(非真两进程)以在 CI 稳定运行;真·两进程端到端属 Task 7 步骤 3 的本地手动验收。
 
-- [ ] **步骤 2:跑** `uv run pytest -q -m integration`(需 `make dev-up`?本测试用 seam+ASGI,无需真 KC/MinIO,可纯 CI)→ 绿
-- [ ] **步骤 3:确认 build job 收集 scaffold/services 测试;提交** `test(ci): gateway↔identity proxy e2e + drift guards`
+- [x] **步骤 2:跑** `uv run pytest -q -m integration`(需 `make dev-up`?本测试用 seam+ASGI,无需真 KC/MinIO,可纯 CI)→ 绿
+- [x] **步骤 3:确认 build job 收集 scaffold/services 测试;提交** `test(ci): gateway↔identity proxy e2e + drift guards`
 
 ---
 

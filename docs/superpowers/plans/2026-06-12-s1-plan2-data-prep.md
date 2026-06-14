@@ -1,5 +1,7 @@
 # S1 Plan 2:pipelines/data_prep(一行命令:图文 tar → 清洗 → Lance on OSS)实现计划
 
+> **✅ 状态(2026-06-14 补勾对齐):全部任务已完成并合并,S1 出口① 已验收。** 云上端到端真跑产出 `rows_in=15138`(CC3M 1.39GB),清洗后 Lance 数据集已落 OSS 企业/组隔离路径,入口经 `can()` + 审计。代码见 `pipelines/data_prep/`(commit 区间 `e1554da`→`0efcc09`);出口① 状态见主 spec §5.3 与 `docs/adr/ADR-014-...`。下方 checkbox 为事后补勾(执行期未实时回写,违反 ADR-017,已知)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 交付 S1 出口①的生产形态:一行命令把 webdataset tar 经 Data-Juicer+Ray 清洗后写成 OSS 上的 Lance 数据集(企业/组隔离路径),入口经 `can()` + 审计。
@@ -18,7 +20,7 @@
 - 创建:`pipelines/__init__.py`、`pipelines/data_prep/__init__.py`
 - 修改:`.importlinter`(三层契约)、`pyproject.toml`(dev 依赖加 `pylance>=0.18`)
 
-- [ ] **步骤 1:建包 + 改 `.importlinter`**
+- [x] **步骤 1:建包 + 改 `.importlinter`**
 
 ```ini
 [importlinter]
@@ -33,11 +35,11 @@ layers =
     libs
 ```
 
-- [ ] **步骤 2:`pyproject.toml` 的 `[project.optional-dependencies].dev` 追加 `"pylance>=0.18"`,跑 `uv lock && make sync`**
+- [x] **步骤 2:`pyproject.toml` 的 `[project.optional-dependencies].dev` 追加 `"pylance>=0.18"`,跑 `uv lock && make sync`**
 
-- [ ] **步骤 3:验证** —— `uv run lint-imports` 期望 `1 kept, 0 broken`;`uv run pytest -q` 全绿(无回归)。
+- [x] **步骤 3:验证** —— `uv run lint-imports` 期望 `1 kept, 0 broken`;`uv run pytest -q` 全绿(无回归)。
 
-- [ ] **步骤 4:提交** `git commit -m "feat(pipelines): add pipelines layer (services→pipelines→libs)"`
+- [x] **步骤 4:提交** `git commit -m "feat(pipelines): add pipelines layer (services→pipelines→libs)"`
 
 ---
 
@@ -46,7 +48,7 @@ layers =
 **Files:**
 - 创建:`pipelines/data_prep/paths.py`、`tests/pipelines/__init__.py`、`tests/pipelines/test_paths.py`
 
-- [ ] **步骤 1:写失败测试**
+- [x] **步骤 1:写失败测试**
 
 ```python
 # tests/pipelines/test_paths.py
@@ -69,9 +71,9 @@ def test_dataset_name_validated():
         DatasetPaths(bucket="b", enterprise_id=E, group_id=G, dataset="a/../b")
 ```
 
-- [ ] **步骤 2:跑红** `uv run pytest tests/pipelines/test_paths.py -q` → ModuleNotFoundError
+- [x] **步骤 2:跑红** `uv run pytest tests/pipelines/test_paths.py -q` → ModuleNotFoundError
 
-- [ ] **步骤 3:最小实现**
+- [x] **步骤 3:最小实现**
 
 ```python
 # pipelines/data_prep/paths.py
@@ -111,7 +113,7 @@ class DatasetPaths:
         return f"s3://{self.bucket}/{self._base}/processed/{self.dataset}.lance"
 ```
 
-- [ ] **步骤 4:跑绿** → 2 passed;**步骤 5:提交** `feat(pipelines): isolated dataset paths (opaque IDs only)`
+- [x] **步骤 4:跑绿** → 2 passed;**步骤 5:提交** `feat(pipelines): isolated dataset paths (opaque IDs only)`
 
 ---
 
@@ -120,7 +122,7 @@ class DatasetPaths:
 **Files:**
 - 创建:`pipelines/data_prep/recipe.py`、`tests/pipelines/test_recipe.py`
 
-- [ ] **步骤 1:写失败测试**
+- [x] **步骤 1:写失败测试**
 
 ```python
 # tests/pipelines/test_recipe.py
@@ -141,9 +143,9 @@ def test_recipe_custom_ops_override():
     assert r["process"] == [{"text_length_filter": {"min_len": 1}}]
 ```
 
-- [ ] **步骤 2:跑红**(需 dev 依赖 `pyyaml`;若缺:dev 加 `"pyyaml>=6"` 并 `uv lock && make sync`)
+- [x] **步骤 2:跑红**(需 dev 依赖 `pyyaml`;若缺:dev 加 `"pyyaml>=6"` 并 `uv lock && make sync`)
 
-- [ ] **步骤 3:最小实现**
+- [x] **步骤 3:最小实现**
 
 ```python
 # pipelines/data_prep/recipe.py
@@ -174,7 +176,7 @@ def build_recipe(input_jsonl: str, out_dir: str, np: int,
     return yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False)
 ```
 
-- [ ] **步骤 4:跑绿** → 2 passed;**步骤 5:提交** `feat(pipelines): DJ recipe builder with spike-validated defaults`
+- [x] **步骤 4:跑绿** → 2 passed;**步骤 5:提交** `feat(pipelines): DJ recipe builder with spike-validated defaults`
 
 ---
 
@@ -183,7 +185,7 @@ def build_recipe(input_jsonl: str, out_dir: str, np: int,
 **Files:**
 - 创建:`pipelines/data_prep/ingest.py`、`tests/pipelines/test_ingest.py`
 
-- [ ] **步骤 1:写失败测试**(用 tmp_path 构造 2 配对 + 1 孤图的小 tar;断言 2 行、孤图丢弃、jsonl 含绝对路径)
+- [x] **步骤 1:写失败测试**(用 tmp_path 构造 2 配对 + 1 孤图的小 tar;断言 2 行、孤图丢弃、jsonl 含绝对路径)
 
 ```python
 # tests/pipelines/test_ingest.py
@@ -211,9 +213,9 @@ def test_wds_to_jsonl_pairs_and_drops_orphans(tmp_path):
     assert rows[0]["images"][0].startswith("/")
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现** —— 把 `spikes/datajuicer_ray/wds_to_jsonl.py` 的 `convert()` 迁为 `pipelines/data_prep/ingest.py::wds_to_jsonl(tar_dir, out_dir) -> int`(逻辑同源:配对 .jpg/.jpeg/.png/.webp 与 .txt、孤图丢弃;函数化、无 `__main__`)。spike 文件保留但头部加注释"生产版在 pipelines/data_prep/ingest.py"。
+- [x] **步骤 2:跑红**;**步骤 3:实现** —— 把 `spikes/datajuicer_ray/wds_to_jsonl.py` 的 `convert()` 迁为 `pipelines/data_prep/ingest.py::wds_to_jsonl(tar_dir, out_dir) -> int`(逻辑同源:配对 .jpg/.jpeg/.png/.webp 与 .txt、孤图丢弃;函数化、无 `__main__`)。spike 文件保留但头部加注释"生产版在 pipelines/data_prep/ingest.py"。
 
-- [ ] **步骤 4:跑绿**;**步骤 5:提交** `feat(pipelines): productionize wds->jsonl ingest`
+- [x] **步骤 4:跑绿**;**步骤 5:提交** `feat(pipelines): productionize wds->jsonl ingest`
 
 ---
 
@@ -222,7 +224,7 @@ def test_wds_to_jsonl_pairs_and_drops_orphans(tmp_path):
 **Files:**
 - 创建:`pipelines/data_prep/lance_writer.py`、`tests/pipelines/test_lance_writer.py`、`tests/integration/test_lance_minio.py`
 
-- [ ] **步骤 1:写失败单测**(storage options 构造——Spike 1 三条约束的固化)
+- [x] **步骤 1:写失败单测**(storage options 构造——Spike 1 三条约束的固化)
 
 ```python
 # tests/pipelines/test_lance_writer.py
@@ -248,7 +250,7 @@ def test_oss_needs_commit_lock():
     assert needs_commit_lock("http://localhost:9000") is False
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**
+- [x] **步骤 2:跑红**;**步骤 3:实现**
 
 ```python
 # pipelines/data_prep/lance_writer.py
@@ -305,7 +307,7 @@ def write_cleaned_to_lance(cleaned_dir: str, uri: str, storage_options: dict,
     return len(rows)
 ```
 
-- [ ] **步骤 4:跑绿(单测)**;**步骤 5:写集成测试(真 MinIO)**
+- [x] **步骤 4:跑绿(单测)**;**步骤 5:写集成测试(真 MinIO)**
 
 ```python
 # tests/integration/test_lance_minio.py
@@ -327,8 +329,8 @@ def test_write_and_read_lance_on_minio(minio_s3, minio_bucket, tmp_path):
     assert ds.to_table(columns=["text"]).num_rows == 10
 ```
 
-- [ ] **步骤 6:`make dev-up` 后跑** `uv run pytest -q -m integration` → 全部集成绿(原 2 + 新 1)
-- [ ] **步骤 7:提交** `feat(pipelines): lance writer with spike-1 constraints baked in`
+- [x] **步骤 6:`make dev-up` 后跑** `uv run pytest -q -m integration` → 全部集成绿(原 2 + 新 1)
+- [x] **步骤 7:提交** `feat(pipelines): lance writer with spike-1 constraints baked in`
 
 ---
 
@@ -337,7 +339,7 @@ def test_write_and_read_lance_on_minio(minio_s3, minio_bucket, tmp_path):
 **Files:**
 - 创建:`pipelines/data_prep/runner.py`、`tests/pipelines/test_runner.py`
 
-- [ ] **步骤 1:写失败测试**(DJ 子进程与 Lance 写用 seam 注入 fake;授权/审计走真实现)
+- [x] **步骤 1:写失败测试**(DJ 子进程与 Lance 写用 seam 注入 fake;授权/审计走真实现)
 
 ```python
 # tests/pipelines/test_runner.py
@@ -390,7 +392,7 @@ def test_dj_failure_audited_and_raises(tmp_path):
     assert any(json.loads(b)["action"] == "data.prepare.failed" for _, b in sink.items)
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**
+- [x] **步骤 2:跑红**;**步骤 3:实现**
 
 ```python
 # pipelines/data_prep/runner.py
@@ -471,8 +473,8 @@ def run_prepare(ctx: Context, req: PrepareRequest, audit: AuditWriter, *,
     return {"rows_in": n_in, "rows_written": n_out, "lance_uri": paths.processed_uri}
 ```
 
-- [ ] **步骤 4:跑绿** → 3 passed;**步骤 5:全量** `uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿
-- [ ] **步骤 6:提交** `feat(pipelines): run_prepare orchestrator — can() chokepoint + audit + staged seams`
+- [x] **步骤 4:跑绿** → 3 passed;**步骤 5:全量** `uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿
+- [x] **步骤 6:提交** `feat(pipelines): run_prepare orchestrator — can() chokepoint + audit + staged seams`
 
 ---
 
@@ -482,7 +484,7 @@ def run_prepare(ctx: Context, req: PrepareRequest, audit: AuditWriter, *,
 - 创建:`pipelines/data_prep/__main__.py`
 - 修改:`Makefile`(`data-prep` 目标)、`README.md`(§新增"数据准备一行命令")
 
-- [ ] **步骤 1:写 `__main__.py`**(argparse → env 取凭据 → x-test-claims 同款 Context 来源:`LITEAI_GROUPS` env 仅 CLI 本地态;真服务化在 Plan 4 经 gateway)
+- [x] **步骤 1:写 `__main__.py`**(argparse → env 取凭据 → x-test-claims 同款 Context 来源:`LITEAI_GROUPS` env 仅 CLI 本地态;真服务化在 Plan 4 经 gateway)
 
 ```python
 # pipelines/data_prep/__main__.py
@@ -531,12 +533,12 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **步骤 2:Makefile 加** `data-prep: ; uv run python -m pipelines.data_prep $(ARGS)`
-- [ ] **步骤 3:手动验证(本地 MinIO,fake DJ)** —— `DJ_BIN=true`(系统 /usr/bin/true 模拟 DJ 成功,但 cleaned 为空会报 no rows,故先手放一个 part 文件)或直接以**集成路径**验:`make dev-up` 后用 tests/integration 全绿代替人工;**真 DJ 端到端属云上验收(下一步骤)**。
-- [ ] **步骤 4:云上端到端(实例已有 dj-venv + 数据)** —— 开机 → 云助手跑:
+- [x] **步骤 2:Makefile 加** `data-prep: ; uv run python -m pipelines.data_prep $(ARGS)`
+- [x] **步骤 3:手动验证(本地 MinIO,fake DJ)** —— `DJ_BIN=true`(系统 /usr/bin/true 模拟 DJ 成功,但 cleaned 为空会报 no rows,故先手放一个 part 文件)或直接以**集成路径**验:`make dev-up` 后用 tests/integration 全绿代替人工;**真 DJ 端到端属云上验收(下一步骤)**。
+- [x] **步骤 4:云上端到端(实例已有 dj-venv + 数据)** —— 开机 → 云助手跑:
   `DJ_BIN=/opt/dj-venv/bin/dj-process OSS_ENDPOINT=…-internal… DATA_BUCKET=lite-ai-data-… AUDIT_BUCKET=lite-ai-audit-… python -m pipelines.data_prep --tar-dir /data/raw/cc3m --dataset cc3m`
   期望:打印 `{"rows_in":15138,"rows_written":…,"lance_uri":"s3://…/e-0001/g-0001/processed/cc3m.lance"}`;审计桶出现 `data.prepare` 事件。**这就是 S1 出口① 的正式验收证据。**
-- [ ] **步骤 5:README 增"§ 数据准备"**(命令 + env 表);**步骤 6:提交** `feat(pipelines): one-command data prep entry`
+- [x] **步骤 5:README 增"§ 数据准备"**(命令 + env 表);**步骤 6:提交** `feat(pipelines): one-command data prep entry`
 
 ---
 
