@@ -149,7 +149,9 @@
   <!-- ④ runbook -->
   <rect x="120" y="240" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
   <text x="140" y="260" font-size="14" font-weight="700" fill="#1a1f26">④ 必含手动验收 runbook</text>
-  <text x="140" y="277" font-size="11.5" fill="#5b6573">可照抄命令 + 期望证据;无 runbook 不算完成</text>
+  <text x="140" y="277" font-size="11.5" fill="#5b6573">可照抄命令 + 期望证据;§4 由人照跑验收</text>
+  <rect x="418" y="246" width="66" height="18" rx="9" fill="#eef3ff" stroke="#2f6feb"/>
+  <text x="451" y="258.5" font-size="9.5" fill="#2f6feb" text-anchor="middle" font-weight="700">⚙ AI 生成</text>
 
   <!-- ⑤ ADR -->
   <rect x="120" y="308" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
@@ -161,9 +163,8 @@
   <text x="140" y="396" font-size="14" font-weight="700" fill="#1a7f4b">⑥ 全绿门禁</text>
   <text x="140" y="413" font-size="11.5" fill="#3a6b52">测试 / lint / 构建全绿才进下一步</text>
 
-  <!-- 人参与徽标:①探查研判 / ④runbook验收 / ⑤ADR拍板 -->
+  <!-- 人参与徽标:①探查研判 / ⑤ADR拍板(④runbook 由 AI 生成,见 ④ 的标)-->
   <circle cx="478" cy="40" r="11" fill="#7a52c7"/><text x="478" y="44" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
-  <circle cx="478" cy="264" r="11" fill="#7a52c7"/><text x="478" y="268" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
   <circle cx="478" cy="332" r="11" fill="#7a52c7"/><text x="478" y="336" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
 
   <g stroke="#2f6feb" stroke-width="2" marker-end="url(#wparr)">
@@ -185,16 +186,15 @@
   <li><b>探查结果研判</b>(对应 ①):探针跑完,由人确认事实文档(真实端点/字段/坑)可信、足以支撑写计划——不让 AI 拿不确信的"实测"就开写。</li>
   <li><b>争议设计拍板 → ADR</b>(对应 ⑤):地基级 / 有争议的设计由<b>人</b>决策并落 ADR,不让 AI 自决。</li>
   <li><b>计划评审批准</b>(进入执行前):计划成稿后人逐项对 spec 审——覆盖完整、拆分粒度合适、无占位符、runbook 可照抄跑;批准后才进入执行。</li>
-  <li><b>手动验收 runbook</b>(对应 ④):计划里的验收 runbook 最终必须由<b>人照着跑</b>并核对每步证据——机器自评不算(§4 的边界 bug 就是人跑 runbook 才逮到)。</li>
 </ol>
-<p style="margin:10px 0 0">其余步骤——<b>② checkbox 拆分、③ 每步 TDD、⑥ 全绿门禁</b>——确定性高,可 headless 无人值守执行。</p>
+<p style="margin:10px 0 0">其余步骤——<b>② 拆分、③ 每步 TDD、④ 生成 runbook、⑥ 全绿门禁</b>——确定性高,可由 AI / headless 无人值守完成。<b>④ 的 runbook 是写计划时由 AI 生成的产物(不需人参与);它"由人照着跑验收"发生在 §4 隔离审查,不在本阶段。</b></p>
 </div>
 
 <ul>
   <li><b>① 探查优先(写计划之前):</b>不把猜的 API 写进计划。未知外部依赖先起真服务、跑通最小链路,把真实端点/字段/响应/坑记成事实文档,后续实现<b>以实测为准</b>。实战中探针常当场逮到外部系统的鉴权/寻址坑——等集成阶段才撞,排查成本翻倍。</li>
   <li><b>② 任务级 checkbox 拆分:</b>每个任务/步骤 <code>- [ ]</code>,粒度到"可单独勾选/验证"(bite-sized:写测试 / 跑红 / 实现 / 跑绿 / 提交 各一步)。</li>
   <li><b>③ 每步 TDD:</b>先写测试(红)→ 最小实现(绿)→ 重构;无测试不合并。</li>
-  <li><b>④ 必含手动验收 runbook:</b>可照抄的命令序列 + 每步期望证据,让人不读代码也能复现验收。<b>无 runbook 的计划不算完成</b>(§4 的人工验收靠它)。</li>
+  <li><b>④ 必含手动验收 runbook:</b>可照抄的命令序列 + 每步期望证据,让人不读代码也能复现验收。<b>由 AI 在写计划时生成</b>(不需人参与);<b>无 runbook 的计划不算完成</b>,§4 再由人照着跑做验收。</li>
   <li><b>⑤ 有争议的设计 → 落 ADR:</b>正文永远是最新版,决策理由与历史进 ADR + git。</li>
   <li><b>⑥ 全绿门禁:</b>每个任务结束跑项目的测试/lint/构建全绿才进下一步;失败先系统化调试定位根因,不打补丁猜。</li>
   <li><b>贯穿全程 · 实时更新状态:</b>每完成一步即勾 <code>- [x]</code> + 同步任务跟踪(in_progress/completed)——进度随时可见、可中断可续;<b>不做完一批才补勾</b>(无人值守跑完忘回填是典型反例)。</li>
