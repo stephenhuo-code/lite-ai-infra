@@ -1,0 +1,45 @@
+openapi: 3.1.0
+info: {title: data-pipeline, version: 0.1.0}
+paths:
+  /v1/data/prepare:
+    post:
+      summary: 提交数据准备作业(异步;立即返回 job,不阻塞)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PrepareJobRequest'}}}}
+      responses:
+        '202': {description: accepted, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+        '401': {description: unauthenticated}
+        '403': {description: forbidden}
+  /v1/data/jobs/{job_id}:
+    get:
+      parameters: [{name: job_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: job, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
+        '403': {description: forbidden}
+        '404': {description: not found}
+components:
+  schemas:
+    PrepareJobRequest:
+      type: object
+      required: [dataset, group_id, tar_dir]
+      properties:
+        dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
+        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
+        tar_dir: {type: string}                       # S1: 管线宿主机 ops 路径(ADR-018);S2a 改 OSS raw 引用
+        np: {type: [integer, 'null'], minimum: 1}
+        process: {type: [array, 'null'], items: {type: object}}   # Layer 1 DJ 算子(spec §8;build_recipe(process=…))
+    Job:
+      type: object
+      required: [id, status, terminal, dataset, group_id, enterprise_id]
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [queued, running, succeeded, failed]}
+        terminal: {type: boolean}     # 派生:status∈{succeeded,failed}。客户端按此判终态(ADR-018 不变量 4;S2a 加新终态如 cancelled 不破坏轮询)
+        dataset: {type: string}
+        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
+        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        rows_in: {type: [integer, 'null']}
+        rows_written: {type: [integer, 'null']}
+        lance_uri: {type: [string, 'null']}
+        error: {type: [string, 'null']}
+        created_at: {type: [string, 'null']}
+        updated_at: {type: [string, 'null']}
