@@ -25,7 +25,7 @@
 
 **Files:** 创建 `deploy/dev/gravitino.yml`、`spikes/gravitino_probe/probe.sh`、`spikes/gravitino_probe/RESULTS.md`
 
-- [ ] **步骤 1:Gravitino compose**(端口避让:Gravitino server 默认 8090 撞 gateway → 宿主用 **8091**)
+- [x] **步骤 1:Gravitino compose**(端口避让:Gravitino server 默认 8090 撞 gateway → 宿主用 **8091**)
 
 ```yaml
 # deploy/dev/gravitino.yml
@@ -42,7 +42,7 @@ networks:
     name: dev_default
 ```
 
-- [ ] **步骤 2:探针脚本(curl 实测,含 list)**
+- [x] **步骤 2:探针脚本(curl 实测,含 list)**
 
 ```bash
 # spikes/gravitino_probe/probe.sh
@@ -64,9 +64,9 @@ curl -fsS "$G/api/metalakes/$ML/catalogs/data/schemas/datasets/filesets"    # �
 curl -fsS "$G/api/metalakes/$ML/catalogs/data/schemas/datasets/filesets/cc3m"  # get(看 audit/comment 字段)
 ```
 
-- [ ] **步骤 3:起依赖跑探针** `make dev-up && docker compose -f deploy/dev/gravitino.yml up -d && sleep 20 && bash spikes/gravitino_probe/probe.sh`。catalog 创建若缺 s3 bundle 失败 → 记 RESULTS,换带 bundle 镜像或挂 jar。
-- [ ] **步骤 4:写 RESULTS.md** —— 记:镜像版本、各 list/get 的**响应包络键名**(`identifiers`/`names`/`catalogs`/`fileset`…)、**fileset 对象字段**(确认 `comment`、`audit.createTime`、`audit.creator`、`storageLocation`、`properties`)、s3 bundle 处理、网络接法。**后续 client 按此写。**
-- [ ] **步骤 5:提交** `feat(spike): gravitino dev probe — pin REST/object shape for fileset catalog on MinIO`
+- [x] **步骤 3:起依赖跑探针** `make dev-up && docker compose -f deploy/dev/gravitino.yml up -d && sleep 20 && bash spikes/gravitino_probe/probe.sh`。catalog 创建若缺 s3 bundle 失败 → 记 RESULTS,换带 bundle 镜像或挂 jar。
+- [x] **步骤 4:写 RESULTS.md** —— 记:镜像版本、各 list/get 的**响应包络键名**(`identifiers`/`names`/`catalogs`/`fileset`…)、**fileset 对象字段**(确认 `comment`、`audit.createTime`、`audit.creator`、`storageLocation`、`properties`)、s3 bundle 处理、网络接法。**后续 client 按此写。**
+- [x] **步骤 5:提交** `feat(spike): gravitino dev probe — pin REST/object shape for fileset catalog on MinIO`
 
 ---
 
@@ -74,7 +74,7 @@ curl -fsS "$G/api/metalakes/$ML/catalogs/data/schemas/datasets/filesets/cc3m"  #
 
 **Files:** 创建 `contracts/openapi/metadata.yaml`;改 `Makefile`(gen 加 metadata)
 
-- [ ] **步骤 1:写契约**(层级对齐 Gravitino;metalake 不进路径;Dataset enrich)
+- [x] **步骤 1:写契约**(层级对齐 Gravitino;metalake 不进路径;Dataset enrich)
 
 ```yaml
 openapi: 3.1.0
@@ -147,9 +147,9 @@ components:
         comment: {type: [string, 'null']}
 ```
 
-- [ ] **步骤 2:Makefile `gen` 追加 metadata 模型**(同 identity 套路,`--output libs/contracts_gen/metadata_models.py`)
-- [ ] **步骤 3:`make gen && uv run python -c "from libs.contracts_gen.metadata_models import Dataset, RegisterDataset, NameList"`** 无报错
-- [ ] **步骤 4:提交** `feat(contracts): metadata.yaml — hierarchical catalogs/schemas/datasets, enriched Dataset`
+- [x] **步骤 2:Makefile `gen` 追加 metadata 模型**(同 identity 套路,`--output libs/contracts_gen/metadata_models.py`)
+- [x] **步骤 3:`make gen && uv run python -c "from libs.contracts_gen.metadata_models import Dataset, RegisterDataset, NameList"`** 无报错
+- [x] **步骤 4:提交** `feat(contracts): metadata.yaml — hierarchical catalogs/schemas/datasets, enriched Dataset`
 
 ---
 
@@ -159,7 +159,7 @@ components:
 
 > 字段/包络按 Task 1 RESULTS 写。下方用研究形态,差异按实测改。
 
-- [ ] **步骤 1:写失败测试**(httpx.MockTransport 注入)
+- [x] **步骤 1:写失败测试**(httpx.MockTransport 注入)
 
 ```python
 # tests/services/metadata/test_gravitino_client.py
@@ -199,7 +199,7 @@ def test_create_fileset_external_with_props():
     assert seen["b"]["type"] == "EXTERNAL" and seen["b"]["properties"]["owner_group"] == "g-0001"
 ```
 
-- [ ] **步骤 2:跑红;步骤 3:实现**(`_names` 解析包络键名按 Task 1 确认,这里设 `identifiers[].name`)
+- [x] **步骤 2:跑红;步骤 3:实现**(`_names` 解析包络键名按 Task 1 确认,这里设 `identifiers[].name`)
 
 ```python
 # services/metadata_service/gravitino.py
@@ -244,7 +244,7 @@ class GravitinoClient:
     # ensure_catalog(FILESET+s3 props)/ ensure_schema 同形,Task 1 确认 props 后补全
 ```
 
-- [ ] **步骤 4:跑绿** → 5 passed;**步骤 5:提交** `feat(metadata): gravitino httpx client (catalogs/schemas/filesets CRUD)`
+- [x] **步骤 4:跑绿** → 5 passed;**步骤 5:提交** `feat(metadata): gravitino httpx client (catalogs/schemas/filesets CRUD)`
 
 ---
 
@@ -252,7 +252,7 @@ class GravitinoClient:
 
 **Files:** 创建 `services/metadata_service/{app,main}.py`、`tests/services/metadata/test_app.py`
 
-- [ ] **步骤 1:写失败测试**(fake gravitino 注入;真 can();seam 开)
+- [x] **步骤 1:写失败测试**(fake gravitino 注入;真 can();seam 开)
 
 ```python
 # tests/services/metadata/test_app.py
@@ -337,7 +337,7 @@ def test_docs_and_contract():
     assert_openapi_subset_of_contract(c.app.openapi(), contract)
 ```
 
-- [ ] **步骤 2:跑红;步骤 3:实现**
+- [x] **步骤 2:跑红;步骤 3:实现**
 
 ```python
 # services/metadata_service/app.py
@@ -431,8 +431,8 @@ from services.metadata_service.app import build_app
 app = build_app(gravitino=GravitinoClient(base_url=os.environ.get("GRAVITINO_URL", "http://localhost:8091")))
 ```
 
-- [ ] **步骤 4:跑绿** → 10 passed;**步骤 5:全量 + 分层 + 护栏**全绿
-- [ ] **步骤 6:提交** `feat(metadata-service): hierarchical catalogs/schemas/datasets + can() + fileset→Dataset projection`
+- [x] **步骤 4:跑绿** → 10 passed;**步骤 5:全量 + 分层 + 护栏**全绿
+- [x] **步骤 6:提交** `feat(metadata-service): hierarchical catalogs/schemas/datasets + can() + fileset→Dataset projection`
 
 ---
 
@@ -440,11 +440,11 @@ app = build_app(gravitino=GravitinoClient(base_url=os.environ.get("GRAVITINO_URL
 
 **Files:** 改 `services/gateway/main.py`、`scripts/dev_services.sh`、`Makefile`(up/down 带 gravitino)
 
-- [ ] **步骤 1:gateway 路由(单前缀覆盖整子树)** —— routes 追加 `"/v1/catalogs": os.environ.get("METADATA_URL", "http://localhost:8002")`(`/v1/catalogs/**` 全转 metadata)
-- [ ] **步骤 2:dev_services.sh SERVICES 加** `"metadata|8002|services.metadata_service.main:app"`;`_env_for` 加 `metadata) echo "GRAVITINO_URL=http://localhost:8091" ;;`
-- [ ] **步骤 3:`make up` 追加** `docker compose -f deploy/dev/gravitino.yml up -d`;`down` 对应 `down`
-- [ ] **步骤 4:验证 swagger 聚合** `make api-docs` → 下拉含 identity-org + metadata(`swagger_urls.py` 自动发现)
-- [ ] **步骤 5:提交** `feat(metadata): wire into gateway + make up + dev_services + aggregated swagger`
+- [x] **步骤 1:gateway 路由(单前缀覆盖整子树)** —— routes 追加 `"/v1/catalogs": os.environ.get("METADATA_URL", "http://localhost:8002")`(`/v1/catalogs/**` 全转 metadata)
+- [x] **步骤 2:dev_services.sh SERVICES 加** `"metadata|8002|services.metadata_service.main:app"`;`_env_for` 加 `metadata) echo "GRAVITINO_URL=http://localhost:8091" ;;`
+- [x] **步骤 3:`make up` 追加** `docker compose -f deploy/dev/gravitino.yml up -d`;`down` 对应 `down`
+- [x] **步骤 4:验证 swagger 聚合** `make api-docs` → 下拉含 identity-org + metadata(`swagger_urls.py` 自动发现)
+- [x] **步骤 5:提交** `feat(metadata): wire into gateway + make up + dev_services + aggregated swagger`
 
 ---
 
@@ -452,8 +452,8 @@ app = build_app(gravitino=GravitinoClient(base_url=os.environ.get("GRAVITINO_URL
 
 **Files:** 创建 `tests/integration/test_metadata_gravitino.py`、`tests/integration/test_lance_register_e2e.py`;`tests/conftest.py` 加 gravitino fixture
 
-- [ ] **步骤 1:conftest 加 `gravitino_url` fixture**(不可达则 skip,同 minio/kc 套路)
-- [ ] **步骤 2:client 级集成**(真 Gravitino:ensure metalake/catalog/schema → create → list/get)
+- [x] **步骤 1:conftest 加 `gravitino_url` fixture**(不可达则 skip,同 minio/kc 套路)
+- [x] **步骤 2:client 级集成**(真 Gravitino:ensure metalake/catalog/schema → create → list/get)
 
 ```python
 # tests/integration/test_metadata_gravitino.py
@@ -472,7 +472,7 @@ def test_real_gravitino_crud(gravitino_url):
     assert g.get_fileset("e_0001", "data", "datasets", n)["properties"]["owner_group"] == "g-0001"
 ```
 
-- [ ] **步骤 3:Lance→注册 端到端**(串 Plan 2/4:MinIO 建真 Lance → metadata-service 注册 → 查回 → 读回验证)
+- [x] **步骤 3:Lance→注册 端到端**(串 Plan 2/4:MinIO 建真 Lance → metadata-service 注册 → 查回 → 读回验证)
 
 ```python
 # tests/integration/test_lance_register_e2e.py
@@ -500,14 +500,14 @@ def test_lance_create_then_register(minio_bucket, gravitino_url, monkeypatch):
 ```
 > **scheme 二元性**:同一物理对象,lance 读写用 `s3://`(object_store→MinIO),Gravitino fileset location 记 `s3a://`(HCFS,EXTERNAL 只记字符串)。同 bucket/key。
 
-- [ ] **步骤 4:`make up`(含 gravitino)→ `uv run pytest -q -m integration` 全绿;步骤 5:提交** `test(metadata): real Gravitino integration + Lance→register e2e`
+- [x] **步骤 4:`make up`(含 gravitino)→ `uv run pytest -q -m integration` 全绿;步骤 5:提交** `test(metadata): real Gravitino integration + Lance→register e2e`
 
 ---
 
 ### Task 7:验收 + 合并
 
-- [ ] **步骤 1:全量** `uv run pytest -q && uv run pytest -q -m integration && uv run lint-imports && bash scripts/ci_guards.sh && make gen && git diff --exit-code libs/contracts_gen/`
-- [ ] **步骤 2:code review**(requesting-code-review,范围=本计划 commit)
+- [x] **步骤 1:全量** `uv run pytest -q && uv run pytest -q -m integration && uv run lint-imports && bash scripts/ci_guards.sh && make gen && git diff --exit-code libs/contracts_gen/`
+- [x] **步骤 2:code review**(requesting-code-review,范围=本计划 commit)
 - [ ] **步骤 3:push → CI 绿 → 合并 main → 删分支**
 - [ ] **步骤 4:S1 spec §9.3 标 Plan 5(metadata)✅;主 spec S1 表出口② → ✅**
 
