@@ -40,7 +40,7 @@
 <div class="lead"><b>一句话:</b>让 AI 高速产出,用<b>"隔离验证"</b>兜底正确性。AI 写得快、覆盖广,但<b>对自己的盲点不可见</b>;流程的价值不在让 AI 更聪明,而在每一步都有<b>独立于实现者</b>的闸门(契约、测试门禁、人工 runbook、独立 reviewer)。</div>
 
 <h2>1. 整体流程</h2>
-<p>三层嵌套:<b>项目级</b>(一次性,出整体设计文档)→ <b>每个 Sprint</b>(出 2 周规划,拆成多个 plan)→ <b>每个 Plan</b>(③④⑤⑥ 循环)。</p>
+<p>三层嵌套:<b>项目级</b>(一次性,出整体设计文档)→ <b>每个 Sprint</b>(出 2 周规划,拆成多个 plan)→ <b>每个 Plan</b>(④⑤⑥⑦ 循环)。</p>
 <svg viewBox="0 0 820 760" width="100%" role="img" aria-label="AI 开发流程图(三层:项目级 / Sprint / Plan)"
      style="max-width:820px;display:block;margin:8px auto;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
   <defs>
@@ -66,7 +66,7 @@
   <text x="170" y="159" font-size="12" font-weight="700" fill="#b4541a">+ Sprint 分期建议 + 时间建议</text>
 
   <line x1="410" y1="76"  x2="410" y2="100" stroke="#2f6feb" stroke-width="2" marker-end="url(#arr)"/>
-  <line x1="410" y1="168" x2="410" y2="196" stroke="#2f6feb" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="410" y1="168" x2="410" y2="228" stroke="#0d9488" stroke-width="2" marker-end="url(#arrT)"/>
 
   <!-- ===== Sprint 循环(外层)===== -->
   <rect x="28" y="196" width="764" height="510" rx="16" fill="none" stroke="#0d9488" stroke-width="1.5" stroke-dasharray="2 4"/>
@@ -76,7 +76,7 @@
   <text x="170" y="251" font-size="14.5" font-weight="700" fill="#0d6b63">③ Sprint 规划文档</text>
   <text x="170" y="270" font-size="12" fill="#46776f">本 sprint 2 周开发计划 → 拆成多个 plan(有序)</text>
 
-  <line x1="410" y1="284" x2="410" y2="312" stroke="#0d9488" stroke-width="2" marker-end="url(#arrT)"/>
+  <line x1="410" y1="284" x2="410" y2="342" stroke="#7a52c7" stroke-width="2" marker-end="url(#arrG)"/>
 
   <!-- ===== Plan 循环(内层)===== -->
   <rect x="60" y="312" width="700" height="350" rx="14" fill="none" stroke="#7a52c7" stroke-width="1.5" stroke-dasharray="2 4"/>
@@ -110,8 +110,8 @@
   <path d="M150 578 H108 V368 H150" fill="none" stroke="#7a52c7" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
   <text x="104" y="473" font-size="10" fill="#7a52c7" transform="rotate(-90 104 473)" text-anchor="middle">下一个 plan</text>
   <!-- Sprint 环:plan 全完 → 下一 sprint(回 ③)-->
-  <path d="M150 628 H44 V256 H150" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrT)"/>
-  <text x="40" y="445" font-size="10" fill="#0d9488" transform="rotate(-90 40 445)" text-anchor="middle">plan 全完 → 下一 Sprint</text>
+  <path d="M150 590 H44 V256 H150" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrT)"/>
+  <text x="40" y="430" font-size="10" fill="#0d9488" transform="rotate(-90 40 430)" text-anchor="middle">plan 全完 → 下一 Sprint</text>
 
   <text x="410" y="734" font-size="12" fill="#5b6573" text-anchor="middle">每个箭头都是一道闸 — 不跳步、不假绿(证据先于断言)</text>
 </svg>
