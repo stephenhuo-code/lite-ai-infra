@@ -1,13 +1,14 @@
 # Lite AI Infra — 架构宪法（Constitution）
 
-> **状态**：Active（v1 起生效）｜**最后更新**：2026-06-06
-> **来源**：ADR-002 / ADR-010 / ADR-011 / ADR-012 + design `docs/superpowers/specs/2026-05-08-llm-infra-platform-design.md`（§3.0 / §3.2）
+> **状态**：Active（v1 起生效）｜**最后更新**：2026-06-14
+> **来源**：ADR-002 / ADR-010 / ADR-011 / ADR-012 / ADR-015 / ADR-016 / ADR-017 + design `docs/superpowers/specs/2026-05-08-llm-infra-platform-design.md`（§3.0 / §3.2）
+> **配套**：AI 开发流程图文说明见 `docs/bestpractise/ai-dev-workflow.html`；通用版宪法模板见 `docs/bestpractise/constitution.template.md`
 > **性质**：**不可违反的硬纪律**。代码、计划、PR 与本文件冲突时，以本文件为准。
 
 ## 0. 元规则
 - 优先级：**用户显式指令 > 本宪法 > superpowers 技能 > 默认行为**。
 - 本宪法的任何变更**必须先改/加 ADR**，再同步本文件（与 `CLAUDE.md` 的引用）。
-- 写代码 / 写计划 / 评审前都应对照本文件；CI 防线（§6）兜底机器强制。
+- 写代码 / 写计划 / 评审前都应对照本文件；CI 防线（§8）兜底机器强制。
 
 ---
 
@@ -33,10 +34,18 @@
 1. **API 优先（API-first）**：任何服务 / 接口**先定契约（OpenAPI/proto）再实现**；**契约是接口的唯一真相源**，入 git、CI 校验 breaking、client 全生成（具体见 §4.2）。
 2. **测试驱动（TDD）**：实现任何 feature / bugfix **先写测试**（红 → 绿 → 重构）；**无测试不合并**。授权 / 隔离 / 契约等关键路径必须有测试（如 AC-1~43）。
 3. **完成前必验证**：声称"完成 / 修复 / 通过"前**必须跑验证命令并给出证据**；**证据先于断言**，禁止仅凭口头声称（superpowers: verification-before-completion）。
-4. **计划先行**：多步任务**先出实现计划**（brainstorming → writing-plans → execute）再写代码；大改动设 review 检查点。**每份计划必须含"手动验收 runbook"**——给出可照抄的命令序列(起服务/调接口/看 Swagger 等)及每步的期望证据,让人不读代码也能手动复现验收;无 runbook 的计划不算完成（ADR-015）。**计划中每个任务/步骤必须用 checkbox（`- [ ]`）显式拆分(粒度可勾选)；执行开发时必须实时更新完成状态**(逐步勾 `- [x]` + TodoWrite 同步 in_progress/completed),让进度随时可见、可中断可续；不得做完一批才补勾或全程不更新（ADR-017）。**计划完成后必须做"隔离审查"(独立于实现者,ADR-017)**:① 人(owner)手动跑 spec 完成度检查(逐 task 对照产物 + 跑验收 runbook);② 用 superpowers:requesting-code-review 派**独立 reviewer**(非实现者自审)做 code review;Critical/Important 修完才可合并。headless / 自主执行尤其不得跳过——机器自评不算数。
+4. **计划先行**：多步任务**先出实现计划**再写代码，按三层循环推进——**项目级**（brainstorm → 整体设计文档 + 关键 ADR + Sprint 分期）→ **每个 Sprint**（规划文档 → 多个有序 plan）→ **每个 Plan**（writing-plans → execute → 隔离审查 → 合并）；大改动设 review 检查点。每份计划**必须**满足：
+   - **探查优先（写计划之前）**：涉及未知外部依赖（第三方 API / 外部服务 / 不熟悉的库）时，第一个任务先起真服务、跑通最小链路，把真实端点 / 字段 / 响应 / 坑记成事实文档，实现**以实测为准**；**禁止把猜测的 API 写进计划**。
+   - **手动验收 runbook（ADR-015）**：可照抄的命令序列（起服务 / 调接口 / 看 Swagger / 查产物等）+ 每步期望证据，让人不读代码也能复现验收；**runbook 由 AI 在写计划时生成（不需人参与）**，无 runbook 的计划不算完成；"由人照着跑验收"发生在下方隔离审查环节。
+   - **checkbox 拆分 + 实时勾选（ADR-017）**：每个任务/步骤用 `- [ ]` 显式拆分（粒度可单独勾选/验证）；执行时**实时更新**状态（逐步勾 `- [x]` + TodoWrite 同步 in_progress/completed），进度随时可见、可中断可续；不得做完一批才补勾或全程不更新。
+   - **争议设计落 ADR**：地基级 / 有争议的设计先决策、落 ADR 再进计划。
+   - **需人参与的环节（不可全交给 AI）**：① 探查结果研判 ② 争议设计拍板（ADR）③ 计划评审批准 ④ 照 runbook 做验收；其余（拆分 / 每步 TDD / 全绿门禁 / 生成 runbook）可 headless 无人值守（见 §3.8）。
+   - **隔离审查 = 机器自评 ≠ 验证（ADR-017）**：计划"完成" ≠ 通过——测试是实现者自己写的、只覆盖他想到的路径，机器审自己有盲区。合并前必须两道**独立于实现者**的审查:① 人(owner)手动跑 spec 完成度检查(逐 task 对照产物) + 照 runbook 用**真实、会撞边界**的数据(重复/残缺/越权/冲突)做验收;② 用 superpowers:requesting-code-review 派**独立 reviewer**(非实现者自审)做 code review。**Critical / Important 修完才可合并；headless / 自主执行尤其不得跳过——机器自评不算数**。
 5. **隔离 + 评审**：功能在**独立分支 / worktree** 开发；**合并前过 code review**；不向 `main` 直接堆未评审改动。
 6. **系统化调试**：遇 bug / 失败**先定位根因再改**，禁止猜测式打补丁（superpowers: systematic-debugging）。
 7. **不静默砍范围**：任何降级 / 截断 / 抽样 / 跳过**必须显式记录**（日志 / PR 说明），不得让"覆盖了一部分"看起来像"全覆盖"。
+8. **headless（无人值守）执行纪律**：仅当**计划已审定、确定性高**时才用 headless（探索性 / 有未知判断的任务用交互式）：脚本先 `unset ANTHROPIC_API_KEY` 走订阅、避免误计费；执行输出流式 `tee` 到日志（另开 tail 日志 / watch 提交看进度）；**headless 跑完只 push + 自评，合并留给人**（§3.4 两道闸不可省）。
+9. **反模式（禁止）**：headless 跑完即当完成、机器审自己代码当审查、把猜的外部 API 写进计划、测试用随机唯一值 / 假对象永不撞边界、地基改动不先批判、计划做完一批才补勾——一律按上述纪律纠正。
 
 ## 4. 后端架构（design §3.0）
 1. **微服务（按子系统全拆）+ API Gateway / BFF**；服务**独立部署、不共享 DB session**。
