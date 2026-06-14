@@ -45,3 +45,10 @@ def test_generic_error_marks_failed(tmp_path, monkeypatch):
     monkeypatch.setattr(W, "_audit_writer", lambda: None)
     W.run_job(str(store.job_dir("job-1")))
     assert store.read("job-1")["status"] == "failed"
+
+def test_missing_spec_marks_failed_not_crash(tmp_path):
+    # 损坏 job dir(spec.json 缺失):worker 写 failed 终态而非崩成无终态孤儿 running
+    store = JobStore(str(tmp_path)); (tmp_path / "job-1").mkdir()
+    W.run_job(str(store.job_dir("job-1")))
+    r = store.read("job-1")
+    assert r["status"] == "failed" and "spec.json" in r["error"]

@@ -23,6 +23,9 @@ def run_job(job_dir: str) -> None:
     root, job_id = os.path.dirname(job_dir.rstrip("/")), os.path.basename(job_dir.rstrip("/"))
     store = JobStore(root)
     spec = store.load_spec(job_id)
+    if spec is None:        # spec.json 缺失/损坏:写终态而非崩成无终态的孤儿 running
+        store.update(job_id, "failed", error="spec.json missing or unreadable")
+        return
     ctx = Context(user=spec.sub, memberships=[
         Membership(EnterpriseId(spec.enterprise_id), GroupId(spec.group_id), spec.role)])
     req = PrepareRequest(

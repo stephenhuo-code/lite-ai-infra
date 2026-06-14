@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json
+import json, os
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,8 +22,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 class JobStore:
-    """状态文件作业存储(ADR-018:v1 无 PG)。spec.json 写一次;status.json 由
-    service(queued→running)与 worker(running→终态)分时写,无并发写者。"""
+    """状态文件作业存储(ADR-018:v1 无 PG)。spec.json 写一次。status.json 按生命周期
+    阶段单写者:service 进程写 queued→running 及看门狗的 running→failed;detached worker
+    进程写 running→终态。二者属**不同进程**,理论上可同时落在同一 status.json 上,故
+    `_write_status` 走 **temp + os.replace 原子替换** —— 任一读者(看门狗 running_jobs)
+    永不会读到半写文件(否则 json.loads 抛错使 dispatch 崩)。看门狗只回收
+    status=='running' 且 pid 已死的作业:worker 写终态后 status 即非 running,不会被误杀
+    (worker 进程在执行 update 期间其 pid 仍活,看门狗据 pid_alive 跳过)。"""
     def __init__(self, root: str):
         self.root = Path(root); self.root.mkdir(parents=True, exist_ok=True)
 
@@ -38,10 +43,17 @@ class JobStore:
                                          **{k: None for k in _PUBLIC}})
 
     def _write_status(self, job_id: str, status_obj: dict) -> None:
-        (self.job_dir(job_id) / "status.json").write_text(json.dumps(status_obj))
+        # 原子替换:跨进程(service 看门狗 / detached worker)写同一 status.json 时,
+        # 读者永不见半写文件(POSIX rename 原子)。temp 与目标同目录确保同一文件系统。
+        d = self.job_dir(job_id)
+        tmp = d / f".status.{os.getpid()}.tmp"
+        tmp.write_text(json.dumps(status_obj))
+        os.replace(tmp, d / "status.json")
 
     def update(self, job_id: str, status: str, **fields) -> None:
-        cur = json.loads((self.job_dir(job_id) / "status.json").read_text())
+        p = self.job_dir(job_id) / "status.json"
+        # status.json 缺失(损坏 job dir)时从最小基底起,保证终态写入仍成功(read 投影需 created_at)
+        cur = json.loads(p.read_text()) if p.exists() else {"created_at": _now(), **{k: None for k in _PUBLIC}}
         cur.update(status=status, updated_at=_now(), **fields)
         self._write_status(job_id, cur)
 
@@ -53,10 +65,11 @@ class JobStore:
         d = self.job_dir(job_id)
         if not (d / "status.json").exists():
             return None
-        spec = json.loads((d / "spec.json").read_text())
+        sp = d / "spec.json"
+        spec = json.loads(sp.read_text()) if sp.exists() else {}   # 损坏 job:spec 缺失仍可投影终态而非 500
         st = json.loads((d / "status.json").read_text())
-        return {"id": job_id, "dataset": spec["dataset"], "group_id": spec["group_id"],
-                "enterprise_id": spec["enterprise_id"], "status": st["status"],
+        return {"id": job_id, "dataset": spec.get("dataset"), "group_id": spec.get("group_id"),
+                "enterprise_id": spec.get("enterprise_id"), "status": st["status"],
                 "terminal": st["status"] in ("succeeded", "failed"),   # 派生:客户端按此判终态(ADR-018 不变量 4)
                 "created_at": st["created_at"], "updated_at": st["updated_at"],
                 **{k: st.get(k) for k in _PUBLIC}}
