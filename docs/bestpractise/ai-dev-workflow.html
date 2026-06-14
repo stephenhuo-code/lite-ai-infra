@@ -34,8 +34,8 @@
 <div class="wrap">
 
 <h1>AI 开发流程经验</h1>
-<p class="sub">superpowers + headless + 强制人工验收 · 来源:S1 Plan 3/4 实战复盘(2026-06)
-<br><span class="tag">constitution §3.4</span><span class="tag">ADR-015</span><span class="tag">ADR-016</span><span class="tag">ADR-017</span></p>
+<p class="sub">superpowers + headless + 强制人工验收 · 通用实践
+<br><span class="tag">计划先行</span><span class="tag">探针优先</span><span class="tag">隔离审查</span><span class="tag">实时勾选</span><span class="tag">ADR</span></p>
 
 <div class="lead"><b>一句话:</b>让 AI 高速产出,用<b>"隔离验证"</b>兜底正确性。AI 写得快、覆盖广,但<b>对自己的盲点不可见</b>;流程的价值不在让 AI 更聪明,而在每一步都有<b>独立于实现者</b>的闸门(契约、测试门禁、人工 runbook、独立 reviewer)。</div>
 
@@ -115,74 +115,74 @@
 
   <text x="410" y="734" font-size="12" fill="#5b6573" text-anchor="middle">每个箭头都是一道闸 — 不跳步、不假绿(证据先于断言)</text>
 </svg>
-
-<h2>2. 实战最大的一条:机器自评 ≠ 验证</h2>
-<p>Plan 4 由 headless(<code>claude -p</code>)自主跑完 7 个任务,<b>自己跑了一轮 code review</b>、78 单元 + 7 集成全绿。看起来"完成了"。但随后:</p>
+<h2>2. writing-plans:把计划写成可执行、可验收、可续接</h2>
+<p>计划是后续一切的脚手架。<b>所有计划相关的纪律都在这一节。</b>一份合格的计划满足:</p>
 <ul>
-  <li><b>独立 reviewer 子代理</b>逮到 <b>I-1</b>:无 <code>owner_group</code> 的 fileset → <code>p["owner_group"]</code> KeyError → <span class="warn">500 而非 fail-closed 403</span>。</li>
-  <li><b>owner 手动跑 runbook</b>(固定名 <code>cc3m</code>,与探针建的撞)逮到 <b>409 bug</b>:重复注册未接住 Gravitino 409 → <span class="warn">逃逸成 500</span>。</li>
+  <li><b>任务级 checkbox 拆分:</b>每个任务/步骤 <code>- [ ]</code>,粒度到"可单独勾选/验证"(bite-sized:写测试 / 跑红 / 实现 / 跑绿 / 提交 各一步)。</li>
+  <li><b>每步 TDD:</b>先写测试(红)→ 最小实现(绿)→ 重构;无测试不合并。</li>
+  <li><b>必含手动验收 runbook:</b>可照抄的命令序列 + 每步期望证据,让人不读代码也能复现验收。<b>无 runbook 的计划不算完成</b>(§4 的人工验收靠它)。</li>
+  <li><b>未知外部依赖 → 第一个任务设"探针":</b>不把猜的 API 写进计划。先起真服务、跑通最小链路、把真实端点/字段/响应/坑记成事实文档,后续实现<b>以实测为准</b>。实战中探针常当场逮到外部系统的鉴权/寻址坑——等集成阶段才撞,排查成本翻倍。</li>
+  <li><b>有争议的设计 → 落 ADR:</b>正文永远是最新版,决策理由与历史进 ADR + git。</li>
+  <li><b>全绿门禁:</b>每个任务结束跑项目的测试/lint/构建全绿才进下一步;失败先系统化调试定位根因,不打补丁猜。</li>
+  <li><b>实时更新状态:</b>每完成一步即勾 <code>- [x]</code> + 同步任务跟踪(in_progress/completed)——进度随时可见、可中断可续;<b>不做完一批才补勾</b>(无人值守跑完忘回填是典型反例)。</li>
 </ul>
-<p>两个都是真 bug,<b>自动测试 + headless 自评全没逮到</b>——因为:单测的 fake 不模拟冲突、集成测试用 <code>uuid</code> 名永不撞、机器 review 自己的代码有盲区。</p>
-<div class="key"><b>结论(ADR-017 落为硬纪律):</b>计划完成 ≠ 通过。合并前必须两道<b>隔离</b>审查:<br>
-① <b>人</b>:照 runbook 手动验收 + 对照 spec 逐 task 核(机器不替代)。<br>
-② <b>独立 reviewer</b>:<code>superpowers:requesting-code-review</code> 派<b>非实现者</b>子代理审 <code>main..HEAD</code>。<br>
-<span class="ok">这条今天就回了本:两个会进生产的 500 在合并前被挡下。</span></div>
+<div class="key"><b>一句话:</b>把 checkbox、TDD、runbook、探针、ADR、全绿门禁<b>都前置进计划</b>,正确性在计划阶段就可检验,而不是堆到最后。</div>
 
-<h2>3. headless 执行:何时用、怎么用、边界</h2>
-<p><b>何时用:</b>计划已审定、任务确定性高、可无人值守。用 <code>headless-plan-runner</code> skill / <code>run-plan-headless.sh</code>。</p>
-<h3>怎么用(三个要点,踩坑换来的)</h3>
+<h2>3. 执行:交互 vs headless</h2>
+<table>
+  <tr><th></th><th>交互</th><th>headless(无人值守)</th></tr>
+  <tr><td>适合</td><td>有未知判断、探索性</td><td>计划已审定、确定性高</td></tr>
+  <tr><td>中途纠偏</td><td>能(实时可打断)</td><td>不能(只能 kill)</td></tr>
+</table>
+<h3>headless 三个要点(踩坑换来的)</h3>
 <ul>
-  <li><b>订阅模式:</b>脚本先 <code>unset ANTHROPIC_API_KEY</code>,否则走 API 计费报 <code>Credit balance too low</code>(shell 启动文件里硬编码的 key 要注释掉)。</li>
-  <li><b>流式 + 落日志:</b><code>claude -p --verbose --output-format stream-json | tee log</code>,另开 <code>tail -f</code> 或 <code>watch git log</code>(每 task 一 commit)看进度。</li>
-  <li><b>合并前停:</b>headless 跑完只 push + 自评 review,<b>合并留给人</b>。</li>
+  <li><b>订阅模式:</b>脚本先 <code>unset ANTHROPIC_API_KEY</code>,否则走 API 计费报 <code>Credit balance too low</code>;shell 启动文件里硬编码的 key 要注释掉。</li>
+  <li><b>流式 + 落日志:</b><code>claude -p --verbose --output-format stream-json | tee log</code>;另开 <code>tail -f</code> 或 <code>watch git log</code>(每任务一 commit)看进度。</li>
+  <li><b>合并前停:</b>headless 跑完只 push + 自评,合并留给人。</li>
 </ul>
-<h3>边界(别踩)</h3>
+<p><span class="warn">headless 的"自评 review"不算数</span> → 必须叠加 §4 隔离审查。</p>
+
+<h2>4. 核心:机器自评 ≠ 验证</h2>
+<p>一次 headless 自主跑完整批任务、自己跑了一轮 code review、单元 + 集成全绿——看起来"完成了"。但合并前的隔离审查仍逮到<b>两个会进生产的崩溃级 bug</b>:</p>
 <ul>
-  <li>headless <b>无法中途纠偏</b>——探索性/有未知判断的任务别用 headless,用交互(Plan 4 Task 1 探针就是交互里边跑边适配的)。</li>
-  <li>headless 的"自评 review"<b>不算数</b>,必须叠加 §2 的隔离审查。</li>
+  <li>一个由<b>独立 reviewer 子代理</b>发现:缺字段的资源未 fail-closed,异常逃逸成 500(本该 deny)。</li>
+  <li>一个由<b>人手动跑 runbook</b>发现:重复操作未接住下游冲突错误,逃逸成 500(本该返冲突状态码)。</li>
 </ul>
+<p>两个都是真 bug,<b>自动测试 + 机器自评全没逮到</b>——因为单测的假对象不模拟冲突、集成测试用随机唯一名永不撞边界、机器审自己的代码有盲区。</p>
+<div class="key"><b>结论:计划"完成" ≠ 通过。</b>合并前必须两道<b>独立于实现者</b>的审查:<br>
+① <b>人</b>:照 runbook 手动验收 + 对照 spec 逐项核(机器不替代)。<br>
+② <b>独立 reviewer</b>:派<b>非实现者</b>的子代理审本次 diff(<code>main..HEAD</code>)。<br>
+<span class="ok">这两道闸把那两个 500 挡在合并前。</span></div>
 
-<h2>4. probe-first:未知外部依赖,先探针再写计划</h2>
-<p>Gravitino 的真实 REST/版本/行为不确定。<b>没把猜的 API 写进计划</b>,而是 Plan 4 Task 1 = 探针:起真服务、curl 跑通全链、把响应包络/字段/坑写进 <code>RESULTS.md</code>,后续代码<b>以实测为准</b>。</p>
-<p>回报:探针当场发现计划没覆盖的两个坑——FILESET catalog 建 schema 时校验 S3(<b>bucket 必须先存在 + 强制 path-style</b>)。若等集成阶段才撞,排查成本翻倍。</p>
-<div class="key"><b>纪律:</b>对不确定的外部系统,计划第一个 task 就是"探针 + 钉死事实",别让推测的 API 漏进实现。</div>
-
-<h2>5. 决策纪律:争议走 ADR,地基改动先批判后批准</h2>
+<h2>5. 决策纪律</h2>
 <ul>
-  <li><b>每个有争议的设计选择落 ADR</b>(ADR-011/016 授权与租户映射;ADR-015/017 流程纪律)。正文永远是最新版,历史看 ADR + git。</li>
-  <li><b>地基级改动</b>(如"把 group 从隔离单元拿掉")<b>先批判再动手</b>:用 product-architect 顾问做 blast-radius 分析,确认是真需求还是偏好。Plan 4 期间这一步<b>避免了一次重开已关闭 S0 地基的返工</b>——结论是保留 group、把 user/role grant 留作 v2 叠加层。</li>
-  <li><b>API 优先:</b>服务的契约是稳定面,不裸传/暴露底层(Gravitino)——metadata-service 是其上的薄 PEP,隐藏 metalake、can() 过滤、领域投影。</li>
+  <li><b>有争议的设计 → ADR:</b>正文为最新版,理由/历史进 ADR + git。</li>
+  <li><b>地基级改动 → 先批判后批准:</b>动手前用架构顾问做 blast-radius 分析,确认是真需求还是偏好。实战中这一步避免了一次"中途重开已交付地基"的返工——结论是不拆地基,把新能力留作上层叠加。</li>
+  <li><b>契约优先:</b>对外契约是稳定面;不裸传/暴露底层系统,在其上加一层薄适配(投影 + 鉴权 + 隔离)。</li>
 </ul>
 
-<h2>6. 计划纪律(写进 constitution §3.4)</h2>
-<ul>
-  <li><b>checkbox 拆分 + 实时勾选:</b>每步 <code>- [ ]</code>,做完即 <code>- [x]</code> + TodoWrite 同步——进度可见、可中断可续(headless 跑完忘回填就是反例,见 ADR-017)。</li>
-  <li><b>每份计划必含手动验收 runbook</b>(ADR-015):可照抄命令 + 期望证据,让人不读代码也能复现验收。§2 的人工验收靠它。</li>
-  <li><b>全绿门禁:</b>每 task 结束跑该项目的测试/lint/构建全绿才进下一步;失败走 systematic-debugging 定位根因,不打补丁猜。</li>
-</ul>
-
-<h2>7. 反模式清单</h2>
+<h2>6. 反模式清单</h2>
 <table>
 <tr><th>反模式</th><th>正解</th></tr>
 <tr><td>headless 跑完 = 完成</td><td>必过人工 runbook + 独立 reviewer</td></tr>
 <tr><td>机器审自己的代码当审查</td><td>隔离审查(独立子代理 / 人)</td></tr>
-<tr><td>把猜的外部 API 写进计划</td><td>probe-first,实测钉死</td></tr>
-<tr><td>测试用 uuid / fake 永不撞边界</td><td>加冲突/缺字段/越权等 fail-closed 用例</td></tr>
+<tr><td>把猜的外部 API 写进计划</td><td>探针优先,实测钉死</td></tr>
+<tr><td>测试用随机唯一名 / 假对象永不撞边界</td><td>加冲突/缺字段/越权等 fail-closed 用例</td></tr>
 <tr><td>地基改动直接动手</td><td>先批判(blast radius)+ ADR</td></tr>
-<tr><td>计划做完一批才补勾</td><td>实时勾选 + TodoWrite</td></tr>
-<tr><td>裸传底层系统的 API</td><td>自有契约 + 薄 PEP 投影</td></tr>
+<tr><td>计划做完一批才补勾</td><td>实时勾选 + 任务跟踪</td></tr>
+<tr><td>裸传底层系统的 API</td><td>自有契约 + 薄适配层</td></tr>
 </table>
 
-<h2>8. 上手清单(下个计划照做)</h2>
+<h2>7. 上手清单(下个计划照做)</h2>
 <ul>
   <li>☐ brainstorm → spec 分节确认;争议 → ADR</li>
-  <li>☐ writing-plans:任务级 checkbox + 每步 TDD + 手动 runbook;不确定外部依赖 → 第一个 task 设探针</li>
+  <li>☐ writing-plans:任务级 checkbox + 每步 TDD + 手动 runbook;不确定外部依赖 → 第一个任务设探针</li>
   <li>☐ 执行:交互(有未知)或 headless(确定);实时勾选 + 全绿门禁</li>
   <li>☐ 完成后:人跑 runbook + 独立 reviewer;修 Critical/Important</li>
-  <li>☐ CI 绿 → owner 确认 → 合并 → 回标 spec/计划 checkbox</li>
+  <li>☐ CI 绿 → 人确认 → 合并 → 回标 spec/计划 checkbox</li>
 </ul>
 
-<footer>本文件(<code>ai-dev-workflow.html</code>)为本经验文档的权威源;流程纪律以 constitution §3.4 + ADR-015/016/017 为准。</footer>
+<footer>本文件为通用 AI 开发实践;落地时把上述纪律写入团队约定(如 constitution / CONTRIBUTING)。</footer>
 
 </div>
 </body>
