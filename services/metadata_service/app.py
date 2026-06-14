@@ -9,25 +9,12 @@ from libs.contracts_gen.metadata_models import RegisterDataset
 from libs.identity.context import Context
 from libs.identity.ids import EnterpriseId, GroupId
 from services._scaffold.app import make_service_app
-from services._scaffold.auth import context_from_request
+from services._scaffold.auth import context_from_request, enterprise_of
 from services.metadata_service.gravitino import GravitinoError, _is_conflict
 
 
 def _metalake(ent: str) -> str:
     return ent.replace("-", "_")
-
-
-def _enterprise(ctx: Context) -> str:
-    """v1 单企业:从 token 推导调用者企业。属多个企业时显式拒绝(不静默挑第一个,宪法 §3.7)。"""
-    ents = []
-    for m in ctx.memberships:
-        if m.enterprise_id not in ents:
-            ents.append(m.enterprise_id)
-    if not ents:
-        raise HTTPException(status_code=403, detail="no enterprise membership")
-    if len(ents) > 1:
-        raise HTTPException(status_code=400, detail="ambiguous enterprise membership; v1 single-enterprise only")
-    return ents[0]
 
 
 def _scope_value(scope) -> str:
@@ -60,15 +47,15 @@ def build_app(gravitino):
 
     @app.get("/v1/catalogs")
     def catalogs(ctx: Context = Depends(context_from_request)):
-        return {"names": gravitino.list_catalogs(_metalake(_enterprise(ctx)))}
+        return {"names": gravitino.list_catalogs(_metalake(enterprise_of(ctx)))}
 
     @app.get("/v1/catalogs/{catalog}/schemas")
     def schemas(catalog: str, ctx: Context = Depends(context_from_request)):
-        return {"names": gravitino.list_schemas(_metalake(_enterprise(ctx)), catalog)}
+        return {"names": gravitino.list_schemas(_metalake(enterprise_of(ctx)), catalog)}
 
     @app.get("/v1/catalogs/{catalog}/schemas/{schema}/datasets")
     def list_ds(catalog: str, schema: str, ctx: Context = Depends(context_from_request)):
-        ent = _enterprise(ctx)
+        ent = enterprise_of(ctx)
         ml = _metalake(ent)
         out = []
         for name in gravitino.list_filesets(ml, catalog, schema):  # N+1:list 仅返回名,逐个 get(ADR-016 规模可忽略)
@@ -81,7 +68,7 @@ def build_app(gravitino):
 
     @app.get("/v1/catalogs/{catalog}/schemas/{schema}/datasets/{name}")
     def get_ds(catalog: str, schema: str, name: str, ctx: Context = Depends(context_from_request)):
-        ent = _enterprise(ctx)
+        ent = enterprise_of(ctx)
         ml = _metalake(ent)
         try:
             fs = gravitino.get_fileset(ml, catalog, schema, name)
@@ -97,7 +84,7 @@ def build_app(gravitino):
     @app.post("/v1/catalogs/{catalog}/schemas/{schema}/datasets", status_code=201)
     def register(catalog: str, schema: str, body: RegisterDataset,
                  ctx: Context = Depends(context_from_request)):
-        ent = _enterprise(ctx)
+        ent = enterprise_of(ctx)
         ml = _metalake(ent)
         scope = _scope_value(body.scope)
         res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent),
