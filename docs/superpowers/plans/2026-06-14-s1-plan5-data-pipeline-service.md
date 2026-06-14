@@ -738,7 +738,7 @@ def test_prepare_job_to_lance_on_minio(tmp_path, minio_s3, minio_bucket, monkeyp
 > `dj_passthrough_bin` fixture:写一个临时可执行,解析 `--config recipe.yaml` 取 `dataset_path`/`export_path`,把输入 jsonl 原样写到 `<export_path>/cleaned.jsonl`(模拟 DJ 清洗为恒等)。放 `tests/conftest.py` 或 `tests/integration/conftest.py`,复用既有 `minio_s3/minio_bucket` fixture。
 
 - [x] **步骤 2:跑** `make dev-up` 后 `uv run pytest -q -m integration`(新 1 + 既有全绿:8 passed);`uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿(101 unit + 分层 KEPT + guards exit 0;含 data-pipeline 层无越界、codegen freshness、漂移守卫)。
-- [ ] **步骤 3:手动验收**——按文末 runbook 真起 `make up`,经 gateway 提交作业 → 轮询到 `succeeded` → 跨企业 403。贴输出。
+- [x] **步骤 3:手动验收**——经 gateway 真 token 提交 → 真 Data-Juicer → `succeeded`(rows=2 + Lance 可读);无 token→401;跨组→403。证据已贴(owner 复核)。修复过程见 Task 9 步骤5(Ray×uv)+ runbook 注记(zsh interactivecomments / GET→POST / 旧进程 make down)。
 - [x] **步骤 4:requesting-code-review 子代理评审 → 修订**(宪法 §3.4/ADR-017:计划完成后强制隔离评审)。独立 reviewer 审 main..HEAD:无 Critical;1 Important(跨进程 status.json 非原子写)+ 1 Minor(worker spec=None 守卫)已修到绿(commit db021c1)。
 - [ ] **步骤 5:回写状态**(本 plan checkbox 实时勾、spec §5.3/§9.3 Plan 5 标 ✅ + 服务化出口推进)+ 提交 `feat(data-pipeline-service): integration e2e + S1 service #3 done` + 合并。
 
@@ -755,7 +755,7 @@ def test_prepare_job_to_lance_on_minio(tmp_path, minio_s3, minio_bucket, monkeyp
 - [x] **步骤 3:dev 默认 `DJ_BIN` 指真 DJ** —— `scripts/dev_services.sh` 与 `Makefile run-data-pipeline` 默认 `DJ_BIN=<repo>/.dj-venv/bin/dj-process`;passthrough 桩降级为**仅集成测试** test double(`tests/integration` conftest),不再是 dev 运行时默认。
 - [x] **步骤 4:spec 落 parity 纪律** —— S1 spec §2 决策6(dev/prod parity)。
 - [x] **步骤 5:本地真 DJ 端到端复验** —— `make dj-setup` + 本地 Ray head + `make up`(DJ_BIN 指真 `.dj-venv`),经 gateway 提交 → **真 Data-Juicer** 清洗 → `succeeded`、`rows_in/written=2`、`lance_uri` 落 OSS(真 Lance 可读)。**复验中发现并修**:新版 Ray 的 "uv run" worker 模式在 uv 项目里绑主 `.venv`(无 ray)→ worker 崩;`_run_dj` 改为剥 `UV_*` + 设 `RAY_ENABLE_UV_RUN_RUNTIME_ENV=0` + `VIRTUAL_ENV`/`PATH` 指 `.dj-venv`(spike "Ray 禁瞬态 uv 环境"教训在 service 链上的再现)。
-- [ ] **步骤 6:提交** `feat(data-pipeline): dev/prod parity — runtime deps + make dj-setup + real DJ default`
+- [x] **步骤 6:提交** `feat(data-pipeline): dev/prod parity — runtime deps + make dj-setup + real DJ default`(commit 189a169)
   > 注:本地真 DJ 需先 `make dj-setup` + 起 Ray head(`.dj-venv/bin/ray start --head`);make up 是否自动起 Ray head 列为后续 dev-UX 改进(本轮 runbook 注明手动起)。
 
 ---
