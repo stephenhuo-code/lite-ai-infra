@@ -7,8 +7,8 @@
 SERVICES=(
   "identity|8001|services.identity_org_service.main:app"
   "metadata|8002|services.metadata_service.main:app"
+  "data-pipeline|8003|services.data_pipeline_service.main:app"
   "gateway|8090|services.gateway.main:app"
-  # Plan 5:"data-pipeline|8003|..."
 )
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,7 +19,9 @@ _env_for() {  # 各服务启动 env
   case "$1" in
     identity) echo "LITEAI_JWKS_URL=$JWKS" ;;
     metadata) echo "LITEAI_JWKS_URL=$JWKS GRAVITINO_URL=http://localhost:8091" ;;
-    gateway)  echo "IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002" ;;
+    # data-pipeline:JOBS_DIR 状态文件根 + 本地 MinIO 凭据/桶(worker 传给 run_prepare)+ 验签
+    data-pipeline) echo "LITEAI_JWKS_URL=$JWKS JOBS_DIR=$ROOT/.dev/jobs OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 OSS_REGION=us-east-1 DATA_BUCKET=lite-ai AUDIT_BUCKET=lite-ai" ;;
+    gateway)  echo "IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 DATA_PIPELINE_URL=http://localhost:8003" ;;
     *)        echo "" ;;
   esac
 }

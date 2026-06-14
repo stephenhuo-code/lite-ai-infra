@@ -8,5 +8,6 @@ app = build_gateway(routes={
     "/v1/me": os.environ.get("IDENTITY_ORG_URL", "http://localhost:8001"),
     # /v1/catalogs/** 整子树(catalogs/schemas/datasets 导航+CRUD)全转 metadata-service
     "/v1/catalogs": os.environ.get("METADATA_URL", "http://localhost:8002"),
-    # Plan 5 追加:"/v1/data"     -> os.environ["DATA_PIPELINE_URL"]
+    # /v1/data/** (prepare 提交 + jobs 查状态)全转 data-pipeline-service
+    "/v1/data": os.environ.get("DATA_PIPELINE_URL", "http://localhost:8003"),
 })
