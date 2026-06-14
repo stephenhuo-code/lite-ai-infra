@@ -10,6 +10,7 @@ from libs.identity.context import Context
 from libs.identity.ids import EnterpriseId, GroupId
 from services._scaffold.app import make_service_app
 from services._scaffold.auth import context_from_request
+from services.metadata_service.gravitino import GravitinoError, _is_conflict
 
 
 def _metalake(ent: str) -> str:
@@ -104,10 +105,15 @@ def build_app(gravitino):
         d = can(ctx, "dataset.register", res)
         if not d.allow:
             return JSONResponse(status_code=403, content={"reason": d.reason})
-        fs = gravitino.create_fileset(ml, catalog, schema, body.name, body.location,
-                                      comment=body.comment or "",
-                                      properties={"owner_group": body.group_id, "owner_user": ctx.user,
-                                                  "scope": scope})
+        try:
+            fs = gravitino.create_fileset(ml, catalog, schema, body.name, body.location,
+                                          comment=body.comment or "",
+                                          properties={"owner_group": body.group_id, "owner_user": ctx.user,
+                                                      "scope": scope})
+        except GravitinoError as e:
+            if _is_conflict(e):            # 已存在 → 409 Conflict(不逃逸成 500)
+                return JSONResponse(status_code=409, content={"reason": "dataset already exists"})
+            raise
         return _dataset(ent, fs)
 
     return app

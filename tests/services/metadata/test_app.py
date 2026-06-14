@@ -109,6 +109,17 @@ def test_register_own_group_201():
     assert r.status_code == 201 and "newds" in g._fs
 
 
+def test_register_existing_returns_409_not_500():
+    # 注册已存在的 fileset:Gravitino 返 409 → 服务该 409 Conflict,绝不逃逸成 500
+    from services.metadata_service.gravitino import GravitinoError
+    class Conflicting(FakeG):
+        def create_fileset(self, *a, **k):
+            raise GravitinoError("409 already exists", status=409)
+    r = _client(Conflicting()).post(_DS, headers=_ALICE,
+        json={"name": "cc3m", "group_id": "g-0001", "location": "s3a://b/e-0001/g-0001/processed/cc3m.lance"})
+    assert r.status_code == 409
+
+
 def test_register_other_group_403():
     assert _client().post(_DS, headers=_ALICE, json={"name": "x", "group_id": "g-0002",
                                                      "location": "s3a://b/x.lance"}).status_code == 403
