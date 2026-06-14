@@ -125,6 +125,8 @@
       <path d="M0 0 L10 5 L0 10 z" fill="#2f6feb"/></marker>
   </defs>
   <text x="20" y="14" font-size="12" font-weight="700" fill="#2f6feb">writing-plans 内部流程</text>
+  <circle cx="566" cy="10" r="9" fill="#7a52c7"/><text x="566" y="14" font-size="10" fill="#fff" text-anchor="middle" font-weight="700">人</text>
+  <text x="582" y="14" font-size="11" fill="#7a52c7">= 需人参与</text>
 
   <!-- ① 探查优先(高亮入口)-->
   <rect x="120" y="22" width="380" height="62" rx="10" fill="#fff7ed" stroke="#b4541a" stroke-width="2"/>
@@ -157,6 +159,10 @@
   <text x="140" y="396" font-size="14" font-weight="700" fill="#1a7f4b">⑥ 全绿门禁</text>
   <text x="140" y="413" font-size="11.5" fill="#3a6b52">测试 / lint / 构建全绿才进下一步</text>
 
+  <!-- 人参与徽标:①探查研判 / ⑤ADR拍板 -->
+  <circle cx="478" cy="40" r="11" fill="#7a52c7"/><text x="478" y="44" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
+  <circle cx="478" cy="332" r="11" fill="#7a52c7"/><text x="478" y="336" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
+
   <g stroke="#2f6feb" stroke-width="2" marker-end="url(#wparr)">
     <line x1="310" y1="84"  x2="310" y2="104"/>
     <line x1="310" y1="152" x2="310" y2="172"/>
@@ -169,6 +175,15 @@
   <path d="M512 104 H548 V424 H512" fill="none" stroke="#7a52c7" stroke-width="1.5" stroke-dasharray="4 4"/>
   <text x="560" y="264" font-size="11" font-weight="700" fill="#7a52c7" transform="rotate(90 560 264)" text-anchor="middle">实时勾选 -[x] + 任务跟踪 · 贯穿全程</text>
 </svg>
+
+<div class="lead" style="border-left-color:#7a52c7;background:#f4f0fb">
+<b>🙋 需要人参与的环节(不可全交给 AI):</b>
+<ol>
+  <li><b>探查结果研判</b>(对应 ①):探针跑完,由人确认事实文档(真实端点/字段/坑)可信、足以支撑写计划——不让 AI 拿不确信的"实测"就开写。</li>
+  <li><b>争议设计拍板 → ADR</b>(对应 ⑤):地基级 / 有争议的设计由<b>人</b>决策并落 ADR,不让 AI 自决。</li>
+  <li><b>计划评审批准</b>(进入执行前):计划成稿后人逐项对 spec 审——覆盖完整、拆分粒度合适、无占位符、runbook 可照抄跑;批准后才进入执行。</li>
+</ol>
+</div>
 
 <ul>
   <li><b>① 探查优先(写计划之前):</b>不把猜的 API 写进计划。未知外部依赖先起真服务、跑通最小链路,把真实端点/字段/响应/坑记成事实文档,后续实现<b>以实测为准</b>。实战中探针常当场逮到外部系统的鉴权/寻址坑——等集成阶段才撞,排查成本翻倍。</li>
