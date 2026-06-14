@@ -127,8 +127,10 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 |---|---|---|---|---|
 | api-gateway / BFF | (聚合) | token 校验 + 路由 + 聚合 | — | `services/gateway/` ✅ |
 | identity-org-service | `identity-org.yaml` | `GET /v1/me/orgs` | Keycloak claim 解析(`libs/identity`) | `services/identity_org_service/`(新,从 gateway 迁出) |
-| metadata-service | `metadata.yaml`(新) | `GET /v1/datasets`、`/v1/datasets/{name}`、`/v1/schemas` | Gravitino(docker) | `services/metadata_service/`(新) |
+| metadata-service | `metadata.yaml`(新) | `GET /v1/catalogs`、`…/{catalog}/schemas`、`…/{schema}/datasets`、`…/datasets/{name}`;`POST …/datasets`(注册) —— 层级树,映射见 ADR-016 | Gravitino(docker) | `services/metadata_service/`(新) |
 | data-pipeline-service | `data-pipeline.yaml`(新) | `POST /v1/data/prepare`、`GET /v1/data/jobs/{id}` | `pipelines/data_prep.run_prepare`(✅已建) | `services/data_pipeline_service/`(新) |
+
+> **修订(2026-06-14):** metadata-service 端点由 06-11 占位的扁平 `/v1/datasets`、`/v1/schemas` 更正为层级 `/v1/catalogs/{catalog}/schemas/{schema}/datasets`,落地 [ADR-016](../../adr/ADR-016-gravitino-tenancy-mapping.md)(2026-06-13)的 metalake→catalog→schema→fileset 映射;契约见 `contracts/openapi/metadata.yaml`,实现见 `services/metadata_service/app.py`。**此为文档同步(决策已在 ADR-016),非新决策。**
 
 边界铁律:**"列/查数据集"归 metadata-service(它拥有 catalog);"跑管线"归 data-pipeline-service**。v1 可同进程共部署,但契约/包/`/docs` 各自独立。`pipelines/data_prep` 与 `libs/` 保持为实现层(分层 `services → pipelines → libs` 不变)。
 
