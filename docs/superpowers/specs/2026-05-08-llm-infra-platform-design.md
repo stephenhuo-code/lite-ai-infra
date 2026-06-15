@@ -309,9 +309,9 @@ lite-ai-infra/
 │   └── openapi/identity-org.yaml   # ✅ identity-org 契约
 ├── services/                       # 各服务：契约 → 生成模型 → FastAPI app(/docs) → 实现
 │   ├── gateway/                    # ✅ BFF / API Gateway（token 校验 + 路由 + 聚合）
-│   ├── identity_org_service/       # ⏳ Plan 4（/v1/me/orgs 从 gateway 迁出，独立）
-│   ├── data_pipeline_service/      # ⏳ Plan 6（包 pipelines/data_prep）
-│   ├── metadata_service/           # ⏳ Plan 5（Gravitino 后端）
+│   ├── identity_org_service/       # ✅ Plan 3（/v1/me/orgs 从 gateway 迁出，独立）
+│   ├── data_pipeline_service/      # ⏳ Plan 5（包 pipelines/data_prep；分支待合并）
+│   ├── metadata_service/           # ✅ Plan 4（Gravitino 后端）
 │   ├── llm_gateway_service/        # ⏳ v2：统一 LLM 接入（LiteLLM 待选型）
 │   ├── agent_platform_service/     # ⏳ v2：Agent 框架/运行时 + 统一对话后端
 │   ├── agentic_search_service/     # ⏳ v3：多源多模态统一检索 agent
@@ -1454,7 +1454,7 @@ Lineage 边（v1 手工）：
 
 > **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。编号以实际计划文档为准(owner 06-14 口径 A):Plan 3=脚手架+identity-org+反代壳、Plan 4=metadata、Plan 5=data-pipeline、Plan 6=SDK。
 
-**出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino 元数据可查 ✅(metadata-service,Plan 5 已合并);③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);⑤ 契约 SDK/CLI 可调 ⏳(Plan 7);DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。**S1 进度:出口①②③ ✅,余 ⑤(Plan 6/7)+ stretch ④。**
+**出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino 元数据可查 ✅(metadata-service,Plan 4 已合并);③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);服务化 ⏳(metadata-service Plan 4 ✅;data-pipeline-service Plan 5 已实现+真DJ验收,**待 code review + 合并**);⑤ 契约 SDK/CLI 可调 ⏳(Plan 6);DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。**S1 进度:出口①②③ ✅,服务化待 Plan 5 合并,余 ⑤(Plan 6)+ stretch ④。**
 
 ---
 
