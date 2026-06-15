@@ -817,7 +817,7 @@ TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret -d username=a
   -d password=alice -d grant_type=password \
   http://localhost:8080/realms/lite-ai/protocol/openid-connect/token \
   | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-# A — 提交作业(tar_dir 用宿主机上一个小 tar 目录;DJ_BIN 桩或真 dj-venv 见下)
+# A — 提交作业(tar_dir 用宿主机上一个小 tar 目录;真 DJ 见下"前置")
 JOB=$(curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' \
   http://localhost:8090/v1/data/prepare | uv run python -c 'import sys,json;print(json.load(sys.stdin)["id"])')
@@ -834,7 +834,7 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'content-type: application/j
   -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' http://localhost:8090/v1/data/prepare
 ```
 期望:A=返回 `202` + 含 `id`/`status`(queued|running)/`enterprise_id=e-0001`;B=数轮后 `succeeded`,`GET` 返回含 `rows_written`/`lance_uri`(`s3://…/e-0001/g-0001/processed/cc3m.lance`);C=`401`。
-> 本地无真 DJ:`make run-data-pipeline` 前 `export DJ_BIN=<passthrough 桩>`(Task 8 fixture 同款),或在云上 spike-ECS 用 `/opt/dj-venv/bin/dj-process` 真跑。
+> **前置(真 DJ,dev/prod parity,spec §2 决策6)**:本地先 `make dj-setup` 建 `.dj-venv`(同云上版本)+ 起 Ray head(`.dj-venv/bin/ray start --head --num-cpus 2 --disable-usage-stats`),`make up` 默认 `DJ_BIN` 即指真 DJ。passthrough 桩**仅** `tests/integration` 用(求速 test double),不作 dev 运行时。云上用 `/opt/dj-venv/bin/dj-process`。
 
 **验收 3 — 隔离(can() deny 边界 = 跨组)**
 > 修正:企业从 caller token 推导(`enterprise_of`),跨**企业** POST 结构上不可能(token 为 e-0099 只能在 e-0099 内操作)。本端点的 deny-审计边界是**跨组**:caller 属 e-0001/g-0002,却提交到 g-0001。

@@ -16,6 +16,8 @@ if [ -x "${VENV}/bin/dj-process" ]; then
 fi
 echo "building DJ venv at ${VENV} (py-data-juicer + ray[default] + pillow, ~93 pkgs, no torch) ..."
 uv venv "${VENV}" --python 3.12
-VIRTUAL_ENV="${PWD}/${VENV}" uv pip install 'py-data-juicer' 'ray[default]' 'pillow>=10'
+# Pin for reproducible dev/prod parity — these MUST match cloud /opt/dj-venv.
+# ray version is load-bearing: the uv-worker behavior that broke us is ray-version-specific (2026-06-15).
+VIRTUAL_ENV="${PWD}/${VENV}" uv pip install 'py-data-juicer==1.5.2' 'ray[default]==2.55.1' 'pillow==12.2.0'
 echo "DJ venv ready: ${VENV}/bin/dj-process"
 echo "data-pipeline default DJ_BIN points here (scripts/dev_services.sh / Makefile run-data-pipeline)."

@@ -44,10 +44,18 @@ def _run_dj(recipe_path: str, log_path: str) -> int:
     # 关掉新版 Ray 的 "uv run" worker 模式:否则它在 uv 项目里用 `uv run` 起 worker,
     # uv 永远绑主 .venv(无 ray)→ worker ImportError ray(2026-06-15 实测)。
     env.update(HF_HUB_OFFLINE="1", HF_DATASETS_OFFLINE="1", RAY_ENABLE_UV_RUN_RUNTIME_ENV="0")
-    djp = Path(dj)
-    if djp.parent.name == "bin" and djp.parent.parent.is_dir():   # DJ_BIN 是 <venv>/bin/dj-process
-        env["VIRTUAL_ENV"] = str(djp.parent.parent)
-        env["PATH"] = f"{djp.parent}{os.pathsep}{env.get('PATH', '')}"
+    # 把 VIRTUAL_ENV/PATH 指向 DJ venv(解软链 + 校验确是 venv);识别不了(如默认裸 dj-process)
+    # 就**清掉**继承来的 VIRTUAL_ENV —— 否则它仍指主 .venv(无 ray),Ray worker 照样崩。
+    venv = None
+    if os.sep in dj or Path(dj).is_absolute():
+        real = Path(dj).resolve()
+        if real.parent.name == "bin" and any((real.parent / p).exists() for p in ("python", "python3")):
+            venv = real.parent.parent
+    if venv:
+        env["VIRTUAL_ENV"] = str(venv)
+        env["PATH"] = f"{venv / 'bin'}{os.pathsep}{env.get('PATH', '')}"
+    else:
+        env.pop("VIRTUAL_ENV", None)
     with open(log_path, "w") as log:
         return subprocess.run([dj, "--config", recipe_path], stdout=log, stderr=log, env=env).returncode
 
