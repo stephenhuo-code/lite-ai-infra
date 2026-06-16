@@ -31,14 +31,33 @@ class PrepareRequest:
     secret_key: str
     session_token: str | None = None
     region: str = "cn-hangzhou"
+    process: list[dict] | None = None   # Layer 1 DJ 算子自定义;None → build_recipe 用默认集
 
 def _run_dj(recipe_path: str, log_path: str) -> int:
-    """DJ 经外部 venv 子进程(spike 教训:Ray 禁瞬态 uv 环境)。DJ_BIN 指 dj-process。"""
+    """DJ 经外部 venv 子进程(spike 教训:Ray 禁瞬态 uv 环境)。DJ_BIN 指 dj-process。
+    关键(2026-06-15 实测):服务由 `uv run` 起,子进程会继承 uv-run 上下文(UV_*、
+    VIRTUAL_ENV=主 .venv)。Ray 据此按 uv 模式起 worker → 在 cwd 重建主 .venv(无 ray)
+    → ModuleNotFoundError: ray → 卡死。故剥掉 UV_*,并把 VIRTUAL_ENV/PATH 指向 DJ venv,
+    让 Ray worker 用含 ray 的 .dj-venv。"""
     dj = os.getenv("DJ_BIN", "dj-process")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("UV_")}
+    # 关掉新版 Ray 的 "uv run" worker 模式:否则它在 uv 项目里用 `uv run` 起 worker,
+    # uv 永远绑主 .venv(无 ray)→ worker ImportError ray(2026-06-15 实测)。
+    env.update(HF_HUB_OFFLINE="1", HF_DATASETS_OFFLINE="1", RAY_ENABLE_UV_RUN_RUNTIME_ENV="0")
+    # 把 VIRTUAL_ENV/PATH 指向 DJ venv(解软链 + 校验确是 venv);识别不了(如默认裸 dj-process)
+    # 就**清掉**继承来的 VIRTUAL_ENV —— 否则它仍指主 .venv(无 ray),Ray worker 照样崩。
+    venv = None
+    if os.sep in dj or Path(dj).is_absolute():
+        real = Path(dj).resolve()
+        if real.parent.name == "bin" and any((real.parent / p).exists() for p in ("python", "python3")):
+            venv = real.parent.parent
+    if venv:
+        env["VIRTUAL_ENV"] = str(venv)
+        env["PATH"] = f"{venv / 'bin'}{os.pathsep}{env.get('PATH', '')}"
+    else:
+        env.pop("VIRTUAL_ENV", None)
     with open(log_path, "w") as log:
-        return subprocess.run([dj, "--config", recipe_path], stdout=log, stderr=log,
-                              env={**os.environ, "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1"},
-                              ).returncode
+        return subprocess.run([dj, "--config", recipe_path], stdout=log, stderr=log, env=env).returncode
 
 def _audit(audit: AuditWriter, ctx: Context, req: PrepareRequest, action: str,
            decision: str, reason: str = "") -> None:
@@ -66,7 +85,8 @@ def run_prepare(ctx: Context, req: PrepareRequest, audit: AuditWriter, *,
 
     n_in = convert_fn(req.tar_dir, str(jsonl_dir))
     recipe_path = work / "recipe.yaml"
-    recipe_path.write_text(build_recipe(str(jsonl_dir / "data.jsonl"), str(cleaned_dir), req.np))
+    recipe_path.write_text(build_recipe(str(jsonl_dir / "data.jsonl"), str(cleaned_dir), req.np,
+                                        process=req.process))
     rc = dj_fn(str(recipe_path), str(work / "dj.log"))
     if rc != 0:
         _audit(audit, ctx, req, "data.prepare.failed", "allow", f"dj exit={rc}")

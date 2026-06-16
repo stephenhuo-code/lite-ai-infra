@@ -21,7 +21,7 @@
 - 修改:`Makefile`(`gen` 目标追加第三条 codegen)
 - 生成:`libs/contracts_gen/data_pipeline_models.py`(codegen 产物,提交)
 
-- [ ] **步骤 1:写契约**(异步:POST 返 `202` + Job;状态枚举含 `queued`——不变量 1/4)
+- [x] **步骤 1:写契约**(异步:POST 返 `202` + Job;状态枚举含 `queued`——不变量 1/4)(注:路径参数统一为 `{job_id}` 以与 app handler/漂移守卫对齐)
 
 ```yaml
 # contracts/openapi/data-pipeline.yaml
@@ -72,10 +72,10 @@ components:
         updated_at: {type: [string, 'null']}
 ```
 
-- [ ] **步骤 2:`Makefile` 的 `gen` 目标追加**(沿用 `--disable-timestamp` 保 freshness 门禁确定性):
+- [x] **步骤 2:`Makefile` 的 `gen` 目标追加**(沿用 `--disable-timestamp` 保 freshness 门禁确定性):
   `&& uv run datamodel-codegen --disable-timestamp --input contracts/openapi/data-pipeline.yaml --input-file-type openapi --output libs/contracts_gen/data_pipeline_models.py`
-- [ ] **步骤 3:`make gen` 生成模型,确认 `git diff` 无残留**(freshness 门禁口径);`oasdiff` warn 门禁自动覆盖新契约(无破坏性变更基线)。
-- [ ] **步骤 4:提交** `feat(contracts): data-pipeline.yaml — async prepare/job contract + codegen`
+- [x] **步骤 3:`make gen` 生成模型,确认 `git diff` 无残留**(freshness 门禁口径;实测二次 gen 无 drift);`oasdiff` warn 门禁自动覆盖新契约(无破坏性变更基线)。
+- [x] **步骤 4:提交** `feat(contracts): data-pipeline.yaml — async prepare/job contract + codegen`
 
 ---
 
@@ -85,7 +85,7 @@ components:
 
 **Files:** 修改:`pipelines/data_prep/runner.py`、`tests/pipelines/test_runner.py`(加用例)
 
-- [ ] **步骤 1:写失败测试**(注入 fake `build_recipe` 断言收到 `process`;happy path 已有,复用 seam)
+- [x] **步骤 1:写失败测试**(注入 fake `build_recipe` 断言收到 `process`;happy path 已有,复用 seam)
 
 ```python
 # 追加到 tests/pipelines/test_runner.py
@@ -102,8 +102,8 @@ def test_process_override_passed_to_recipe(tmp_path, monkeypatch):
 ```
 （`_req` 加 `process` 透传到 `PrepareRequest`;默认 `None`。）
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现** —— `PrepareRequest` 加 `process: list[dict] | None = None`;`run_prepare` 改 `recipe_path.write_text(build_recipe(..., req.np, process=req.process))`。
-- [ ] **步骤 4:跑绿**(原 3 + 新 1 = 4 passed);**步骤 5:提交** `feat(pipelines): thread DJ process override through run_prepare`
+- [x] **步骤 2:跑红**;**步骤 3:实现** —— `PrepareRequest` 加 `process: list[dict] | None = None`;`run_prepare` 改 `recipe_path.write_text(build_recipe(..., req.np, process=req.process))`。
+- [x] **步骤 4:跑绿**(原 3 + 新 1 = 4 passed);**步骤 5:提交** `feat(pipelines): thread DJ process override through run_prepare`
 
 ---
 
@@ -111,7 +111,7 @@ def test_process_override_passed_to_recipe(tmp_path, monkeypatch):
 
 **Files:** 创建:`services/data_pipeline_service/__init__.py`、`services/data_pipeline_service/jobs.py`、`tests/services/data_pipeline/__init__.py`、`tests/services/data_pipeline/test_store.py`
 
-- [ ] **步骤 1:写失败测试**(create→queued、update 转状态、read 投影、oldest_queued FIFO、running_count、未知 id 返 None)
+- [x] **步骤 1:写失败测试**(create→queued、update 转状态、read 投影、oldest_queued FIFO、running_count、未知 id 返 None)
 
 ```python
 # tests/services/data_pipeline/test_store.py
@@ -157,7 +157,7 @@ def test_load_spec_roundtrip(tmp_path):
     assert sp.tar_dir == "/d" and sp.role == "member" and sp.process == [{"a": 1}]
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(`<root>/<id>/spec.json` 由 create 一次写;`status.json` 初始 queued、后续 update;read = 投影合并;时间戳 UTC ISO)
+- [x] **步骤 2:跑红**;**步骤 3:实现**(`<root>/<id>/spec.json` 由 create 一次写;`status.json` 初始 queued、后续 update;read = 投影合并;时间戳 UTC ISO)
 
 ```python
 # services/data_pipeline_service/jobs.py
@@ -242,7 +242,7 @@ class JobStore:
         return min(q)[1] if q else None
 ```
 
-- [ ] **步骤 4:跑绿** → 全 passed;**步骤 5:提交** `feat(data-pipeline): JobSpec + status-file JobStore (ADR-018)`
+- [x] **步骤 4:跑绿** → 全 passed;**步骤 5:提交** `feat(data-pipeline): JobSpec + status-file JobStore (ADR-018)`
 
 ---
 
@@ -252,7 +252,7 @@ class JobStore:
 
 **Files:** 创建:`services/data_pipeline_service/scheduler.py`、`tests/services/data_pipeline/test_scheduler.py`
 
-- [ ] **步骤 1:写失败测试**(submit 非阻塞即返;空槽时 dispatch 标 running 并 spawn;有 running 时不再 spawn=串行;spawn 用 seam 注入 fake)
+- [x] **步骤 1:写失败测试**(submit 非阻塞即返;空槽时 dispatch 标 running 并 spawn;有 running 时不再 spawn=串行;spawn 用 seam 注入 fake)
 
 ```python
 # tests/services/data_pipeline/test_scheduler.py
@@ -314,7 +314,7 @@ def test_pid_watchdog_reaps_orphan(tmp_path):              # OOM/硬杀:running 
     assert store.read("job-2")["status"] == "running"
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(`spawn` 默认 `subprocess.Popen(..., start_new_session=True)` = detached → "服务挂管线不挂";`worker_argv` 默认指向 Task 5 的 worker 模块)
+- [x] **步骤 2:跑红**;**步骤 3:实现**(`spawn` 默认 `subprocess.Popen(..., start_new_session=True)` = detached → "服务挂管线不挂";`worker_argv` 默认指向 Task 5 的 worker 模块)
 
 ```python
 # services/data_pipeline_service/scheduler.py
@@ -381,7 +381,7 @@ class SubprocessJobRunner:
             self.store.update(jid, "running", pid=getattr(proc, "pid", None))
 ```
 
-- [ ] **步骤 4:跑绿** → 全 passed;**步骤 5:提交** `feat(data-pipeline): JobRunner port + SubprocessJobRunner (serial, detached)`
+- [x] **步骤 4:跑绿** → 全 passed;**步骤 5:提交** `feat(data-pipeline): JobRunner port + SubprocessJobRunner (serial, detached)`
 
 ---
 
@@ -391,7 +391,7 @@ class SubprocessJobRunner:
 
 **Files:** 创建:`services/data_pipeline_service/worker.py`、`tests/services/data_pipeline/test_worker.py`
 
-- [ ] **步骤 1:写失败测试**(注入 fake run_prepare:成功→写 succeeded + 字段;PermissionError→failed;其他异常→failed;断言用快照重建的 ctx 角色正确)
+- [x] **步骤 1:写失败测试**(注入 fake run_prepare:成功→写 succeeded + 字段;PermissionError→failed;其他异常→failed;断言用快照重建的 ctx 角色正确)
 
 ```python
 # tests/services/data_pipeline/test_worker.py
@@ -437,7 +437,7 @@ def test_generic_error_marks_failed(tmp_path, monkeypatch):
 ```
 > 注:上面 `seen["ctx_role"]` 写得啰嗦只为单测内联断言;实现期可在测试里直接 `from libs.identity.ids import EnterpriseId, GroupId` 顶部导入简化。
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(凭据/桶走 env,同 `pipelines/data_prep/__main__.py`;`_audit_writer()` 抽成可 monkeypatch 的 seam)
+- [x] **步骤 2:跑红**;**步骤 3:实现**(凭据/桶走 env,同 `pipelines/data_prep/__main__.py`;`_audit_writer()` 抽成可 monkeypatch 的 seam)
 
 ```python
 # services/data_pipeline_service/worker.py
@@ -494,7 +494,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **步骤 4:跑绿** → 全 passed;**步骤 5:提交** `feat(data-pipeline): detached worker — run_prepare + terminal status`
+- [x] **步骤 4:跑绿** → 全 passed;**步骤 5:提交** `feat(data-pipeline): detached worker — run_prepare + terminal status`
 
 ---
 
@@ -504,7 +504,7 @@ if __name__ == "__main__":
 
 **Files:** 创建:`services/data_pipeline_service/app.py`、`services/data_pipeline_service/main.py`、`tests/services/data_pipeline/test_app.py`;修改:`services/_scaffold/auth.py`(加共享 `enterprise_of`)、`services/metadata_service/app.py`(改用 `enterprise_of`,删本地 `_enterprise`)
 
-- [ ] **步骤 1:写失败测试**(seam 开启;happy→202+queued/running、job_id 不透明;跨企业 submit→403 零副作用(store 空)+审计 deny;GET 本组→200、跨组→403、未知→404;暴露 process)
+- [x] **步骤 1:写失败测试**(seam 开启;happy→202+queued/running、job_id 不透明;跨企业 submit→403 零副作用(store 空)+审计 deny【修正:企业从 token 推导,跨企业 POST 结构上不可能,改测跨组 deny】;GET 本组→200、跨组→403、未知→404;暴露 process)
 
 ```python
 # tests/services/data_pipeline/test_app.py
@@ -562,8 +562,8 @@ def test_process_override_persisted(tmp_path):
     assert store.load_spec(jid).process == [{"text_length_filter": {"min_len": 9}}]
 ```
 
-- [ ] **步骤 2:跑红**
-- [ ] **步骤 3:抽取共享 `enterprise_of`**(复审意见:第二次复制 → 抽到 `_scaffold`;纯函数零跨服务 import 风险)
+- [x] **步骤 2:跑红**
+- [x] **步骤 3:抽取共享 `enterprise_of`**(复审意见:第二次复制 → 抽到 `_scaffold`;纯函数零跨服务 import 风险)
 
 ```python
 # 追加 services/_scaffold/auth.py(metadata-service 改 import 它、删本地 _enterprise;其测试守回归)
@@ -583,7 +583,7 @@ def enterprise_of(ctx: Context) -> str:
     return ents[0]
 ```
 
-- [ ] **步骤 4:实现 app**(job_id=`job-`+uuid4 hex 服务端生成=不变量 3;deny 审计走 AuditWriter;dispatch 由 runner 自管 handler 不碰)
+- [x] **步骤 4:实现 app**(job_id=`job-`+uuid4 hex 服务端生成=不变量 3;deny 审计走 AuditWriter;dispatch 由 runner 自管 handler 不碰)
 
 ```python
 # services/data_pipeline_service/app.py
@@ -660,7 +660,7 @@ _runner = SubprocessJobRunner(JobStore(os.environ.get("JOBS_DIR", "./.jobs")), d
 app = build_app(runner=_runner, audit=AuditWriter(OssAuditSink(bucket=os.environ["AUDIT_BUCKET"], client=_s3)))
 ```
 
-- [ ] **步骤 5:跑绿** → 全 passed(含并发/看门狗用例);**步骤 6:提交** `feat(data-pipeline-service): async prepare/job-status app on scaffold (can() boundary)`
+- [x] **步骤 5:跑绿** → 全 passed(含并发/看门狗用例);**步骤 6:提交** `feat(data-pipeline-service): async prepare/job-status app on scaffold (can() boundary)`
 
 ---
 
@@ -668,10 +668,10 @@ app = build_app(runner=_runner, audit=AuditWriter(OssAuditSink(bucket=os.environ
 
 **Files:** 修改:`services/gateway/main.py`、`scripts/dev_services.sh`、`Makefile`(`run-data-pipeline`)、`README.md`(端口表);创建:`tests/services/data_pipeline/test_drift.py`
 
-- [ ] **步骤 1:gateway 加路由**(Plan 3 的 async 反代已转发 body,无需改 proxy):`services/gateway/main.py` 的 routes 追加 `"/v1/data": os.environ.get("DATA_PIPELINE_URL", "http://localhost:8003")`,删去该处 Plan 5 占位注释。
-- [ ] **步骤 2:`scripts/dev_services.sh`**:`SERVICES` 加 `"data-pipeline|8003|services.data_pipeline_service.main:app"`;`_env_for` 加 `data-pipeline)` 分支(`JOBS_DIR` + `OSS_*`/`DATA_BUCKET`/`AUDIT_BUCKET` + `LITEAI_JWKS_URL`,本地指向 MinIO);gateway 分支 env 追加 `DATA_PIPELINE_URL=http://localhost:8003`。
-- [ ] **步骤 3:`Makefile`** 加 `run-data-pipeline`(前台 + --reload,带本地 MinIO env);`make api-docs` 经 `swagger_urls.py` 自动纳入 `data-pipeline.yaml`(无需改脚本);README 端口表加 data-pipeline 8003。
-- [ ] **步骤 4:漂移守卫测试**(运行时 openapi ⊆ 契约,L3 活样例)
+- [x] **步骤 1:gateway 加路由**(Plan 3 的 async 反代已转发 body,无需改 proxy):`services/gateway/main.py` 的 routes 追加 `"/v1/data": os.environ.get("DATA_PIPELINE_URL", "http://localhost:8003")`,删去该处 Plan 5 占位注释。
+- [x] **步骤 2:`scripts/dev_services.sh`**:`SERVICES` 加 `"data-pipeline|8003|services.data_pipeline_service.main:app"`;`_env_for` 加 `data-pipeline)` 分支(`JOBS_DIR` + `OSS_*`/`DATA_BUCKET`/`AUDIT_BUCKET` + `LITEAI_JWKS_URL`,本地指向 MinIO);gateway 分支 env 追加 `DATA_PIPELINE_URL=http://localhost:8003`。
+- [x] **步骤 3:`Makefile`** 加 `run-data-pipeline`(前台 + --reload,带本地 MinIO env);`make api-docs` 经 `swagger_urls.py` 自动纳入 `data-pipeline.yaml`(无需改脚本);README 端口表加 data-pipeline 8003。
+- [x] **步骤 4:漂移守卫测试**(运行时 openapi ⊆ 契约,L3 活样例)
 
 ```python
 # tests/services/data_pipeline/test_drift.py
@@ -691,7 +691,7 @@ def test_runtime_matches_contract(tmp_path):
     assert_openapi_subset_of_contract(TestClient(app).app.openapi(), contract)
 ```
 
-- [ ] **步骤 5:提交** `feat(data-pipeline): wire into gateway + dev orchestration + drift guard`
+- [x] **步骤 5:提交** `feat(data-pipeline): wire into gateway + dev orchestration + drift guard`
 
 ---
 
@@ -699,7 +699,7 @@ def test_runtime_matches_contract(tmp_path):
 
 **Files:** 创建:`tests/integration/test_data_pipeline_e2e.py`
 
-- [ ] **步骤 1:集成测试**(标 `integration`;真 MinIO + `DJ_BIN` 桩=把输入 jsonl 拷成 `cleaned/cleaned.jsonl` 模拟 DJ → run_prepare 真写 Lance on MinIO;**同步驱动 worker.run_job 直跑**避免子进程不确定性,真验"提交参数→Lance 产物→状态终态")
+- [x] **步骤 1:集成测试**(标 `integration`;真 MinIO + `DJ_BIN` 桩=把输入 jsonl 拷成 `cleaned/cleaned.jsonl` 模拟 DJ → run_prepare 真写 Lance on MinIO;**同步驱动 worker.run_job 直跑**避免子进程不确定性,真验"提交参数→Lance 产物→状态终态")
 
 ```python
 # tests/integration/test_data_pipeline_e2e.py
@@ -737,10 +737,26 @@ def test_prepare_job_to_lance_on_minio(tmp_path, minio_s3, minio_bucket, monkeyp
 ```
 > `dj_passthrough_bin` fixture:写一个临时可执行,解析 `--config recipe.yaml` 取 `dataset_path`/`export_path`,把输入 jsonl 原样写到 `<export_path>/cleaned.jsonl`(模拟 DJ 清洗为恒等)。放 `tests/conftest.py` 或 `tests/integration/conftest.py`,复用既有 `minio_s3/minio_bucket` fixture。
 
-- [ ] **步骤 2:跑** `make dev-up` 后 `uv run pytest -q -m integration`(新 1 + 既有全绿);`uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿(含 data-pipeline 层无越界、codegen freshness、漂移守卫)。
-- [ ] **步骤 3:手动验收**——按文末 runbook 真起 `make up`,经 gateway 提交作业 → 轮询到 `succeeded` → 跨企业 403。贴输出。
-- [ ] **步骤 4:requesting-code-review 子代理评审 → 修订**(宪法 §3.4/ADR-017:计划完成后强制隔离评审)。
-- [ ] **步骤 5:回写状态**(本 plan checkbox 实时勾、spec §5.3/§9.3 Plan 5 标 ✅ + 服务化出口推进)+ 提交 `feat(data-pipeline-service): integration e2e + S1 service #3 done` + 合并。
+- [x] **步骤 2:跑** `make dev-up` 后 `uv run pytest -q -m integration`(新 1 + 既有全绿:8 passed);`uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿(101 unit + 分层 KEPT + guards exit 0;含 data-pipeline 层无越界、codegen freshness、漂移守卫)。
+- [x] **步骤 3:手动验收**——经 gateway 真 token 提交 → 真 Data-Juicer → `succeeded`(rows=2 + Lance 可读);无 token→401;跨组→403。证据已贴(owner 复核)。修复过程见 Task 9 步骤5(Ray×uv)+ runbook 注记(zsh interactivecomments / GET→POST / 旧进程 make down)。
+- [x] **步骤 4:requesting-code-review 子代理评审 → 修订**(宪法 §3.4/ADR-017:计划完成后强制隔离评审)。独立 reviewer 审 main..HEAD:无 Critical;1 Important(跨进程 status.json 非原子写)+ 1 Minor(worker spec=None 守卫)已修到绿(commit db021c1)。
+- [x] **步骤 5:回写状态**(spec §5.3/§9.3 Plan 5 标 ✅ + 服务化出口 ✅ + 目录树注释)+ 合并到 main。
+
+---
+
+### Task 9:dev/prod parity 收尾(手动验收暴露 + owner 决策 2026-06-15)
+
+> 手动验收发现:本地 `make up` 提交作业 `failed`,因 dev 没有 Data-Juicer、且 `pylance`/`pyyaml` 被误放 `dev` extras。owner 定 parity 纪律(spec §2 决策6):dev 含与云上同套依赖与功能,仅数据量/部署不同;桩仅限 CI。
+
+**Files:** 修改:`pyproject.toml`、`Makefile`、`scripts/dev_services.sh`、`.gitignore`、`pipelines/data_prep/runner.py`(`_run_dj` 剥 uv 上下文)、`docs/superpowers/specs/2026-06-11-s1-data-pipeline-design.md`(§2 决策6);创建:`scripts/dj_setup.sh`
+
+- [x] **步骤 1:修运行时依赖归属** —— `pylance`/`pyyaml` 从 `dev` extras 移入 `[project].dependencies`(它们是 data-pipeline worker 运行时 import);`uv lock && make sync` 后 `uv run pytest` 仍绿。
+- [x] **步骤 2:`make dj-setup`** —— `scripts/dj_setup.sh` 建独立 `.dj-venv`(`py-data-juicer ray[default] pillow`,镜像云上 `/opt/dj-venv`;沿用 spike run.sh 配方);`.gitignore` 加 `.dj-venv/`。
+- [x] **步骤 3:dev 默认 `DJ_BIN` 指真 DJ** —— `scripts/dev_services.sh` 与 `Makefile run-data-pipeline` 默认 `DJ_BIN=<repo>/.dj-venv/bin/dj-process`;passthrough 桩降级为**仅集成测试** test double(`tests/integration` conftest),不再是 dev 运行时默认。
+- [x] **步骤 4:spec 落 parity 纪律** —— S1 spec §2 决策6(dev/prod parity)。
+- [x] **步骤 5:本地真 DJ 端到端复验** —— `make dj-setup` + 本地 Ray head + `make up`(DJ_BIN 指真 `.dj-venv`),经 gateway 提交 → **真 Data-Juicer** 清洗 → `succeeded`、`rows_in/written=2`、`lance_uri` 落 OSS(真 Lance 可读)。**复验中发现并修**:新版 Ray 的 "uv run" worker 模式在 uv 项目里绑主 `.venv`(无 ray)→ worker 崩;`_run_dj` 改为剥 `UV_*` + 设 `RAY_ENABLE_UV_RUN_RUNTIME_ENV=0` + `VIRTUAL_ENV`/`PATH` 指 `.dj-venv`(spike "Ray 禁瞬态 uv 环境"教训在 service 链上的再现)。
+- [x] **步骤 6:提交** `feat(data-pipeline): dev/prod parity — runtime deps + make dj-setup + real DJ default`(commit 189a169)
+  > 注:本地真 DJ 需先 `make dj-setup` + 起 Ray head(`.dj-venv/bin/ray start --head`);make up 是否自动起 Ray head 列为后续 dev-UX 改进(本轮 runbook 注明手动起)。
 
 ---
 
@@ -781,6 +797,8 @@ SDK/CLI(出口⑤)= Plan 6(由本契约生成)。
 ## 手动验收 runbook(实现完成后照此验证)
 
 > 原则(宪法 §3.2):证据先于断言。本服务套脚手架后,`make up` 自动带起、契约自动进 `make api-docs` 下拉(spec §9.2 runbook 模板)。
+>
+> **粘贴前两条注意(zsh)**:① 整段粘贴若报 `parse error near '#'` —— zsh 默认不把 `#` 当注释,先执行一次 `setopt interactivecomments`。② 改过服务路由/代码后,`make up` 会**跳过已在端口上的旧进程**(陈旧路由表)→ 先 `make down` 再 `make up`,否则会撞到老 gateway 的 404。
 
 **前置:本地凭据用 MinIO**(dev compose 已起 MinIO);`make up` 后确认 4 服务运行(identity 8001 / metadata 8002 / data-pipeline 8003 / gateway 8090)。
 
@@ -799,33 +817,36 @@ TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret -d username=a
   -d password=alice -d grant_type=password \
   http://localhost:8080/realms/lite-ai/protocol/openid-connect/token \
   | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-# 提交作业(tar_dir 用宿主机上一个小 tar 目录;DJ_BIN 桩或真 dj-venv 见下)
+# A — 提交作业(tar_dir 用宿主机上一个小 tar 目录;真 DJ 见下"前置")
 JOB=$(curl -fsS -X POST -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' \
-  http://localhost:8090/v1/data/prepare | uv run python -c 'import sys,json;print(json.load(sys.stdin)["id"])')   # A
+  http://localhost:8090/v1/data/prepare | uv run python -c 'import sys,json;print(json.load(sys.stdin)["id"])')
 echo "job=$JOB"
-# 轮询直到 terminal(按派生布尔判终态,非字符串匹配 → S2a 加新终态不破坏此脚本)
+# B — 轮询直到 terminal(按派生布尔判终态,非字符串匹配 → S2a 加新终态不破坏此脚本)
 for i in $(seq 1 30); do
   J=$(curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/data/jobs/$JOB)
   echo "  $(echo "$J" | uv run python -c 'import sys,json;print(json.load(sys.stdin)["status"])')"
   echo "$J" | uv run python -c 'import sys,json;sys.exit(0 if json.load(sys.stdin)["terminal"] else 1)' && break
   sleep 2
-done                                                                                                              # B
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8090/v1/data/prepare                                   # C 无 token
+done
+# C — 无 token:必须 POST(GET /prepare 只会得 405 Method Not Allowed,到不了鉴权)→ 期望 401
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'content-type: application/json' \
+  -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' http://localhost:8090/v1/data/prepare
 ```
 期望:A=返回 `202` + 含 `id`/`status`(queued|running)/`enterprise_id=e-0001`;B=数轮后 `succeeded`,`GET` 返回含 `rows_written`/`lance_uri`(`s3://…/e-0001/g-0001/processed/cc3m.lance`);C=`401`。
-> 本地无真 DJ:`make run-data-pipeline` 前 `export DJ_BIN=<passthrough 桩>`(Task 8 fixture 同款),或在云上 spike-ECS 用 `/opt/dj-venv/bin/dj-process` 真跑。
+> **前置(真 DJ,dev/prod parity,spec §2 决策6)**:本地先 `make dj-setup` 建 `.dj-venv`(同云上版本)+ 起 Ray head(`.dj-venv/bin/ray start --head --num-cpus 2 --disable-usage-stats`),`make up` 默认 `DJ_BIN` 即指真 DJ。passthrough 桩**仅** `tests/integration` 用(求速 test double),不作 dev 运行时。云上用 `/opt/dj-venv/bin/dj-process`。
 
-**验收 3 — 隔离(跨企业)**
+**验收 3 — 隔离(can() deny 边界 = 跨组)**
+> 修正:企业从 caller token 推导(`enterprise_of`),跨**企业** POST 结构上不可能(token 为 e-0099 只能在 e-0099 内操作)。本端点的 deny-审计边界是**跨组**:caller 属 e-0001/g-0002,却提交到 g-0001。
 ```bash
-# 用属 e-0099 的用户 token(seed realm 若无,用 x-test-claims seam 在 8003 直测)
-LITEAI_ALLOW_TEST_CLAIMS=1  # 仅本地;curl 8003 带 x-test-claims
+# x-test-claims seam(仅本地,需 LITEAI_ALLOW_TEST_CLAIMS=1):caller 在 g-0002,提交 g-0001 → 跨组 deny
+export LITEAI_ALLOW_TEST_CLAIMS=1
 curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'content-type: application/json' \
-  -H 'x-test-claims: {"sub":"u-x","groups":["/e-0099/g-0001/members"]}' \
+  -H 'x-test-claims: {"sub":"u-x","groups":["/e-0001/g-0002/members"]}' \
   -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' \
   http://localhost:8003/v1/data/prepare                                                                          # D
 ```
-期望:D=`403`(跨企业 deny,零副作用 + 审计桶出现 `decision:deny`)。
+期望:D=`403`(跨组 deny,零副作用 = 无作业落库 + 审计桶出现 `decision:deny`)。
 
 **验收 4 — 漂移守卫**
 ```bash

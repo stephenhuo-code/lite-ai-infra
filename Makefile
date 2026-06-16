@@ -1,6 +1,8 @@
-.PHONY: test test-integration lint contract-check dev-up dev-down sync gen up down ps api-docs api-docs-down
+.PHONY: test test-integration lint contract-check dev-up dev-down sync gen up down ps api-docs api-docs-down dj-setup
 sync:             ; uv sync --extra dev
-gen:              ; uv run datamodel-codegen --disable-timestamp --input contracts/openapi/identity-org.yaml --input-file-type openapi --output libs/contracts_gen/identity_org_models.py && uv run datamodel-codegen --disable-timestamp --input contracts/openapi/metadata.yaml --input-file-type openapi --output libs/contracts_gen/metadata_models.py
+# dev/prod parity:建独立 .dj-venv(同云上 Data-Juicer+Ray);本地真跑数据管线前先 `make dj-setup` 一次
+dj-setup:         ; bash scripts/dj_setup.sh
+gen:              ; uv run datamodel-codegen --disable-timestamp --input contracts/openapi/identity-org.yaml --input-file-type openapi --output libs/contracts_gen/identity_org_models.py && uv run datamodel-codegen --disable-timestamp --input contracts/openapi/metadata.yaml --input-file-type openapi --output libs/contracts_gen/metadata_models.py && uv run datamodel-codegen --disable-timestamp --input contracts/openapi/data-pipeline.yaml --input-file-type openapi --output libs/contracts_gen/data_pipeline_models.py
 test:             ; uv run pytest -q
 test-integration: ; uv run pytest -q -m integration
 lint:             ; uv run lint-imports && bash scripts/ci_guards.sh
@@ -19,4 +21,5 @@ api-docs-down:    ; docker compose -f deploy/dev/swagger-ui.yml down
 # 单服务前台(开发热重载用)
 run-identity:     ; LITEAI_JWKS_URL=$(JWKS) uv run uvicorn services.identity_org_service.main:app --port 8001 --reload
 run-metadata:     ; LITEAI_JWKS_URL=$(JWKS) GRAVITINO_URL=http://localhost:8091 uv run uvicorn services.metadata_service.main:app --port 8002 --reload
-run-gateway:      ; IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 uv run uvicorn services.gateway.main:app --port 8090 --reload
+run-gateway:      ; IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 DATA_PIPELINE_URL=http://localhost:8003 uv run uvicorn services.gateway.main:app --port 8090 --reload
+run-data-pipeline: ; LITEAI_JWKS_URL=$(JWKS) JOBS_DIR=./.dev/jobs OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 OSS_REGION=us-east-1 DATA_BUCKET=lite-ai AUDIT_BUCKET=lite-ai DJ_BIN=$(PWD)/.dj-venv/bin/dj-process uv run uvicorn services.data_pipeline_service.main:app --port 8003 --reload

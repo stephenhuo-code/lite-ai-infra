@@ -99,7 +99,7 @@ uv run python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signatur
 | **api-gateway**(反代壳) | **8090** | `make run-gateway` |
 | identity-org-service | 8001 | `make run-identity` |
 | metadata-service | 8002 | (Plan 4) |
-| data-pipeline-service | 8003 | (Plan 5) |
+| data-pipeline-service | 8003 | `make run-data-pipeline` |
 
 **一键起停全部(deps 容器 + 全部服务进程):**
 ```bash

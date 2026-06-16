@@ -309,9 +309,9 @@ lite-ai-infra/
 │   └── openapi/identity-org.yaml   # ✅ identity-org 契约
 ├── services/                       # 各服务：契约 → 生成模型 → FastAPI app(/docs) → 实现
 │   ├── gateway/                    # ✅ BFF / API Gateway（token 校验 + 路由 + 聚合）
-│   ├── identity_org_service/       # ⏳ Plan 4（/v1/me/orgs 从 gateway 迁出，独立）
-│   ├── data_pipeline_service/      # ⏳ Plan 6（包 pipelines/data_prep）
-│   ├── metadata_service/           # ⏳ Plan 5（Gravitino 后端）
+│   ├── identity_org_service/       # ✅ Plan 3（/v1/me/orgs 从 gateway 迁出，独立）
+│   ├── data_pipeline_service/      # ✅ Plan 5（包 pipelines/data_prep；异步作业薄壳）
+│   ├── metadata_service/           # ✅ Plan 4（Gravitino 后端）
 │   ├── llm_gateway_service/        # ⏳ v2：统一 LLM 接入（LiteLLM 待选型）
 │   ├── agent_platform_service/     # ⏳ v2：Agent 框架/运行时 + 统一对话后端
 │   ├── agentic_search_service/     # ⏳ v3：多源多模态统一检索 agent
@@ -1448,13 +1448,13 @@ Lineage 边（v1 手工）：
 | Plan 2:`pipelines/data_prep` | 一行命令:tar → DJ+Ray 清洗 → Lance on OSS 隔离路径;can()+审计入口;三层自定义开放(配方层已落地) | **①** | ✅ **已验收**(15,138 条 CC3M 真 E2E,1m43s;39 单测/3 集成) |
 | Plan 3:脚手架 + identity-org-service + gateway 反代壳 | 统一 FastAPI 模板(/docs)+ `make api-docs` + 漂移守卫 CI;identity-org 迁出独立;gateway 改纯反代壳 | swagger 能力 + 服务化① | ✅ 已合并 |
 | Plan 4:metadata-service | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **②** | ✅ **已合并**(层级 API/can() 过滤/fileset→Dataset;80 单元+7 集成;人工 runbook 验收)|
-| Plan 5:data-pipeline-service | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id+查状态) | 服务化 | ⏳ 下一个 |
+| Plan 5:data-pipeline-service | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id+查状态) | 服务化 | ✅ **已合并**(异步作业薄壳 ADR-018;JobRunner seam/单槽串行/PID 看门狗;102 单元+8 集成;独立 review;真 DJ 端到端验收)|
 | Plan 6:生成式 SDK/CLI | 契约生成 client + `laictl`(调服务 API);手写 CLI 降级 ops 后门 | **⑤** | ⏳ |
 | stretch:Dev Workspace | docker code-server 半天版(Pod 版 → S2) | ④(降级) | ⏳ 不阻塞 DoD |
 
 > **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。编号以实际计划文档为准(owner 06-14 口径 A):Plan 3=脚手架+identity-org+反代壳、Plan 4=metadata、Plan 5=data-pipeline、Plan 6=SDK。
 
-**出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino 元数据可查 ✅(metadata-service,Plan 5 已合并);③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);⑤ 契约 SDK/CLI 可调 ⏳(Plan 7);DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。**S1 进度:出口①②③ ✅,余 ⑤(Plan 6/7)+ stretch ④。**
+**出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino 元数据可查 ✅(metadata-service,Plan 4 已合并);③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);服务化 ✅(metadata-service Plan 4 + data-pipeline-service Plan 5,契约先行,经 gateway can()+audit);⑤ 契约 SDK/CLI 可调 ⏳(Plan 6);DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。**S1 进度:出口①②③ + 服务化 ✅,余 ⑤(Plan 6)+ stretch ④。**
 
 ---
 

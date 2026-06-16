@@ -54,6 +54,7 @@ SDK(生成) ──┘        │
 3. **分层扩展**:import-linter 由 `services → libs` 扩为 **`services → pipelines → libs`**;`pipelines` 不得 import `services`。
 4. **纪律延续**:所有 mutation 经 `can()`(宪法 §2.4 唯一出入口)+ 审计(best-effort);资源命名只有不透明 ID(护栏已在 CI)。
 5. **运行时形态**:两服务与 gateway 同进程组部署可接受(S1 单机 uvicorn 多 app 或单 app 多 router 均可,实现期定,以契约边界为准——服务边界=契约边界,而非进程边界,符合宪法 §4 对 v1 的容忍)。
+6. **dev/prod parity(2026-06-15,owner)**:本地开发环境**含与云上同套系统依赖与功能**,**仅数据量与部署形态不同**——不得用"本地缺某依赖/用桩替代"作为 dev 默认。具体落地:① 运行时依赖必须声明在 `[project].dependencies`(非 `dev` extras),否则精简装的生产环境会 ImportError(如 `pylance`/`pyyaml`);② Data-Juicer 在本地经 `make dj-setup` 建独立 `.dj-venv`(镜像云上 `/opt/dj-venv`,装同套包),`make up` 默认 `DJ_BIN` 指向它,本地 `make up` 即跑**真 DJ**(小样本);③ 测试用的桩(如 DJ passthrough)**仅限 CI/集成测试求速**(test double),不作 dev 运行时默认。独立 `.dj-venv`(而非进主 `.venv`)是**拓扑对等**:云上 DJ 本就跑在独立环境/容器,且平台只 subprocess 调 `dj-process` 二进制、从不 import(见 ADR-018)。
 
 ## 3. 数据流与隔离(宪法 §1 落地)
 
@@ -146,7 +147,7 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 |---|---|---|---|
 | **Plan 3:服务脚手架 + identity-org-service + gateway 反代壳** | 统一 FastAPI 模板(/docs)+ `make api-docs` + 漂移守卫 CI;identity-org 从 gateway 迁出独立;gateway 改纯反代壳 | swagger 能力 + 服务化① | ✅ 已合并 |
 | **Plan 4:metadata-service** | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **出口②** | ✅ 已合并 |
-| **Plan 5:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id + 查状态)+ 集成 | 服务化 | ⏳ 下一个 |
+| **Plan 5:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id + 查状态)+ 集成 | 服务化 | ✅ 已合并(异步作业薄壳,ADR-018;真 DJ 端到端 + dev/prod parity) |
 | **Plan 6:生成式 SDK/CLI** | 由契约生成 client + `laictl data prepare/list/describe`(调服务 API,OIDC device flow) | **出口⑤** | ⏳ |
 | stretch | Dev Workspace docker 版 | ④降级 | ⏳ |
 
