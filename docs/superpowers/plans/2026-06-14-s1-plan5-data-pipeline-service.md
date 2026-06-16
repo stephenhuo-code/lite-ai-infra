@@ -740,7 +740,7 @@ def test_prepare_job_to_lance_on_minio(tmp_path, minio_s3, minio_bucket, monkeyp
 - [x] **步骤 2:跑** `make dev-up` 后 `uv run pytest -q -m integration`(新 1 + 既有全绿:8 passed);`uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿(101 unit + 分层 KEPT + guards exit 0;含 data-pipeline 层无越界、codegen freshness、漂移守卫)。
 - [x] **步骤 3:手动验收**——经 gateway 真 token 提交 → 真 Data-Juicer → `succeeded`(rows=2 + Lance 可读);无 token→401;跨组→403。证据已贴(owner 复核)。修复过程见 Task 9 步骤5(Ray×uv)+ runbook 注记(zsh interactivecomments / GET→POST / 旧进程 make down)。
 - [x] **步骤 4:requesting-code-review 子代理评审 → 修订**(宪法 §3.4/ADR-017:计划完成后强制隔离评审)。独立 reviewer 审 main..HEAD:无 Critical;1 Important(跨进程 status.json 非原子写)+ 1 Minor(worker spec=None 守卫)已修到绿(commit db021c1)。
-- [ ] **步骤 5:回写状态**(本 plan checkbox 实时勾、spec §5.3/§9.3 Plan 5 标 ✅ + 服务化出口推进)+ 提交 `feat(data-pipeline-service): integration e2e + S1 service #3 done` + 合并。
+- [x] **步骤 5:回写状态**(spec §5.3/§9.3 Plan 5 标 ✅ + 服务化出口 ✅ + 目录树注释)+ 合并到 main。
 
 ---
 
