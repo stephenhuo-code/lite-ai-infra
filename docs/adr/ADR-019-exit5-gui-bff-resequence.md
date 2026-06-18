@@ -18,17 +18,21 @@ owner 决策(2026-06-18 问答):**跳过 CLI,直接做真 GUI** 来满足出口�
 
 1. **出口⑤ 重定义**:由"SDK/CLI 可调"改为 **"真 GUI 经 API 端到端调通"**(图形客户端登录 → 经 gateway 调服务 → 完成数据域核心流)。`laictl`(Plan 6 草稿,commit 9a70c18)**推迟**为后续 ops/自动化/CI 工具,**不删**(契约/device-flow 分析沉淀复用)。
 
-2. **认证 = BFF**(owner 决策)。gateway 由"薄反代壳"升级为 **BFF**:服务端 OIDC Authorization Code(+PKCE)、`/login`·`/callback`·`/logout`、服务端会话、会话→下游 bearer、CSRF 防护。**前端永不接触 token**(比 SPA-PKCE 安全,终态形态)。
+2. **认证 = BFF**(owner)。gateway 由薄反代壳升级为 BFF:服务端 OIDC Authorization Code + **PKCE**、`/auth/login`·`/auth/callback`·`/auth/logout`、服务端会话、会话→下游 bearer、CSRF。前端永不接触 token。
+   - **(C-3,复审)本 ADR 显式修订 spec §9.1 的 BFF 定义**:由"纯路由聚合"扩为 **"OIDC 会话终结 + 路由聚合"**。OIDC/会话/CSRF 封装为 gateway 内独立模块 `services/gateway/bff/`(与反代物理隔离,为 v2 拆分留缝),**不**直接长进 `build_gateway`。
+   - **(C-4,复审)realm 加固 = Plan 6 DoD 硬门**:`redirectUris` 由 `["*"]` 收窄到精确回调;关 `directAccessGrantsEnabled`(ROPC,CLI 已推迟);client secret 走 env/secret 管理,prod 不用 `dev-secret`。
+   - **(I-3,复审)** `/auth/callback` 校验 `state` + PKCE `code_verifier`;所有副作用端点严格非 GET(SameSite=Lax 方成立);CSRF 双提交 token(cookie 副本 + `X-CSRF-Token` 头)。
 
-3. **会话存储(v1 无 PG,ADR-013)= 无状态加密 cookie**(owner 采纳推荐)。token 装进**签名+加密 cookie**(AEAD,如 Fernet),无服务端会话存储、**零新基础设施**。置于**会话存储 seam** 后,S2 可换服务端存储(Redis/PG)。
-   - 代价:无中心化会话吊销(依赖 token 生命周期 / Spike A);cookie 体积上限;刷新靠 refresh-token-in-cookie 或重登。
-   - 否决:进程内内存(单副本、重启丢)、Redis(新基础设施)——均不适 v1。
+3. **会话存储 = 无状态加密 cookie**(owner)。**(C-2,复审更正)这是为规避 Redis 新基建的独立工程取舍,非 ADR-013 要求**(ADR-013 的"无 PG"是业务数据/审计一致性,与会话无关);置于**会话存储 seam** 后,v2 可换 Redis/PG 获中心吊销。token 装 Fernet 加密 cookie(HttpOnly/SameSite=Lax)。
+   - **吊销窗口(登记风险,owner 接受)**:无中心吊销 → 踢人/改组/降权在 access token 过期前不生效。**缓解 = access token TTL ≤ 5min + refresh 轮换**,把隔离风险窗口压到 ≤5min(写进风险表)。v2 服务端会话可即时吊销。
+   - **(I-2,复审)refresh 并发死结**:无状态无服务端锁,并发请求同时刷新 + Keycloak refresh rotation → 互相失效 → 随机登出。**Plan 6 探查任务**用真 Keycloak 实测,定 single-flight(单副本进程内按 sub 加 asyncio.Lock)或关 rotation;**禁止把猜测写进计划**(宪法 §3.4 探查优先)。
+   - 否决:进程内内存(单副本/重启丢)、Redis(新基建)。
 
-4. **前端 = React + Vite**(owner 决策),置 `frontend/` 子目录(node 工具链);dev 经 vite 起,**生产部署留 S2c**。把中保真原型(`docs/superpowers/prototypes/2026-06-16-data-domain-midfi.html`)做成真调 BFF 的应用。
+4. **前端 = React + Vite**(owner),置 `frontend/`(node 工具链)。**(I-4,复审 + owner)gateway serve `frontend/dist`**(构建后静态资源由 gateway 直接 serve → 天然同源,消掉 CORS/cookie-domain/SameSite 跨域整类问题,更接近终态);dev 用 vite 代理同源。**出口⑤ 在同源拓扑上验收**。把中保真原型做成真调 BFF 的应用。
 
-5. **强制后端补契约**:`GET /v1/data/jobs`(backlog #1,列作业 + 分页/状态过滤)加进 data-pipeline(GUI 作业页需要)。其余 backlog 按 GUI 各页需要逐步加(#2 分页等);**"数据集上传"页(#11)本轮可推迟**(上传端点是独立较大件)。
+5. **强制后端补契约**:`GET /v1/data/jobs`(backlog #1)加进 data-pipeline。**(I-1,复审)契约先行 + 响应必经 `can()` 按企业/组过滤**(`JobStore` 加 `list_jobs(ctx,status,limit,offset)`,过滤在 service 层经 `can()` 做,**不**裸暴露跨企业的 `_all_status()`);分页 limit/offset;作业量上千需索引,**显式登记 vN+**。**"数据集上传"页(#11)本轮推迟。**
 
-6. **路线重排**:GUI(BFF + 前端)现在做、关 S1 出口⑤;**S2a(10TB 放大 + Gravitino HA)、S2b(Embedding/ANN)顺延到 GUI 之后**(承 ADR-014:出口重排走 ADR)。
+6. **范围/路线(C-1,owner=直接延长 S1)**:GUI(BFF+前端)**并入 S1、S1 工期顺延**;出口⑤ 由 GUI 关闭。**S1 范围显式扩张**(非 carry-over;spec §1 出口表 + §9.3 计划序同步)。S2a(10TB)/S2b(检索)顺延到 GUI 之后(承 ADR-014:重排走 ADR)。
 
 7. **计划拆分**(编号承口径 A):
    - **Plan 6 → BFF 后端**:gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1)。
@@ -41,12 +45,19 @@ owner 决策(2026-06-18 问答):**跳过 CLI,直接做真 GUI** 来满足出口�
 **正面**:交付真正的终端用户产品;BFF 是安全/终态认证模型(token 不进浏览器);React+Vite 可维护;API 仍是稳定核心(GUI 只是又一个客户端,services 不动业务逻辑)。
 
 **负面 / 已知**:
-- 体量远大于 CLI;**等于把 S2c 提前**,S2a/S2b 顺延。
+- 体量远大于 CLI;**S1 范围扩张、工期顺延**(owner:直接延长 S1);S2a/S2b 顺延到 GUI 之后。
 - Python 仓库引入 **node 工具链**(隔离在 `frontend/`)。
-- **无状态 cookie**:无中心会话吊销(token 生命周期依赖);cookie 体积限制;刷新需处理。
-- BFF 是 **confidential OIDC 客户端**(持 client secret),需管密钥;Keycloak realm 需对应客户端配置(回调 URI)。
-- **CORS**:若前端经 gateway 同源服务/反代,可免 CORS;dev 若异源(vite :5173 ↔ gateway :8090)需配 CORS 或 vite 代理。
+- **无状态 cookie 无中心吊销**:踢人/改组在 access token 过期前不生效 → **吊销窗口 ≤ access TTL(≤5min)**(登记风险,owner 接受);cookie 体积上限(Plan 6 探查实测真 token 大小,token 带 groups full-path claim 多组用户可能膨胀)。
+- BFF 持 **client secret**(confidential client),需密钥管理;realm 回调收窄 + 关 ROPC 为 DoD 硬门(C-4)。
+- **refresh 并发刷新**需 single-flight 或关 rotation(I-2,探查实测定)。
+- gateway 职责扩为 **"OIDC 会话终结 + 反代聚合"**(修订 §9.1);会话逻辑模块隔离,留 v2 拆分缝(C-3)。
+- **同源 serving**(gateway serve `dist`)避开 CORS;出口⑤ 在同源拓扑验收(I-4)。
 - GUI 受当前契约面限制,本轮拉入 #1(列作业);其余 backlog 渐进补。
+- **Plan 6 可独立验收**(M-1):curl 跑通 OIDC code 全链路(`/auth/login` 302→KC→`/auth/callback` set-cookie→带 cookie 调 `/v1/data/jobs` 200→`/auth/logout` 清 cookie),不依赖 Plan 7 前端。
+
+## 修订记录
+
+- **2026-06-18(product-architect 隔离复审采纳)**:C-1 范围定性=直接延长 S1(已入 Decision §6 + Consequences);C-2 会话存储论证更正(独立取舍非 ADR-013 要求)+ ≤5min TTL + 吊销窗口登记;C-3 显式修订 spec §9.1 BFF 定义 + 会话逻辑模块隔离;C-4 realm 加固为 DoD 硬门;I-1 列作业 can() 过滤+分页;I-2 refresh 并发探查任务;I-3 callback state/PKCE + CSRF;I-4 gateway serve dist 同源验收。复审结论"需改后用",上述修订后方可作 Plan 6/7 地基。
 
 ## Alternatives considered
 

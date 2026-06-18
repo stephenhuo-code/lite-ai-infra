@@ -132,7 +132,7 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 
 | 服务 | 契约 | 拥有 endpoint | 后端实现 | 包路径 |
 |---|---|---|---|---|
-| api-gateway / BFF | (聚合) | token 校验 + 路由 + 聚合 | — | `services/gateway/` ✅ |
+| api-gateway / BFF | (聚合) | **OIDC 会话终结**(`/auth/login·callback·logout`,会话→下游 bearer,CSRF)+ token 校验 + 路由 + 聚合 + serve `frontend/dist` | — | `services/gateway/`(BFF 逻辑独立模块 `gateway/bff/`)|
 | identity-org-service | `identity-org.yaml` | `GET /v1/me/orgs` | Keycloak claim 解析(`libs/identity`) | `services/identity_org_service/`(新,从 gateway 迁出) |
 | metadata-service | `metadata.yaml`(新) | `GET /v1/catalogs`、`…/{catalog}/schemas`、`…/{schema}/datasets`、`…/datasets/{name}`;`POST …/datasets`(注册) —— 层级树,映射见 ADR-016 | Gravitino(docker) | `services/metadata_service/`(新) |
 | data-pipeline-service | `data-pipeline.yaml`(新) | `POST /v1/data/prepare`、`GET /v1/data/jobs/{id}` | `pipelines/data_prep.run_prepare`(✅已建) | `services/data_pipeline_service/`(新) |
@@ -159,5 +159,5 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 | **Plan 8:Dev Workspace docker** | code-server 半天版 | ④降级 | ⏳ |
 | ~~Plan 6(原):SDK/CLI `laictl`~~ | ⏸ **deferred**(后续 ops 工具) | — | ADR-019 |
 
-> **出口⑤ 重定义(2026-06-18,ADR-019)**:由"SDK/CLI 可调"改为**真 GUI 经 API 调通**——owner 终态是 GUI,GUI/CLI 同为 API 客户端,跳过 CLI 直接做 GUI(BFF + React/Vite)。CLI 推迟为 ops 工具。等于把 S2c(前端+BFF)提前,S2a/S2b 顺延。详见 ADR-019。
+> **出口⑤ 重定义(2026-06-18,ADR-019;product-architect 复审采纳)**:由"SDK/CLI 可调"改为**真 GUI 经 API 调通**——owner 终态是 GUI,GUI/CLI 同为 API 客户端,跳过 CLI 直接做 GUI(BFF + React/Vite)。CLI 推迟为 ops 工具。**owner 决:直接延长 S1**(GUI 并入 S1、工期顺延、S1 范围显式扩张),S2a/S2b 顺延到 GUI 之后。§9.1 BFF 定义随之修订(加 OIDC 会话终结)。会话=无状态加密 cookie(access TTL≤5min,吊销窗口登记风险)。详见 ADR-019。
 > 手写 `python -m pipelines.data_prep` 仍为 ops 后门(标注非产品入口)。
