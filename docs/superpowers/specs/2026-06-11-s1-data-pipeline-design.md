@@ -90,6 +90,12 @@ SDK(生成) ──┘        │
 ## 6. 边界与 S2 交接备忘
 
 1. **S2 前端原型先行**:数据域前端的**低保真原型必须在 S2 spec 之前/之中**完成(brainstorming visual companion)——前端是契约的第一个消费者,原型驱动契约修订(S1 契约 0.x 留了加法余地)。高保真视觉稿放 spec 后。
+   > **落地(2026-06-16)**:已产出数据域中保真原型 `docs/superpowers/prototypes/2026-06-16-data-domain-midfi.html`(身份域/数据域分离:登录 → 我的账户/组织;数据集上传 → 创建作业 → 数据管线 → 数据目录)。作为契约第一个消费者,反推出 **S2 契约修订 backlog**(详见原型 Design notes):
+   > - **data-pipeline**:① `GET /v1/data/jobs` 列作业(+分页/状态过滤,可早)· ⑥ "算子目录" 端点驱动 process 表单 · ⑦ 作业日志端点 / 取消(随 Argo)
+   > - **metadata**:② list 分页/搜索/过滤 · ③ Dataset 统计(行数/大小/列schema/样本)· ④ 血缘 `source_job_id` · ⑧ PATCH/DELETE(改属性/删)
+   > - **新端点**:⑪ **上传原始数据到 OSS**(分片 multipart + 列 raw,落本组 raw/ 隔离路径,经 can()+审计)· ⑤ 创建作业源数据改"选已上传原始集"(取代 tar_dir 宿主机路径,依赖⑪)
+   > - **identity / BFF**:⑩ `/me/orgs` 加 profile(email/姓名)· ⑨ BFF 加 OIDC 登录回调+会话,**品牌化托管登录页(不暴露 Keycloak)**;登录方式=realm 配置(邮箱 v1 现成、手机短信需 Keycloak 扩展、企业 SSO 走联邦)
+   > 均为 0.x 加法,不破坏既有契约。其中 ①/② 若前端提前,可在 Plan 6 或小补丁先加。
 2. **S2 必须分阶段**:S2a(10TB 放大 + Gravitino HA)→ S2b(Embedding/ANN + V8 斜率)→ S2c(前端 + Provisioner),每段独立验收;S2 时长按一人现实重排,与 v1 交付日后移一起走 ADR(宪法 §7)。
 3. S1 出口①②⑤ 的产物(管线包/契约/SDK)即 S2a/S2c 的直接输入;Argo 化与 K8s 化在 S2a 评估。
 

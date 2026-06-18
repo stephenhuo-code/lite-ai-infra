@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lite-ai 控制台 · 中保真原型</title>
+<style>
+  *{box-sizing:border-box}
+  :root{
+    --bg:#f6f7f9;--card:#fff;--ink:#1f2937;--mut:#6b7280;--line:#e5e7eb;
+    --pri:#4f46e5;--pri-soft:#eef2ff;--ok:#16a34a;--ok-soft:#e7f6ec;
+    --warn:#d97706;--warn-soft:#fcf3e6;--bad:#dc2626;--bad-soft:#fdecec;--info:#2563eb;
+    --sb:#111827;--sb-mut:#9ca3af;
+  }
+  body{margin:0;font:14px/1.5 -apple-system,"Segoe UI",Roboto,"PingFang SC",sans-serif;color:var(--ink);background:var(--bg)}
+  code{background:#f1f2f4;padding:1px 6px;border-radius:5px;font-size:12px;font-family:ui-monospace,Menlo,monospace}
+  .mut{color:var(--mut)} .small{font-size:12px}
+  /* Login */
+  #login{position:fixed;inset:0;background:linear-gradient(135deg,#0f172a,#1e293b);display:flex;align-items:center;justify-content:center;z-index:50}
+  .loginbox{background:#fff;border-radius:16px;padding:38px;width:380px;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center}
+  .loginbox .logo{display:inline-flex;align-items:center;gap:10px;font-weight:700;font-size:22px;margin-bottom:6px}
+  .loginbox .dot{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#6366f1,#22d3ee)}
+  .loginbox p{color:var(--mut);font-size:13px;margin:4px 0 22px}
+  .loginbox .fine{margin-top:18px;font-size:11px;color:#9aa1ab;line-height:1.5}
+  .ltabs{display:flex;gap:4px;background:#f1f2f4;border-radius:9px;padding:4px;margin-bottom:14px}
+  .ltab{flex:1;text-align:center;padding:7px;border-radius:7px;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer}
+  .ltab.on{background:#fff;color:#111;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .linp{width:100%;border:1px solid var(--line);border-radius:9px;padding:11px 13px;font-size:14px;margin-bottom:10px}
+  .oidc{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;color:#111}
+  .oidc:hover{background:#f8fafc}
+  .oidc.pri{border-color:var(--pri);background:var(--pri);color:#fff;margin-top:4px}.oidc.pri:hover{background:#4338ca}
+  .ldiv{display:flex;align-items:center;gap:10px;color:#9aa1ab;font-size:12px;margin:14px 0}
+  .ldiv::before,.ldiv::after{content:"";flex:1;height:1px;background:var(--line)}
+  /* App shell */
+  .app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+  .sb{background:var(--sb);color:#e5e7eb;padding:18px 14px;display:flex;flex-direction:column;gap:3px}
+  .sb .logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:16px;color:#fff;padding:4px 8px 14px}
+  .sb .logo .dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#6366f1,#22d3ee)}
+  .sb .grp{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--sb-mut);padding:14px 10px 6px}
+  .nav{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:#d1d5db;cursor:pointer;font-size:13.5px}
+  .nav:hover{background:#1f2937;color:#fff}.nav.on{background:var(--pri);color:#fff;font-weight:600}
+  .nav .i{width:16px;text-align:center}
+  .sb .foot{margin-top:auto;font-size:11px;color:var(--sb-mut);padding:10px;border-top:1px solid #374151}
+  .main{display:flex;flex-direction:column;min-width:0}
+  .top{height:56px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 22px}
+  .crumb{font-weight:600}.crumb .mut{font-weight:400}.top .sp{flex:1}
+  .umenu{display:flex;align-items:center;gap:9px;cursor:pointer;border:1px solid var(--line);border-radius:20px;padding:3px 6px 3px 12px}
+  .umenu .ava{width:28px;height:28px;border-radius:50%;background:#ddd6fe;color:#5b21b6;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+  .ct{padding:22px;max-width:1040px}
+  .ct h1{font-size:19px;margin:0 0 2px}.ct .sub{color:var(--mut);margin:0 0 18px;font-size:13px}
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .inp{border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:13px;background:#fff;min-width:200px}
+  select.inp{min-width:120px}
+  .btn{border:1px solid var(--pri);background:var(--pri);color:#fff;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn.ghost{background:#fff;color:var(--pri)}.btn.sub{background:#fff;color:#374151;border-color:var(--line)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .split{display:grid;grid-template-columns:210px 1fr;gap:16px}
+  .tree{padding:12px}
+  .tnode{padding:6px 9px;border-radius:7px;font-size:13px;display:flex;align-items:center;gap:7px}
+  .tnode.on{background:var(--pri-soft);color:#4338ca;font-weight:600}.tnode.child{margin-left:16px;font-size:12.5px;color:#475569}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+  td{padding:12px 14px;border-bottom:1px solid #f1f2f4;font-size:13.5px}tr:last-child td{border-bottom:0}
+  tbody tr{cursor:pointer}tbody tr:hover{background:#fafafe}
+  .name{font-weight:600;color:#111}
+  .pill{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:2px 9px;font-size:12px;font-weight:600}
+  .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+  .p-ok{color:var(--ok);background:var(--ok-soft)}.p-run{color:var(--info);background:#e7effd}
+  .p-bad{color:var(--bad);background:var(--bad-soft)}.p-q{color:var(--warn);background:var(--warn-soft)}
+  .tag{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:1px 8px;font-size:12px;color:#475569;background:#f8fafc}
+  .field{margin-bottom:16px;max-width:560px}.field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+  .field .hint{font-size:12px;color:var(--mut);margin-top:5px}
+  .opchips{display:flex;gap:8px;flex-wrap:wrap}
+  .opchip{border:1px solid #c7d2fe;background:var(--pri-soft);color:#4338ca;border-radius:8px;padding:5px 10px;font-size:12.5px;font-weight:600}
+  .opchip.add{border-style:dashed;background:#fff;color:var(--pri)}
+  .drop{border:2px dashed #c7cdd6;border-radius:12px;padding:34px;text-align:center;color:#6b7280;background:#fbfcfe;cursor:pointer}
+  .drop:hover{border-color:var(--pri);background:var(--pri-soft)}
+  .drop .ic{font-size:30px}
+  .scrim{position:fixed;inset:0;background:rgba(17,24,39,.35);display:none}
+  .drawer{position:fixed;top:0;right:0;width:430px;max-width:92vw;height:100vh;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.08);transform:translateX(100%);transition:transform .18s;padding:22px;overflow:auto;z-index:40}
+  .drawer.open{transform:none}.scrim.open{display:block}
+  .drawer h3{margin:0 0 2px;font-size:17px}
+  .kv{display:grid;grid-template-columns:96px 1fr;gap:8px 12px;margin:16px 0;font-size:13.5px}.kv .k{color:var(--mut)}
+  .ph{border:1px dashed var(--line);border-radius:8px;padding:10px 12px;color:#9aa1ab;font-size:12.5px;background:#fcfcfd}
+  .timeline{border-left:2px solid var(--line);margin:8px 0 0 6px;padding-left:14px}
+  .timeline div{position:relative;margin-bottom:10px;font-size:13px}
+  .timeline div::before{content:"";position:absolute;left:-21px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--pri)}
+  .x{float:right;cursor:pointer;color:var(--mut);font-size:20px;line-height:1}
+  .note{background:#fff6ee;border-left:3px solid #e08a3c;padding:8px 12px;border-radius:0 8px 8px 0;margin:8px 0;font-size:13px}.note b{color:#b4500f}
+  .view{display:none}.view.on{display:block}
+  .mecard{display:flex;align-items:center;gap:16px;padding:20px}
+  .mecard .big{width:56px;height:56px;border-radius:50%;background:#ddd6fe;color:#5b21b6;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px}
+  .roleb{display:inline-block;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:600;background:#eef2ff;color:#4338ca}
+</style>
+</head>
+<body>
+
+<!-- ░░ Login ░░ -->
+<div id="login">
+  <div class="loginbox">
+    <div class="logo"><span class="dot"></span> lite-ai</div>
+    <p>多企业 AI 基础设施 · 数据平台</p>
+    <div class="ltabs">
+      <span class="ltab on" data-m="email" onclick="ltab('email')">邮箱</span>
+      <span class="ltab" data-m="phone" onclick="ltab('phone')">手机</span>
+    </div>
+    <div id="m-email"><input class="linp" placeholder="邮箱地址"><input class="linp" type="password" placeholder="密码"></div>
+    <div id="m-phone" style="display:none"><input class="linp" placeholder="手机号">
+      <div style="display:flex;gap:8px"><input class="linp" style="flex:1" placeholder="短信验证码"><button class="btn sub" style="white-space:nowrap">发送</button></div></div>
+    <button class="oidc pri" onclick="signIn()">登录</button>
+    <div class="ldiv">或</div>
+    <button class="oidc" onclick="signIn()">使用企业 SSO 登录</button>
+    <div class="fine">认证由企业身份服务统一处理(OIDC Authorization Code + PKCE,凭据不经过本应用)。<br>可用登录方式由企业身份服务配置;登录后从 token 解析企业/组/角色,无独立用户库。</div>
+  </div>
+</div>
+
+<!-- ░░ App ░░ -->
+<div class="app" id="app" style="display:none">
+  <aside class="sb">
+    <div class="logo"><span class="dot"></span> lite-ai</div>
+    <div class="grp">数据域</div>
+    <div class="nav" data-v="datasets"><span class="i">⬆</span> 数据集 <span class="mut small">(上传)</span></div>
+    <div class="nav on" data-v="catalog"><span class="i">▤</span> 数据目录 <span class="mut small">(元数据)</span></div>
+    <div class="nav" data-v="pipeline"><span class="i">⛭</span> 数据管线</div>
+    <div class="nav" data-v="create"><span class="i">⚙</span> 创建作业</div>
+    <div class="grp">账户</div>
+    <div class="nav" data-v="me"><span class="i">◎</span> 我的账户 / 组织</div>
+    <div class="grp">设计</div>
+    <div class="nav" data-v="notes"><span class="i">✎</span> Design notes</div>
+    <div class="foot">中保真原型 · 2026-06-16<br>身份域 / 数据域 已分离</div>
+  </aside>
+
+  <div class="main">
+    <div class="top">
+      <div class="crumb" id="crumb">数据域 <span class="mut">/ 数据目录</span></div>
+      <div class="sp"></div>
+      <div class="umenu" onclick="go('me')"><div class="ava">A</div><span class="small">alice ▾</span></div>
+    </div>
+
+    <!-- ░ 数据集 = 上传原始数据到 OSS(输入) ░ -->
+    <section class="ct view" id="v-datasets">
+      <h1>数据集 · 上传</h1>
+      <p class="sub">把<b>原始数据</b>(webdataset tar / jsonl)上传到对象存储本组隔离路径 <code>…/g-0001/raw/</code>,供「创建作业」消费。区别于「数据目录」(已处理 Lance 的元数据)。</p>
+      <div class="drop" onclick="alert('选择文件 / 拖拽上传(分片 multipart 到 OSS)')">
+        <div class="ic">⬆️</div>
+        <div style="margin-top:6px"><b>拖拽文件到此</b> 或 点击选择</div>
+        <div class="small mut">webdataset .tar / .jsonl · 大文件分片上传到 OSS</div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <table>
+          <thead><tr><th>原始数据集</th><th>大小</th><th>OSS 路径(raw/)</th><th>上传</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr onclick="openRaw('cc3m-raw')"><td class="name">cc3m-raw</td><td>1.39 GB</td><td class="mut small">…/g-0001/raw/cc3m/</td><td class="mut">06-14</td><td><span class="pill p-ok">就绪</span></td></tr>
+            <tr onclick="openRaw('coco-raw')"><td class="name">coco-raw</td><td>820 MB</td><td class="mut small">…/g-0001/raw/coco/</td><td class="mut">06-12</td><td><span class="pill p-ok">就绪</span></td></tr>
+            <tr onclick="openRaw('up')"><td class="name">laion-sub-raw</td><td>2.1 GB</td><td class="mut small">…/g-0001/raw/laion-sub/</td><td class="mut">—</td><td><span class="pill p-run">上传中 62%</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="mut small" style="margin-top:10px"><span class="tag">⚠ S1 契约无"上传/原始数据"端点 — notes #11(本页揭示)</span></p>
+    </section>
+
+    <!-- ░ 数据目录 = 元数据管理(metadata-service) ░ -->
+    <section class="ct view on" id="v-catalog">
+      <h1>数据目录</h1>
+      <p class="sub">Gravitino 编目的<b>已处理</b>数据集元数据(ADR-016)。组/owner/scope 是数据集<b>属性</b>(访问维度),不是目录层级。</p>
+      <div class="toolbar">
+        <input class="inp" placeholder="🔎 搜索数据集名…">
+        <select class="inp"><option>scope:全部</option><option>private</option><option>shared</option></select>
+        <div class="sp" style="flex:1"></div>
+        <button class="btn" onclick="alert('注册数据集:登记一个已存在的 Lance 位置进目录')">＋ 注册数据集</button>
+      </div>
+      <div class="split">
+        <div class="card tree">
+          <div class="small mut" style="padding:0 9px 6px">数据组织(非租户)</div>
+          <div class="tnode on">📁 catalog: data</div>
+          <div class="tnode child on">📂 schema: datasets</div>
+          <div class="small mut" style="padding:10px 9px 0;line-height:1.4">enterprise=metalake(隐藏)<br>catalog=数据源 · schema=数据域</div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>数据集</th><th>owner_group</th><th>owner</th><th>scope</th><th>位置</th><th>创建</th></tr></thead>
+            <tbody>
+              <tr onclick="openDs('cc3m')"><td class="name">cc3m</td><td><span class="tag">g-0001</span></td><td>alice</td><td><span class="pill p-q">private</span></td><td class="mut small">…/cc3m.lance</td><td class="mut">06-15</td></tr>
+              <tr onclick="openDs('coco')"><td class="name">coco</td><td><span class="tag">g-0001</span></td><td>bob</td><td><span class="pill p-ok">shared</span></td><td class="mut small">…/coco.lance</td><td class="mut">06-12</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="mut small" style="margin-top:10px"><span class="tag">⚠ 元数据只读+注册,无改属性/删 — notes #8</span> · <span class="tag">无分页/搜索 — #2</span></p>
+    </section>
+
+    <!-- ░ 数据管线 = 作业列表 + 状态(data-pipeline-service) ░ -->
+    <section class="ct view" id="v-pipeline">
+      <h1>数据管线</h1>
+      <p class="sub">管线作业(tar→清洗→Lance)的列表与状态 · 轮询按 <code>terminal</code> 判终态</p>
+      <div class="toolbar">
+        <select class="inp"><option>状态:全部</option><option>succeeded</option><option>running</option><option>failed</option></select>
+        <div class="sp" style="flex:1"></div>
+        <button class="btn" onclick="go('create')">＋ 创建作业</button>
+      </div>
+      <div class="card"><table>
+        <thead><tr><th>作业</th><th>数据集</th><th>状态</th><th>行数</th><th>提交</th></tr></thead>
+        <tbody>
+          <tr onclick="openJob('ok')"><td class="name">job-6afd…</td><td>cc3m</td><td><span class="pill p-ok">succeeded</span></td><td>2</td><td class="mut">06-15 07:11</td></tr>
+          <tr onclick="openJob('run')"><td class="name">job-c13c…</td><td>cc3m</td><td><span class="pill p-run">running</span></td><td class="mut">—</td><td class="mut">06-15 07:01</td></tr>
+          <tr onclick="openJob('bad')"><td class="name">job-9422…</td><td>cc3m</td><td><span class="pill p-bad">failed</span></td><td class="mut">—</td><td class="mut">06-15 06:55</td></tr>
+        </tbody>
+      </table></div>
+      <p class="mut small" style="margin-top:10px"><span class="tag">⚠ 契约无"列作业"端点 — notes #1</span></p>
+    </section>
+
+    <!-- ░ 创建作业 = 提交管线作业表单 ░ -->
+    <section class="ct view" id="v-create">
+      <h1>创建作业</h1>
+      <p class="sub">配置并提交一次数据管线作业;产物 Lance 自动注册进「数据目录」(异步,提交即返回)</p>
+      <div class="card" style="padding:22px;max-width:600px">
+        <div class="field"><label>源数据 <span class="mut small">(来自「数据集」)</span></label>
+          <select class="inp" style="width:100%"><option>cc3m-raw  (…/g-0001/raw/cc3m/)</option><option>coco-raw  (…/g-0001/raw/coco/)</option></select>
+          <div class="hint">从已上传的原始数据集里选 —— 取代旧版填宿主机路径(改进 notes #5)</div></div>
+        <div class="field"><label>输出数据集名</label><input class="inp" style="width:100%" value="cc3m"><div class="hint">产物写 <code>…/g-0001/processed/cc3m.lance</code> 并注册</div></div>
+        <div class="field"><label>清洗算子 <span class="mut small">(默认一套)</span></label>
+          <div class="opchips"><span class="opchip">text_length_filter ✎</span><span class="opchip">image_shape_filter ✎</span><span class="opchip add">＋ 加算子</span></div>
+          <div class="hint">需"算子目录"端点驱动表单 — notes #6</div></div>
+        <button class="btn" onclick="go('pipeline')">提交作业 →</button>
+      </div>
+    </section>
+
+    <!-- ░ 我的账户 / 组织 = 身份域 ░ -->
+    <section class="ct view" id="v-me">
+      <h1>我的账户 / 组织</h1>
+      <p class="sub">身份/组织信息来自 token(identity-org-service)。与数据无关 —— 组只是访问维度。</p>
+      <div class="card mecard"><div class="big">A</div>
+        <div><div style="font-size:17px;font-weight:700">alice</div><div class="mut small">sub: u-alice · 平台管理员:否</div></div></div>
+      <div class="card" style="margin-top:16px"><table>
+        <thead><tr><th>企业</th><th>组</th><th>角色</th></tr></thead>
+        <tbody><tr><td>默认企业 <span class="mut small">(e-0001,从 token 推导,隐藏标识)</span></td><td><span class="tag">g-0001</span></td><td><span class="roleb">member</span></td></tr></tbody>
+      </table></div>
+      <p class="mut small" style="margin-top:10px"><span class="tag">⚠ 仅 sub,无 email/姓名 — notes #10</span> · <span class="tag">组成员管理属 Provisioner(S2c)</span></p>
+      <div style="margin-top:14px"><button class="btn sub" onclick="signOut()">退出登录</button></div>
+    </section>
+
+    <!-- ░ Design notes ░ -->
+    <section class="ct view" id="v-notes">
+      <h1>Design notes · 原型反推的契约/架构修订</h1>
+      <p class="sub">spec §6.1:前端是契约第一个消费者 → 驱动契约修订(0.x 加法)</p>
+      <div class="card" style="overflow:hidden"><table>
+        <thead><tr><th>#</th><th>域/契约</th><th>缺口</th><th>建议</th><th>时点</th></tr></thead>
+        <tbody class="small">
+          <tr><td>1</td><td>data-pipeline</td><td><b>无 GET /v1/data/jobs 列作业</b></td><td>加列端点+分页+状态过滤</td><td>S2(可早)</td></tr>
+          <tr><td>2</td><td>metadata</td><td>list 无分页/搜索/过滤</td><td>加 limit/cursor/q/scope</td><td>S2</td></tr>
+          <tr><td>3</td><td>metadata</td><td>Dataset 缺 行数/大小/列schema/样本</td><td>注册时由 job 回填统计</td><td>S2</td></tr>
+          <tr><td>4</td><td>metadata</td><td>无血缘(dataset ↔ 产出 job)</td><td>Dataset 加 source_job_id</td><td>S2</td></tr>
+          <tr><td>5</td><td>data-pipeline</td><td>tar_dir 宿主机路径</td><td>改"选已上传原始数据集"(本轮原型已体现;依赖 #11)</td><td>S2a</td></tr>
+          <tr><td>6</td><td>data-pipeline</td><td>process 裸 array,UI 无法渲染</td><td>加"算子目录/schema"端点</td><td>S2b</td></tr>
+          <tr><td>7</td><td>data-pipeline</td><td>无日志/无取消</td><td>日志端点;取消随 Argo</td><td>S2a</td></tr>
+          <tr><td>8</td><td>metadata</td><td>无改属性/删数据集端点</td><td>加 PATCH(scope/comment)/DELETE</td><td>S2</td></tr>
+          <tr><td>9</td><td>gateway/BFF + IdP</td><td>无登录/会话;登录页不应暴露 Keycloak</td><td>BFF 加 OIDC 回调+会话;品牌化托管登录页;登录方式=realm 配置(邮箱 v1 可用,手机短信需扩展)</td><td>S2c</td></tr>
+          <tr><td>10</td><td>identity</td><td>/me/orgs 仅 sub+memberships,无 email/姓名</td><td>profile 字段(从 token claims)</td><td>S2</td></tr>
+          <tr><td>11</td><td><b>新缺口</b></td><td><b>无"上传原始数据到 OSS"端点</b>(本轮「数据集」页揭示)</td><td>加 上传(分片 multipart)+ 列原始数据集 端点;落本组 raw/ 隔离路径,经 can()+审计</td><td>S2</td></tr>
+        </tbody>
+      </table></div>
+      <div class="note" style="margin-top:14px"><b>IA(本轮 owner 反馈)</b>:身份域(登录/我的账户)与数据域分离;数据域 = 数据集(上传 raw,输入)→ 创建作业(管线)→ 数据管线(作业状态)→ 数据目录(处理后元数据,输出)。企业/组只作访问维度,不进数据视图主结构(ADR-010/016)。</div>
+    </section>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer"></aside>
+
+<script>
+  function ltab(m){document.querySelectorAll('.ltab').forEach(t=>t.classList.toggle('on',t.dataset.m===m));
+    document.getElementById('m-email').style.display=m==='email'?'block':'none';
+    document.getElementById('m-phone').style.display=m==='phone'?'block':'none';}
+  function signIn(){login.style.display='none';app.style.display='grid'}
+  function signOut(){app.style.display='none';login.style.display='flex';closeDrawer()}
+  const nav=document.querySelectorAll('.nav');
+  const cmap={datasets:'数据集',catalog:'数据目录',pipeline:'数据管线',create:'创建作业',me:'我的账户 / 组织',notes:'Design notes'};
+  const domain={datasets:'数据域',catalog:'数据域',pipeline:'数据域',create:'数据域',me:'账户',notes:'设计'};
+  function go(v){document.querySelectorAll('.view').forEach(s=>s.classList.remove('on'));
+    document.getElementById('v-'+v).classList.add('on');
+    nav.forEach(n=>n.classList.toggle('on',n.dataset.v===v));
+    document.getElementById('crumb').innerHTML=domain[v]+' <span class="mut">/ '+cmap[v]+'</span>';closeDrawer();}
+  nav.forEach(n=>n.onclick=()=>go(n.dataset.v));
+  function openRaw(n){drawer.innerHTML=`<span class="x" onclick="closeDrawer()">×</span>
+    <h3>${n}</h3><div class="mut small">原始数据集 · 对象存储</div>
+    <div class="kv"><div class="k">OSS 路径</div><div><code>oss://…/g-0001/raw/${n.replace('-raw','')}/</code></div>
+    <div class="k">组</div><div><span class="tag">g-0001</span></div><div class="k">状态</div><div><span class="pill p-ok">就绪</span></div></div>
+    <div class="ph">上传/列原始数据需新端点 — notes #11</div>
+    <div style="margin-top:16px"><button class="btn" onclick="go('create')">用它创建作业</button></div>`;showDrawer()}
+  const ds={cc3m:{scope:'private',sp:'p-q',o:'alice'},coco:{scope:'shared',sp:'p-ok',o:'bob'}};
+  function openDs(n){const d=ds[n];drawer.innerHTML=`<span class="x" onclick="closeDrawer()">×</span>
+    <h3>${n}</h3><div class="mut small">数据集元数据 · catalog data / schema datasets</div>
+    <div class="kv"><div class="k">owner_group</div><div><span class="tag">g-0001</span></div><div class="k">owner</div><div>${d.o}</div>
+    <div class="k">scope</div><div><span class="pill ${d.sp}">${d.scope}</span></div>
+    <div class="k">位置</div><div><code>s3a://…/g-0001/processed/${n}.lance</code></div><div class="k">创建</div><div>2026-06-15</div></div>
+    <div class="ph">契约暂无:行数/列schema/样本/血缘 — #3·#4 ｜ 改 scope/备注无端点 — #8</div>
+    <div style="margin-top:16px"><button class="btn" onclick="go('create')">重新处理</button> <button class="btn sub">复制 URI</button></div>`;showDrawer()}
+  const jb={ok:{id:'job-6afd…',st:'succeeded',c:'p-ok',rin:2,rout:2,uri:'s3a://…/cc3m.lance',err:null},
+    run:{id:'job-c13c…',st:'running',c:'p-run',rin:null,uri:null,err:null},
+    bad:{id:'job-9422…',st:'failed',c:'p-bad',rin:null,uri:null,err:'data-juicer worker 启动失败'}};
+  function openJob(k){const j=jb[k];drawer.innerHTML=`<span class="x" onclick="closeDrawer()">×</span>
+    <h3>${j.id}</h3><div class="mut small">数据集 cc3m · 组 g-0001</div>
+    <div class="kv"><div class="k">状态</div><div><span class="pill ${j.c}">${j.st}</span></div>
+    <div class="k">行数</div><div>${j.rin==null?'—':j.rin+' → '+j.rout}</div>
+    <div class="k">产物</div><div>${j.uri?'<code>'+j.uri+'</code>':'<span class=mut>—</span>'}</div>
+    ${j.err?'<div class="k">错误</div><div style="color:var(--bad)">'+j.err+'</div>':''}</div>
+    <div class="small mut">时间线</div><div class="timeline"><div>queued</div><div>running</div>${j.st==='succeeded'?'<div>succeeded</div>':''}${j.st==='failed'?'<div style="color:var(--bad)">failed</div>':''}</div>
+    <div class="ph" style="margin-top:14px">契约暂无:实时日志/取消/分片进度 — notes #7</div>
+    ${j.uri?'<div style="margin-top:14px"><button class="btn" onclick="openDs(\'cc3m\')">查看数据集</button></div>':''}`;showDrawer()}
+  function showDrawer(){scrim.classList.add('open');drawer.classList.add('open')}
+  function closeDrawer(){scrim.classList.remove('open');drawer.classList.remove('open')}
+</script>
+</body>
+</html>
