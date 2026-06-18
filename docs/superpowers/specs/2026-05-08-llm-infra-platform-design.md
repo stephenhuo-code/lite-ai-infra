@@ -104,7 +104,7 @@
 
 | # | 子系统 | 职责 | v1 形态 |
 |---|---|---|---|
-| ① | 前端 + API Gateway/BFF + SDK + CLI | 完整前端页面（数据域优先）；提交作业、查询、列表；自动注入 enterprise_id/group_id | 自研，**完整前端**（Next.js）+ API Gateway；SDK/CLI 由 OpenAPI 契约生成 |
+| ① | 前端 + API Gateway/BFF + SDK + CLI | 完整前端页面（数据域优先）；提交作业、查询、列表；自动注入 enterprise_id/group_id | 自研，**完整前端**（**React + Vite**,ADR-019;gateway BFF serve dist）+ API Gateway/BFF（OIDC 会话）；SDK/CLI 由 OpenAPI 契约生成（CLI 推迟为 ops 工具,ADR-019） |
 | ② | 配额 | 按 enterprise_id 隔离 Kueue 配额 | LocalQueue per enterprise/group |
 | ③ | 实验元数据 | 训练参数/指标/artifact tracking | MLflow 单实例（experiments 按 enterprise_id 分组） |
 | ④ | 数据管线 | 10TB 图文清洗 → Lance | Ray Data + Data-Juicer + Argo |
@@ -265,7 +265,7 @@
 
 | 服务 | 职责 | 语言/栈 |
 |---|---|---|
-| **api-gateway / BFF** | 前端/SDK/CLI 入口、路由、token 校验、聚合 | Python FastAPI（或 Envoy + 薄 BFF） |
+| **api-gateway / BFF** | 前端/SDK/CLI 入口、路由、token 校验、聚合；**OIDC 会话终结**（登录/会话/登出,无状态加密 cookie,ADR-019）+ serve 前端 dist | Python FastAPI（或 Envoy + 薄 BFF） |
 <!-- 06-13:反代分两层。内层 gateway(BFF)用**应用内 httpx 反代**(`services/_scaffold/proxy.py`)——因转发前后要做 JWKS 验签/审计/Context 注入,属 Python 应用逻辑,不用 nginx。外层 L7 LB(TLS 终止/负载均衡/静态限流)用阿里云 ALB/SLB,摆在 gateway 前面,S2a 引入。两层职责不同、不冲突:`客户端 → ALB → gateway(BFF 应用内反代) → 下游服务`。 -->
 | **identity-org-service** | Keycloak-facing：Organization/Group/成员；解析 groups claim | Python FastAPI |
 | **authz (Cerbos)** | PDP，策略 in git（ADR-011） | Cerbos（Go，sidecar/服务） |
@@ -308,7 +308,7 @@ lite-ai-infra/
 ├── contracts/                      # ✅ API 优先：OpenAPI 契约（真相源，先于实现）
 │   └── openapi/identity-org.yaml   # ✅ identity-org 契约
 ├── services/                       # 各服务：契约 → 生成模型 → FastAPI app(/docs) → 实现
-│   ├── gateway/                    # ✅ BFF / API Gateway（token 校验 + 路由 + 聚合）
+│   ├── gateway/                    # ✅ BFF / API Gateway（token 校验 + 路由 + 聚合；⏳ OIDC 会话终结 gateway/bff/ + serve dist，ADR-019）
 │   ├── identity_org_service/       # ✅ Plan 3（/v1/me/orgs 从 gateway 迁出，独立）
 │   ├── data_pipeline_service/      # ✅ Plan 5（包 pipelines/data_prep；异步作业薄壳）
 │   ├── metadata_service/           # ✅ Plan 4（Gravitino 后端）
@@ -323,7 +323,7 @@ lite-ai-infra/
 │   └── data_prep/                  # ✅ tar→DJ/Ray→Lance（data_pipeline_service 的内部实现）
 ├── libs/                           # ✅ 共享层：identity / authz / audit / contracts_gen
 ├── authz/                          # ⏳ v2：Cerbos 策略（YAML, in git；现暂存 spikes/cerbos_seam/）
-├── frontend/                       # ⏳ S2c：Next.js 完整前端
+├── frontend/                       # ⏳ S1(ADR-019 提前)：React + Vite 数据域控制台（gateway serve dist）
 ├── sdk/  cli/                      # ⏳ Plan 7：由 contracts 生成 + 薄封装（laictl）
 ├── deploy/                         # ✅ dev compose + test IaC（Helm/ArgoCD → S2a）
 │   ├── dev/                        # ✅ docker-compose（Keycloak + MinIO）
@@ -1449,12 +1449,14 @@ Lineage 边（v1 手工）：
 | Plan 3:脚手架 + identity-org-service + gateway 反代壳 | 统一 FastAPI 模板(/docs)+ `make api-docs` + 漂移守卫 CI;identity-org 迁出独立;gateway 改纯反代壳 | swagger 能力 + 服务化① | ✅ 已合并 |
 | Plan 4:metadata-service | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **②** | ✅ **已合并**(层级 API/can() 过滤/fileset→Dataset;80 单元+7 集成;人工 runbook 验收)|
 | Plan 5:data-pipeline-service | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id+查状态) | 服务化 | ✅ **已合并**(异步作业薄壳 ADR-018;JobRunner seam/单槽串行/PID 看门狗;102 单元+8 集成;独立 review;真 DJ 端到端验收)|
-| Plan 6:生成式 SDK/CLI | 契约生成 client + `laictl`(调服务 API);手写 CLI 降级 ops 后门 | **⑤** | ⏳ |
-| stretch:Dev Workspace | docker code-server 半天版(Pod 版 → S2) | ④(降级) | ⏳ 不阻塞 DoD |
+| Plan 6:BFF 后端 | gateway OIDC 登录/会话/登出(无状态加密 cookie,access TTL≤5min)+ CSRF + `GET /v1/data/jobs`(can()+分页);realm 加固 | **⑤**(GUI 前置) | ⏳ |
+| Plan 7:React/Vite 前端 | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户),调 BFF;gateway serve `dist` | **⑤** | ⏳ |
+| Plan 8:Dev Workspace | docker code-server 半天版(Pod 版 → S2) | ④(降级) | ⏳ 不阻塞 DoD |
+| ~~Plan 6(原):生成式 SDK/CLI `laictl`~~ | ⏸ **deferred**(后续 ops/CI 工具) | — | ADR-019 |
 
-> **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。编号以实际计划文档为准(owner 06-14 口径 A):Plan 3=脚手架+identity-org+反代壳、Plan 4=metadata、Plan 5=data-pipeline、Plan 6=SDK。
+> **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。编号以实际计划文档为准(owner 06-14 口径 A):Plan 3=脚手架+identity-org+反代壳、Plan 4=metadata、Plan 5=data-pipeline。**出口⑤ 重定义(2026-06-18,ADR-019):CLI→真 GUI;owner 直接延长 S1(GUI 并入,工期顺延),Plan 6=BFF/7=前端/8=DevWorkspace,CLI 推迟。**
 
-**出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino 元数据可查 ✅(metadata-service,Plan 4 已合并);③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);服务化 ✅(metadata-service Plan 4 + data-pipeline-service Plan 5,契约先行,经 gateway can()+audit);⑤ 契约 SDK/CLI 可调 ⏳(Plan 6);DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。**S1 进度:出口①②③ + 服务化 ✅,余 ⑤(Plan 6)+ stretch ④。**
+**出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino 元数据可查 ✅(metadata-service,Plan 4 已合并);③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);服务化 ✅(metadata Plan 4 + data-pipeline Plan 5,契约先行,经 gateway can()+audit);⑤ **真 GUI 经 API 调通** ⏳(BFF Plan 6 + 前端 Plan 7,ADR-019;原 SDK/CLI 推迟);DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。**S1 进度:出口①②③ + 服务化 ✅,余 ⑤(GUI:Plan 6/7)+ ④ Dev Workspace(Plan 8);owner 直接延长 S1。**
 
 ---
 
