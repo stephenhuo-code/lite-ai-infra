@@ -1,5 +1,7 @@
 # S1 Plan 6:生成式 SDK + `laictl` CLI(出口⑤ 契约 SDK/CLI 可调)
 
+> **⏸ DEFERRED(2026-06-18,ADR-019)**:owner 决定出口⑤ 改由**真 GUI**(BFF + React/Vite)证明,**跳过 CLI**。本计划推迟为后续 ops/自动化/CI 工具,**不删**(契约/device-flow 分析沉淀复用)。现行 Plan 6 = BFF 后端、Plan 7 = 前端、Plan 8 = Dev Workspace。见 `docs/adr/ADR-019-exit5-gui-bff-resequence.md`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 交付 S1 出口⑤ —— 由契约对齐的 **Python SDK + `laictl` CLI**,经 **OIDC device flow** 登录、打 **gateway** 调真服务:`laictl data prepare / list / describe` 三命令成功。手写 `python -m pipelines.data_prep` 正式降级为 ops/debug 后门。
