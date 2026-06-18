@@ -157,7 +157,7 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 | **Plan 6:BFF 后端** | gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1) | **出口⑤**(GUI 前置) | ⏳ |
 | **Plan 7:React/Vite 前端** | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户),调 BFF | **出口⑤** | ⏳ |
 | **Plan 8:Dev Workspace docker** | code-server 半天版 | ④降级 | ⏳ |
-| ~~Plan 6(原):SDK/CLI `laictl`~~ | ⏸ **deferred**(后续 ops 工具) | — | ADR-019 |
+| ~~Plan 6(原):SDK/CLI `laictl`~~ | ⏸ 推迟,**文档已删**(后续 ops 工具,日后重写;commit 9a70c18 留底) | — | ADR-019 |
 
 > **出口⑤ 重定义(2026-06-18,ADR-019;product-architect 复审采纳)**:由"SDK/CLI 可调"改为**真 GUI 经 API 调通**——owner 终态是 GUI,GUI/CLI 同为 API 客户端,跳过 CLI 直接做 GUI(BFF + React/Vite)。CLI 推迟为 ops 工具。**owner 决:直接延长 S1**(GUI 并入 S1、工期顺延、S1 范围显式扩张),S2a/S2b 顺延到 GUI 之后。§9.1 BFF 定义随之修订(加 OIDC 会话终结)。会话=无状态加密 cookie(access TTL≤5min,吊销窗口登记风险)。详见 ADR-019。
 > 手写 `python -m pipelines.data_prep` 仍为 ops 后门(标注非产品入口)。

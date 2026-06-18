@@ -1452,7 +1452,7 @@ Lineage 边（v1 手工）：
 | Plan 6:BFF 后端 | gateway OIDC 登录/会话/登出(无状态加密 cookie,access TTL≤5min)+ CSRF + `GET /v1/data/jobs`(can()+分页);realm 加固 | **⑤**(GUI 前置) | ⏳ |
 | Plan 7:React/Vite 前端 | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户),调 BFF;gateway serve `dist` | **⑤** | ⏳ |
 | Plan 8:Dev Workspace | docker code-server 半天版(Pod 版 → S2) | ④(降级) | ⏳ 不阻塞 DoD |
-| ~~Plan 6(原):生成式 SDK/CLI `laictl`~~ | ⏸ **deferred**(后续 ops/CI 工具) | — | ADR-019 |
+| ~~Plan 6(原):生成式 SDK/CLI `laictl`~~ | ⏸ 推迟,**文档已删**(后续 ops/CI 工具,日后重写;commit 9a70c18 留底) | — | ADR-019 |
 
 > **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。编号以实际计划文档为准(owner 06-14 口径 A):Plan 3=脚手架+identity-org+反代壳、Plan 4=metadata、Plan 5=data-pipeline。**出口⑤ 重定义(2026-06-18,ADR-019):CLI→真 GUI;owner 直接延长 S1(GUI 并入,工期顺延),Plan 6=BFF/7=前端/8=DevWorkspace,CLI 推迟。**
 

@@ -16,7 +16,7 @@ owner 决策(2026-06-18 问答):**跳过 CLI,直接做真 GUI** 来满足出口�
 
 ## Decision
 
-1. **出口⑤ 重定义**:由"SDK/CLI 可调"改为 **"真 GUI 经 API 端到端调通"**(图形客户端登录 → 经 gateway 调服务 → 完成数据域核心流)。`laictl`(Plan 6 草稿,commit 9a70c18)**推迟**为后续 ops/自动化/CI 工具,**不删**(契约/device-flow 分析沉淀复用)。
+1. **出口⑤ 重定义**:由"SDK/CLI 可调"改为 **"真 GUI 经 API 端到端调通"**(图形客户端登录 → 经 gateway 调服务 → 完成数据域核心流)。`laictl` CLI **推迟**为后续 ops/自动化/CI 工具(计划文档已删,日后需要时重写;原草稿与契约/device-flow 分析见 git commit 9a70c18 留底)。
 
 2. **认证 = BFF**(owner)。gateway 由薄反代壳升级为 BFF:服务端 OIDC Authorization Code + **PKCE**、`/auth/login`·`/auth/callback`·`/auth/logout`、服务端会话、会话→下游 bearer、CSRF。前端永不接触 token。
    - **(C-3,复审)本 ADR 显式修订 spec §9.1 的 BFF 定义**:由"纯路由聚合"扩为 **"OIDC 会话终结 + 路由聚合"**。OIDC/会话/CSRF 封装为 gateway 内独立模块 `services/gateway/bff/`(与反代物理隔离,为 v2 拆分留缝),**不**直接长进 `build_gateway`。
@@ -38,7 +38,7 @@ owner 决策(2026-06-18 问答):**跳过 CLI,直接做真 GUI** 来满足出口�
    - **Plan 6 → BFF 后端**:gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1)。
    - **Plan 7 → React/Vite 前端**:数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户;数据集上传页按 #11 决定是否纳入)。
    - **Plan 8 → Dev Workspace docker**(出口④ stretch,顺延一位)。
-   - 原 CLI Plan 6 文档标 **deferred**。
+   - 原 CLI Plan 6 文档**已删**(推迟为后续 ops 工具,日后重写;commit 9a70c18 留底)。
 
 ## Consequences
 
