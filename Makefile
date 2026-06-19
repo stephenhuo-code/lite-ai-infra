@@ -21,5 +21,5 @@ api-docs-down:    ; docker compose -f deploy/dev/swagger-ui.yml down
 # 单服务前台(开发热重载用)
 run-identity:     ; LITEAI_JWKS_URL=$(JWKS) uv run uvicorn services.identity_org_service.main:app --port 8001 --reload
 run-metadata:     ; LITEAI_JWKS_URL=$(JWKS) GRAVITINO_URL=http://localhost:8091 uv run uvicorn services.metadata_service.main:app --port 8002 --reload
-run-gateway:      ; IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 DATA_PIPELINE_URL=http://localhost:8003 uv run uvicorn services.gateway.main:app --port 8090 --reload
+run-gateway:      ; IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 DATA_PIPELINE_URL=http://localhost:8003 LITEAI_JWKS_URL=$(JWKS) BFF_SESSION_KEY=5SetoEInIYji6K_tuQEB8pJ8NCaoC5yi2vNAxtPi7gg= OIDC_CLIENT_ID=lite-ai-web OIDC_CLIENT_SECRET=dev-web-secret OIDC_ISSUER=http://localhost:8080/realms/lite-ai BFF_REDIRECT_URI=http://localhost:8090/auth/callback uv run uvicorn services.gateway.main:app --port 8090 --reload
 run-data-pipeline: ; LITEAI_JWKS_URL=$(JWKS) JOBS_DIR=./.dev/jobs OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 OSS_REGION=us-east-1 DATA_BUCKET=lite-ai AUDIT_BUCKET=lite-ai DJ_BIN=$(PWD)/.dj-venv/bin/dj-process uv run uvicorn services.data_pipeline_service.main:app --port 8003 --reload

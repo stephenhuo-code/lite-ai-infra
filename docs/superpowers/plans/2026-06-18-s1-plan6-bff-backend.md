@@ -247,10 +247,10 @@ def test_logout_clears_cookie(monkeypatch):
 
 **Files:** 修改:`services/gateway/main.py`(挂 BFF:auth 路由 + 会话/CSRF 中间件 + env)、`scripts/dev_services.sh`(gateway env 加 `BFF_*`/`OIDC_*`)、`README.md`;创建:`tests/integration/test_bff_oidc.py`
 
-- [ ] **步骤 1:接线** `main.py`:`build_gateway(routes=…)` 之上挂 BFF(auth router + 中间件)。**(C-2)显式中间件顺序**:`@app.middleware` 后注册先执行(LIFO)——保证会话中间件**包在 proxy 路由外层**(call_next 前设好 `request.state.bearer`)、在 request-id 中间件内层;`main.py` 注释写死次序并加守护断言/测试。`dev_services.sh` gateway 分支加 `BFF_SESSION_KEY`(dev 固定值)、`OIDC_CLIENT_ID=lite-ai-web`、`OIDC_CLIENT_SECRET=dev-web-secret`、`OIDC_ISSUER`、`BFF_REDIRECT_URI`。
-- [ ] **步骤 2:集成测试**(标 `integration`;真 Keycloak code 流难全自动 → 用真 Keycloak **直接 authorize+登录拿 code** 的脚本化 session,或退而验:会话 cookie 手工构造(真 token 经 `gateway` ROPC 取)→ 带 cookie 打 `/v1/data/jobs` 200 + 注入 bearer 下游通;无 cookie→401;CSRF 缺头→403)。完整浏览器 code 流由人工 runbook 验。
-- [ ] **步骤 3:`make up` 后** `uv run pytest -q -m integration` + `uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿。
-- [ ] **步骤 4:手动验收**(文末 runbook:真浏览器 OIDC 登录全链路)。贴输出。
+- [x] **步骤 1:接线** `main.py`:`build_gateway(routes=…)` 之上挂 BFF(auth router + 中间件)。**(C-2)显式中间件顺序**:`@app.middleware` 后注册先执行(LIFO)——保证会话中间件**包在 proxy 路由外层**(call_next 前设好 `request.state.bearer`)、在 request-id 中间件内层;`main.py` 注释写死次序并加守护断言/测试。`dev_services.sh` gateway 分支加 `BFF_SESSION_KEY`(dev 固定值)、`OIDC_CLIENT_ID=lite-ai-web`、`OIDC_CLIENT_SECRET=dev-web-secret`、`OIDC_ISSUER`、`BFF_REDIRECT_URI`。
+- [x] **步骤 2:集成测试**(标 `integration`;真 Keycloak code 流难全自动 → 用真 Keycloak **直接 authorize+登录拿 code** 的脚本化 session,或退而验:会话 cookie 手工构造(真 token 经 `gateway` ROPC 取)→ 带 cookie 打 `/v1/data/jobs` 200 + 注入 bearer 下游通;无 cookie→401;CSRF 缺头→403)。完整浏览器 code 流由人工 runbook 验。
+- [x] **步骤 3:`make up` 后** `uv run pytest -q -m integration` + `uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿。 ✅ 10 integration(真 KC,含 BFF 全链路 + 真 code+PKCE 经 callback)+ 138 unit + lint KEPT + gen 幂等
+- [ ] **步骤 4:手动验收**(文末 runbook:真浏览器 OIDC 登录全链路)。贴输出。 ⏳ **留给 owner 人工**(宪法 §3.4:机器自评不算数;机器侧已由 tests/integration/test_bff_oidc.py 真 KC 自动覆盖 验收2/3 等价项)
 - [ ] **步骤 5:requesting-code-review 子代理隔离评审 → 修 Critical/Important(宪法 §3.4/ADR-017)。**
 - [ ] **步骤 6:回写状态**(本 plan checkbox + spec §5.3/§9.3 Plan 6 标 ✅ + 出口⑤ 进度"BFF 后端就绪,待 Plan 7 前端")+ 提交 + 合并。
 
