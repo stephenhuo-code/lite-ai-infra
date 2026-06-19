@@ -70,9 +70,12 @@ make dev-up
 
 **Seeded realm `lite-ai`**（见 `deploy/dev/keycloak/realm-lite-ai.json`，dev/test 共用同一份）：
 
-- client `gateway`（secret `dev-secret`，开启 direct access grant；`groups` mapper 带全路径）
+- client `gateway`（secret `dev-secret`，开启 direct access grant；`groups` mapper 带全路径）—— ROPC 仅给集成测试/ops 取 token
+- client `lite-ai-web`（secret `dev-web-secret`，**授权码流 + PKCE、禁 ROPC、窄回调 `:8090/auth/callback`**；`groups` mapper 带全路径）—— **BFF（gateway）OIDC 登录专用**（ADR-019 / 复审 C-4）
 - 组织结构：`/platform-admins`、`/e-0001/g-0001/{admins,members}`
 - 种子用户：**`alice` / `alice`**，归属 `/e-0001/g-0001/members`
+
+> **🔴 DoD 硬门（prod realm 另发，不可用 dev 值上线）**：`lite-ai-web` secret 走 secret 管理（**非 `dev-web-secret`**）；`redirectUris`/`webOrigins` 用 prod 域名（非 `localhost:8090`）；`gateway` 客户端 prod **关 ROPC**（`directAccessGrantsEnabled=false`）；BFF 会话 cookie `Secure` 开。dev 用上列固定值。
 
 **验证拿到带 `groups` claim 的 token**（S0 出口 ②）：
 

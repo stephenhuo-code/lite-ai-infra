@@ -37,3 +37,8 @@ class Job(BaseModel):
     error: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+
+class JobList(BaseModel):
+    jobs: list[Job]
+    total: int

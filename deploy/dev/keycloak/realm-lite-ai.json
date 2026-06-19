@@ -9,6 +9,17 @@
       "config": {"full.path": "true", "claim.name": "groups",
                  "access.token.claim": "true", "id.token.claim": "true"}
     }]
+  }, {
+    "clientId": "lite-ai-web", "publicClient": false, "secret": "dev-web-secret",
+    "standardFlowEnabled": true, "directAccessGrantsEnabled": false,
+    "redirectUris": ["http://localhost:8090/auth/callback"],
+    "webOrigins": ["http://localhost:8090"],
+    "protocolMappers": [{
+      "name": "groups", "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "config": {"full.path": "true", "claim.name": "groups",
+                 "access.token.claim": "true", "id.token.claim": "true"}
+    }]
   }],
   "groups": [
     {"name": "platform-admins"},

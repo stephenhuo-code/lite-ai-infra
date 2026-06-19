@@ -4,7 +4,12 @@ from __future__ import annotations
 import httpx
 from fastapi import FastAPI, Request, Response
 
-_FWD_HEADERS = ("authorization", "x-request-id", "content-type", "x-test-claims")
+# C-1(BFF 命门):**所有客户端可控的鉴权输入都不透传**。bearer 只由 BFF 会话中间件经
+# request.state.bearer 注入(见下);客户端自带的 `authorization` **与** `x-test-claims`
+# 一律**不读、不转发** —— 二者都是"绕过会话冒充身份"的等价 forge 路径(x-test-claims 在
+# 下游 LITEAI_ALLOW_TEST_CLAIMS=1 时会被当真),故 gateway 这道边界统一剥离。
+# 测试 seam 仍可**直连下游**注入 x-test-claims(不经 gateway)。gateway 是 mount_proxy 唯一使用者。
+_FWD_HEADERS = ("x-request-id", "content-type")
 
 
 def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
@@ -20,6 +25,11 @@ def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
 
     async def _do_forward(request: Request) -> Response:
         fwd_headers = {h: request.headers[h] for h in _FWD_HEADERS if h in request.headers}
+        # bearer 唯一来源:BFF 会话中间件设的 request.state.bearer(C-1)。缺失 → 不带任何
+        # authorization(让下游 401),**绝不回退客户端原值**。
+        bearer = getattr(request.state, "bearer", None)
+        if bearer:
+            fwd_headers["authorization"] = f"Bearer {bearer}"
         body = await request.body()
         async with _factory() as client:
             up = await client.request(request.method, request.url.path,
