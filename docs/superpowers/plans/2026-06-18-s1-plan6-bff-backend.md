@@ -250,7 +250,7 @@ def test_logout_clears_cookie(monkeypatch):
 - [x] **步骤 1:接线** `main.py`:`build_gateway(routes=…)` 之上挂 BFF(auth router + 中间件)。**(C-2)显式中间件顺序**:`@app.middleware` 后注册先执行(LIFO)——保证会话中间件**包在 proxy 路由外层**(call_next 前设好 `request.state.bearer`)、在 request-id 中间件内层;`main.py` 注释写死次序并加守护断言/测试。`dev_services.sh` gateway 分支加 `BFF_SESSION_KEY`(dev 固定值)、`OIDC_CLIENT_ID=lite-ai-web`、`OIDC_CLIENT_SECRET=dev-web-secret`、`OIDC_ISSUER`、`BFF_REDIRECT_URI`。
 - [x] **步骤 2:集成测试**(标 `integration`;真 Keycloak code 流难全自动 → 用真 Keycloak **直接 authorize+登录拿 code** 的脚本化 session,或退而验:会话 cookie 手工构造(真 token 经 `gateway` ROPC 取)→ 带 cookie 打 `/v1/data/jobs` 200 + 注入 bearer 下游通;无 cookie→401;CSRF 缺头→403)。完整浏览器 code 流由人工 runbook 验。
 - [x] **步骤 3:`make up` 后** `uv run pytest -q -m integration` + `uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿。 ✅ 10 integration(真 KC,含 BFF 全链路 + 真 code+PKCE 经 callback)+ 138 unit + lint KEPT + gen 幂等
-- [ ] **步骤 4:手动验收**(文末 runbook:真浏览器 OIDC 登录全链路)。贴输出。 ⏳ **留给 owner 人工**(宪法 §3.4:机器自评不算数;机器侧已由 tests/integration/test_bff_oidc.py 真 KC 自动覆盖 验收2/3 等价项)
+- [x] **步骤 4:手动验收** —— 一键脚本 `scripts/accept_bff.py` **7/7 通过**(/auth/me 真验签、jobs 会话→bearer、C-1 红线伪造 bearer→401、CSRF 403/202、登出清 cookie);owner 浏览器 `/auth/login` 登录链路通(跳 Keycloak→回 `/`,`/` 404=无前端预期,Plan 7 补)。runbook 验收 A/B。
 - [x] **步骤 5:requesting-code-review 子代理隔离评审 → 修 Critical/Important(宪法 §3.4/ADR-017)。** ✅ 独立 reviewer 审 main..HEAD:0 Critical;3 Important(x-test-claims 透传 / 分页边界 / refresh 锁泄漏)当场修到绿 + Minor(clear secure);140u+11i 全绿
 - [x] **步骤 6:回写状态**(本 plan checkbox + 两份 spec Plan 6 标 🟡代码就绪 + 出口⑤ 进度"BFF 后端就绪,待 Plan 7 前端")+ 提交。⏳ **合并留给 owner**(宪法 §3.4:人工验收+合并不可由机器代;已 push 分支等确认)。
 
@@ -300,36 +300,19 @@ def test_logout_clears_cookie(monkeypatch):
 
 **前置:** `make up`(含 gateway BFF env);浏览器可达 Keycloak `:8080` 与 gateway `:8090`。
 
-**验收 1 — 真浏览器 OIDC 全链路**
+**验收 A — 一键脚本(浏览器无关,推荐)**
 ```bash
-open http://localhost:8090/auth/login     # 跳 Keycloak 登录页(lite-ai-web 客户端)→ 用 alice 登录 → 跳回 /
-# 浏览器开发者工具:确认有 HttpOnly `session` cookie + 非 HttpOnly `csrf_token` cookie
+uv run python scripts/accept_bff.py
 ```
-期望:登录后回到 `/`;`session` cookie(HttpOnly/SameSite=Lax)在;`/auth/me` 返回 alice + csrf。
+会话自举同集成测试(ROPC 取真 KC token → `SessionCodec` 构造会话 cookie),打 **live gateway** 真验,打印 PASS/FAIL,全过退出码 0。覆盖:`/auth/me` 真验签 · `/v1/data/jobs`(会话→bearer 注入+下游 can())· **C-1 红线**(无会话+伪造 bearer→401)· CSRF 缺头 403/带头 202 · 登出清 cookie。**这就是出口⑤ BFF 侧验收证据(GUI 侧 = Plan 7)。**
 
-**验收 2 — 会话调真服务(curl 复用浏览器 cookie 或脚本化)**
-```bash
-# 用浏览器 cookie 或脚本拿到 session cookie 后:
-curl -fsS -b "session=<COOKIE>" http://localhost:8090/auth/me                          # A 返 user+csrf
-curl -fsS -b "session=<COOKIE>" http://localhost:8090/v1/data/jobs                      # B 列本组作业(can() 过滤)
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8090/v1/data/jobs             # C 无会话 → 401
-CSRF=<从 csrf_token cookie 读>
-curl -s -o /dev/null -w "%{http_code}\n" -b "session=<COOKIE>" -X POST \
-  -H "content-type: application/json" -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' \
-  http://localhost:8090/v1/data/prepare                                                 # D 缺 X-CSRF-Token → 403
-curl -fsS -b "session=<COOKIE>" -H "X-CSRF-Token: $CSRF" -X POST \
-  -H "content-type: application/json" -d '{"dataset":"cc3m","group_id":"g-0001","tar_dir":"/tmp/tars"}' \
-  http://localhost:8090/v1/data/prepare                                                 # E 带 CSRF → 202
-```
-期望:A=alice+csrf;B=本组作业列表(经 can());C=`401`;D=`403`(CSRF 拦截);E=`202`(下游收到会话注入的 Bearer)。**这就是出口⑤ BFF 侧验收证据(GUI 侧 = Plan 7)。**
+> 注:`user` = Keycloak `sub`(平台以 sub 作用户 id;友好名属 backlog #10/S2),非字面 "alice"。
 
-**验收 3 — 登出**(C-3:logout 需 CSRF)
+**验收 B — 真浏览器视觉登录(owner 视觉签认)**
 ```bash
-CSRF=<从 csrf_token cookie 读>
-curl -s -i -b "session=<COOKIE>" -H "X-CSRF-Token: $CSRF" -X POST http://localhost:8090/auth/logout | grep -i set-cookie  # session Max-Age=0
-curl -s -o /dev/null -w "%{http_code}\n" -b "session=<COOKIE>" -X POST http://localhost:8090/auth/logout                 # 缺 CSRF → 403
+open http://localhost:8090/auth/login     # 跳 Keycloak 登录页(lite-ai-web)→ alice 登录 → 跳回 /
 ```
-期望:带 CSRF→`session`/`csrf_token` cookie 被清(Max-Age=0),旧 cookie 再打 `/v1/data/jobs`→401;缺 CSRF→`403`。
+期望:跳到 Keycloak 登录页、登录后跳回 `/`(**Plan 6 纯后端,`/` 暂 404 = 无前端,正常;前端 = Plan 7**);浏览器开发者工具见 HttpOnly `session` + 非 HttpOnly `csrf_token` cookie;开 `http://localhost:8090/auth/me` 见 user+csrf。
 
 **收尾:** `make down`。
 > **prod 加固提醒(DoD 硬门)**:`lite-ai-web` secret 走 secret 管理、回调/webOrigins 用 prod 域名、`gateway` 客户端 prod 关 ROPC、cookie `Secure` 开。
