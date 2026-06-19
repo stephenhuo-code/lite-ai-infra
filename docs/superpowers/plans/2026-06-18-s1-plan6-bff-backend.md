@@ -119,7 +119,7 @@ class SessionCodec:
 
 **Files:** 创建:`services/gateway/bff/oidc.py`、`services/gateway/bff/routes.py`、`tests/gateway/bff/test_oidc_flow.py`
 
-- [ ] **步骤 1:写失败测试**(login→302 到 Keycloak authorize 且带 state+code_challenge,并下发临时 state cookie;callback state 不匹配→400;匹配→换 token(fake)→下发会话 cookie→302 回 `/`;logout→清 cookie)
+- [x] **步骤 1:写失败测试**(login→302 到 Keycloak authorize 且带 state+code_challenge,并下发临时 state cookie;callback state 不匹配→400;匹配→换 token(fake)→下发会话 cookie→302 回 `/`;logout→清 cookie)
 
 ```python
 # tests/gateway/bff/test_oidc_flow.py
@@ -151,8 +151,8 @@ def test_logout_clears_cookie(monkeypatch):
     assert 'session=' in r.headers.get("set-cookie","") and "Max-Age=0" in r.headers.get("set-cookie","")
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现** `oidc.py`(authorize URL 构造 + PKCE S256 + 真 token 交换 `exchange_code`,默认打 Keycloak token 端点用 `lite-ai-web`+secret;可注入 seam)、`routes.py`(三路由:login 生成 state/verifier 存临时签名 cookie + 302;callback 校验 state→exchange→**生成 csrf**→建 `SessionData(exp=now+expires_in, csrf=…)`→set 加密会话 cookie + **下发非 HttpOnly `csrf_token` 同值明文 cookie**(I-3 唯一写入点)+ 清临时 cookie + 302 `/`;logout 清会话 + csrf cookie)。
-- [ ] **步骤 4:跑绿**;**步骤 5:提交** `feat(bff): OIDC code+PKCE login/callback/logout`
+- [x] **步骤 2:跑红**;**步骤 3:实现** `oidc.py`(authorize URL 构造 + PKCE S256 + 真 token 交换 `exchange_code`,默认打 Keycloak token 端点用 `lite-ai-web`+secret;可注入 seam)、`routes.py`(三路由:login 生成 state/verifier 存临时签名 cookie + 302;callback 校验 state→exchange→**生成 csrf**→建 `SessionData(exp=now+expires_in, csrf=…)`→set 加密会话 cookie + **下发非 HttpOnly `csrf_token` 同值明文 cookie**(I-3 唯一写入点)+ 清临时 cookie + 302 `/`;logout 清会话 + csrf cookie)。
+- [x] **步骤 4:跑绿**(4 passed;全量 112 passed);**步骤 5:提交** `feat(bff): OIDC code+PKCE login/callback/logout`
 
 ---
 
