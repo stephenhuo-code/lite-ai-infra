@@ -6,6 +6,7 @@ from services.data_pipeline_service.jobs import JobSpec, JobStore
 class JobRunner(Protocol):
     def submit(self, spec: JobSpec) -> str: ...
     def get(self, job_id: str) -> dict | None: ...
+    def list_jobs(self) -> list[dict]: ...
 
 def _default_argv(job_dir: str) -> list[str]:
     return [sys.executable, "-m", "services.data_pipeline_service.worker", "--job-dir", job_dir]
@@ -44,6 +45,9 @@ class SubprocessJobRunner:
 
     def get(self, job_id: str) -> dict | None:
         return self.store.read(job_id)
+
+    def list_jobs(self) -> list[dict]:
+        return self.store.list_jobs()
 
     def dispatch(self) -> None:
         """单槽串行 + 孤儿回收。全程持锁 → handler 线程与后台线程并发安全(防同一作业起两次)。"""

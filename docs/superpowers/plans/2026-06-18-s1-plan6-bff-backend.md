@@ -204,7 +204,7 @@ def test_logout_clears_cookie(monkeypatch):
 
 **Files:** 修改:`contracts/openapi/data-pipeline.yaml`(加 `GET /v1/data/jobs` + `JobList`)、`Makefile gen`(契约已在 gen 列,重生成模型)、`services/data_pipeline_service/jobs.py`(加 `list_jobs`)、`services/data_pipeline_service/app.py`(加 handler)、`tests/services/data_pipeline/test_list_jobs.py`
 
-- [ ] **步骤 1:契约加端点**
+- [x] **步骤 1:契约加端点**
 
 ```yaml
   /v1/data/jobs:
@@ -225,8 +225,8 @@ def test_logout_clears_cookie(monkeypatch):
         total: {type: integer}
 ```
 
-- [ ] **步骤 2:`make gen` 重生成模型(freshness 绿)**
-- [ ] **步骤 3:写失败测试**(本组作业可见、跨组/跨企业不可见、status 过滤、分页 limit/offset、total 为过滤后总数)
+- [x] **步骤 2:`make gen` 重生成模型(freshness 绿;JobList 生成,gen 幂等)**
+- [x] **步骤 3:写失败测试**(本组作业可见、跨组/跨企业不可见、status 过滤、分页 limit/offset、total 为过滤后总数)
 
 ```python
 # tests/services/data_pipeline/test_list_jobs.py(要点)
@@ -236,10 +236,10 @@ def test_logout_clears_cookie(monkeypatch):
 # 【I-2 fail-closed】构造一条 spec.json 缺失的损坏 job(read 返回 enterprise_id=None)→ 必被排除,不漏给任何企业
 ```
 
-- [ ] **步骤 4:跑红**;**步骤 5:实现**:
+- [x] **步骤 4:跑红**;**步骤 5:实现**:
   - **(I-2)** `JobStore.list_jobs() -> list[dict]`:遍历目录 → 对每个 `read(job_id)` **投影**(含 `enterprise_id`/`group_id` —— 这两字段在 **spec.json**,`_all_status()` 只读 status.json 拿不到,**不能用 `_all_status()` 否则无法 can() 过滤→隔离失效**);按 created_at 倒序;**纯取数,不做授权**。
   - `app.py` handler:`ent=enterprise_of(ctx)`;对每条 **fail-closed** 跳过 `enterprise_id` 为 None/≠ent 的(对照 metadata `_owner_group` fail-closed),再 `can(ctx,"data.read",Resource(kind="job",ent,group_id=job["group_id"])).allow` 才纳入;status 过滤 + `offset:offset+limit` 切片;`total`=过滤后条数。**契约注释登记:扫目录 O(n),作业量上千需索引(vN+)。**
-- [ ] **步骤 6:跑绿 + `make gen` 无 diff + lint-imports**;**步骤 7:提交** `feat(data-pipeline): GET /v1/data/jobs (can()-filtered, paginated)`
+- [x] **步骤 6:跑绿**(5 passed;全量 136 passed)+ `make gen` 幂等 + lint KEPT;**步骤 7:提交** `feat(data-pipeline): GET /v1/data/jobs (can()-filtered, paginated)`
 
 ---
 

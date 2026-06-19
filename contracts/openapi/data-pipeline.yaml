@@ -9,6 +9,17 @@ paths:
         '202': {description: accepted, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
         '401': {description: unauthenticated}
         '403': {description: forbidden}
+  /v1/data/jobs:
+    get:
+      summary: 列本企业/组作业(必经 can() 按企业/组过滤;分页)
+      # 实现登记:扫 JOBS_DIR 目录 O(n);作业量上千需索引(vN+,见 jobs.py list_jobs 注释)
+      parameters:
+        - {name: status, in: query, required: false, schema: {type: string, enum: [queued, running, succeeded, failed]}}
+        - {name: limit, in: query, required: false, schema: {type: integer, default: 50, maximum: 200}}
+        - {name: offset, in: query, required: false, schema: {type: integer, default: 0}}
+      responses:
+        '200': {description: jobs, content: {application/json: {schema: {$ref: '#/components/schemas/JobList'}}}}
+        '401': {description: unauthenticated}
   /v1/data/jobs/{job_id}:
     get:
       parameters: [{name: job_id, in: path, required: true, schema: {type: string}}]
@@ -43,3 +54,9 @@ components:
         error: {type: [string, 'null']}
         created_at: {type: [string, 'null']}
         updated_at: {type: [string, 'null']}
+    JobList:
+      type: object
+      required: [jobs, total]
+      properties:
+        jobs: {type: array, items: {$ref: '#/components/schemas/Job'}}
+        total: {type: integer}     # 过滤后(can() + status)总数,非全量

@@ -37,6 +37,24 @@ def build_app(runner, audit: AuditWriter):
         runner.submit(spec)
         return runner.get(job_id)
 
+    @app.get("/v1/data/jobs")
+    def list_jobs(status: str | None = None, limit: int = 50, offset: int = 0,
+                  ctx: Context = Depends(context_from_request)):
+        ent = enterprise_of(ctx)
+        visible = []
+        for j in runner.list_jobs():                       # 纯取数(含 enterprise_id/group_id 投影)
+            je, jg = j.get("enterprise_id"), j.get("group_id")
+            if je is None or je != ent:                    # I-2 fail-closed:spec 缺失/跨企业 → 跳过
+                continue
+            res = Resource(kind="job", enterprise_id=EnterpriseId(ent), group_id=GroupId(jg))
+            if not can(ctx, "data.read", res).allow:       # I-1:必经 can() 按组过滤(跨组不可见)
+                continue
+            if status and j.get("status") != status:       # status 过滤
+                continue
+            visible.append(j)
+        total = len(visible)                               # 过滤后总数(非全量、非页大小)
+        return {"jobs": visible[offset: offset + limit], "total": total}
+
     @app.get("/v1/data/jobs/{job_id}")
     def get_job(job_id: str, ctx: Context = Depends(context_from_request)):
         ent = enterprise_of(ctx)

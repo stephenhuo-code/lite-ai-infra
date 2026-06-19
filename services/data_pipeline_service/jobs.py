@@ -74,6 +74,22 @@ class JobStore:
                 "created_at": st["created_at"], "updated_at": st["updated_at"],
                 **{k: st.get(k) for k in _PUBLIC}}
 
+    def list_jobs(self) -> list[dict]:
+        """**纯取数,不做授权**:遍历目录 → 对每个 job `read()` 投影(含 enterprise_id/group_id ——
+        这两字段在 spec.json,`_all_status()` 只读 status.json 拿不到,故**必须用 read()**,否则
+        handler 无法 can() 按企业/组过滤 → 隔离失效)。按 created_at 倒序。授权/过滤在 handler。
+        I-2:spec.json 缺失的损坏 job,read() 投影出 enterprise_id=None,handler fail-closed 排除。
+        登记:扫目录 O(n);作业量上千需索引(vN+;S2a 真 store 落地时换 DB 查询)。"""
+        out: list[dict] = []
+        for d in self.root.iterdir():
+            if not d.is_dir():
+                continue
+            j = self.read(d.name)
+            if j is not None:
+                out.append(j)
+        out.sort(key=lambda j: j.get("created_at") or "", reverse=True)
+        return out
+
     def _all_status(self):
         for d in self.root.iterdir():
             sp = d / "status.json"
