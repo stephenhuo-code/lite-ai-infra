@@ -38,7 +38,7 @@
 
 **Files:** 修改:`deploy/dev/keycloak/realm-lite-ai.json`
 
-- [ ] **步骤 1:加专用机密客户端 `lite-ai-web`**(授权码流、窄回调、**无 ROPC**)
+- [x] **步骤 1:加专用机密客户端 `lite-ai-web`**(授权码流、窄回调、**无 ROPC**) ✅ 加 groups mapper(BFF token 需 groups claim)
 
 ```json
 { "clientId": "lite-ai-web", "publicClient": false, "secret": "dev-web-secret",
@@ -48,8 +48,8 @@
 ```
 > `gateway` 客户端**保留**(其 ROPC 给集成测试/runbook 取 token;BFF 不用它)。BFF 用的 `lite-ai-web` 无 ROPC、回调精确 —— 满足复审 C-4 "BFF 客户端不留开放重定向/ROPC"。
 
-- [ ] **步骤 2:DoD 硬门登记**(写进本 plan 验收 + README):**prod realm 另发**——`lite-ai-web` secret 走 secret 管理(非 `dev-web-secret`)、`webOrigins`/`redirectUris` 用 prod 域名、`gateway` 客户端 prod 关 ROPC。dev 用上面值。
-- [ ] **步骤 3:`make dev-up` 重导 realm,确认 `lite-ai-web` 生效**(authorize 端点对它返回登录页);**步骤 4:提交** `feat(bff): dedicated lite-ai-web OIDC client (code-flow, no ROPC, narrow redirect)`
+- [x] **步骤 2:DoD 硬门登记**(写进本 plan 验收 + README):**prod realm 另发**——`lite-ai-web` secret 走 secret 管理(非 `dev-web-secret`)、`webOrigins`/`redirectUris` 用 prod 域名、`gateway` 客户端 prod 关 ROPC。dev 用上面值。 ✅ README §4 加 🔴 DoD 硬门块
+- [x] **步骤 3:`make dev-up` 重导 realm,确认 `lite-ai-web` 生效**(authorize 端点对它返回登录页);**步骤 4:提交** `feat(bff): dedicated lite-ai-web OIDC client (code-flow, no ROPC, narrow redirect)` ✅ down -v 重导;实测 authorize 302、ROPC→unauthorized_client、evil redirect→400、code+PKCE 端到端拿到带 groups 的 token
 
 ---
 
