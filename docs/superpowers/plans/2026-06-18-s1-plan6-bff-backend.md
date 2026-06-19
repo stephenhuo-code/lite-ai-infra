@@ -162,7 +162,7 @@ def test_logout_clears_cookie(monkeypatch):
 
 **Files:** 创建:`services/gateway/bff/middleware.py`;修改:`services/gateway/app.py`(build_gateway 接 BFF)、`services/_scaffold/proxy.py`(bearer 来源改 request.state)、`tests/gateway/bff/test_session_mw.py`
 
-- [ ] **步骤 1:写失败测试**(有效会话→请求注入 Bearer 透传下游 stub;无会话→受保护路由 401;access 过期 + 有 refresh→触发刷新(fake)并更新 cookie;`/auth/me` 返回 user+csrf)
+- [x] **步骤 1:写失败测试**(有效会话→请求注入 Bearer 透传下游 stub;无会话→受保护路由 401;access 过期 + 有 refresh→触发刷新(fake)并更新 cookie;`/auth/me` 返回 user+csrf)
 
 ```python
 # tests/gateway/bff/test_session_mw.py  (要点)
@@ -175,13 +175,13 @@ def test_logout_clears_cookie(monkeypatch):
 # - GET /auth/me → {user, is_platform_admin, csrf}(user/memberships 解自会话内 access token,不存 id_token)
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**:
+- [x] **步骤 2:跑红**;**步骤 3:实现**:
   - **(C-1,proxy 命门)** `_scaffold/proxy.py`:从 `_FWD_HEADERS` **删除 `"authorization"`**;bearer **只**由 BFF 从 `request.state.bearer` 写入 fwd_headers,`request.state.bearer` 缺失则**不转发任何 authorization**(让下游 401),**绝不回退客户端原值**。gateway 是 mount_proxy 唯一使用者,安全。
   - **(C-2,中间件两阶段)** `middleware.py` `@app.middleware("http")`,严格分两段:**call_next 前**——解会话 cookie → 无/坏 → 受保护路由(`/v1/*`、`/auth/me`)返 401;有效 → 过期且有 refresh 则刷新 → 设 `request.state.bearer` + 把待下发新会话挂 `request.state.new_session`;**call_next 后**——若 `request.state.new_session` 存在则 `response.set_cookie(...)` 下发到**当前响应**。Task 8 接线须显式定中间件注册顺序(会话中间件包在 proxy 路由外层、request-id 内层)。
   - **(I-1,单飞共享)** 刷新按 Task 1 结论:rotation 开 → per-`sub` `asyncio.Lock` + **lock 内 double-check**(已被并发请求刷过则**复用其结果**,不重复刷,避免 rotation 让旧 refresh 失效→随机登出);rotation 关 → 直刷。
   - **(I-4,刷新失败降级)** 刷新调用失败(refresh 也过期/被吊销)→ **清会话 cookie(Max-Age=0)+ 受保护路由返 401**(前端据此跳登录),不得抛 500。
   - **(M-3)** `/auth/me`:解**会话内 access token** 的 claims 返回 `{user, is_platform_admin, csrf}`(access 已在会话,无需存 id_token、无需多跳 identity)。
-- [ ] **步骤 4:跑绿**;**步骤 5:提交** `feat(bff): session middleware + bearer injection + refresh + /auth/me`
+- [x] **步骤 4:跑绿**(9 passed;全量 122 passed;含 scaffold proxy C-1 负向 2 测);**步骤 5:提交** `feat(bff): session middleware + bearer injection + refresh + /auth/me`
 
 ---
 

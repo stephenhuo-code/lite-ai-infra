@@ -4,7 +4,10 @@ from __future__ import annotations
 import httpx
 from fastapi import FastAPI, Request, Response
 
-_FWD_HEADERS = ("authorization", "x-request-id", "content-type", "x-test-claims")
+# C-1(BFF 命门):authorization **不在**透传白名单。bearer 只由 BFF 会话中间件经
+# request.state.bearer 注入(见下);客户端自带的 Authorization 头一律**不读、不转发**,
+# 杜绝"客户端伪造 bearer 绕过会话"。gateway 是 mount_proxy 唯一使用者,安全。
+_FWD_HEADERS = ("x-request-id", "content-type", "x-test-claims")
 
 
 def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
@@ -20,6 +23,11 @@ def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):
 
     async def _do_forward(request: Request) -> Response:
         fwd_headers = {h: request.headers[h] for h in _FWD_HEADERS if h in request.headers}
+        # bearer 唯一来源:BFF 会话中间件设的 request.state.bearer(C-1)。缺失 → 不带任何
+        # authorization(让下游 401),**绝不回退客户端原值**。
+        bearer = getattr(request.state, "bearer", None)
+        if bearer:
+            fwd_headers["authorization"] = f"Bearer {bearer}"
         body = await request.body()
         async with _factory() as client:
             up = await client.request(request.method, request.url.path,
