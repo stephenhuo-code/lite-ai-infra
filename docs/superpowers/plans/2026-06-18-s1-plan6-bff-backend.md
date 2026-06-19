@@ -57,7 +57,7 @@
 
 **Files:** 创建:`services/gateway/bff/__init__.py`、`services/gateway/bff/session.py`、`tests/gateway/bff/__init__.py`、`tests/gateway/bff/test_session.py`
 
-- [ ] **步骤 1:写失败测试**(编/解码 roundtrip;坏/篡改 cookie → None;过期判定)
+- [x] **步骤 1:写失败测试**(编/解码 roundtrip;坏/篡改 cookie → None;过期判定)
 
 ```python
 # tests/gateway/bff/test_session.py
@@ -80,7 +80,7 @@ def test_is_expired():
     assert SessionData("a","r",1000).is_expired(now=100) is False
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(Fernet 对称加密 JSON;key 从 env;decode 容错返 None)
+- [x] **步骤 2:跑红**;**步骤 3:实现**(Fernet 对称加密 JSON;key 从 env;decode 容错返 None)
 
 ```python
 # services/gateway/bff/session.py
@@ -109,7 +109,7 @@ class SessionCodec:
             return None
 ```
 
-- [ ] **步骤 4:跑绿**;**步骤 5:提交** `feat(bff): Fernet-encrypted stateless session codec`
+- [x] **步骤 4:跑绿**(6 passed + lint KEPT);**步骤 5:提交** `feat(bff): Fernet-encrypted stateless session codec`
 
 ---
 
