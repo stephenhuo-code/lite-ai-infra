@@ -25,12 +25,12 @@
 
 **Files:** 创建:`spikes/bff_oidc/probe.md`(事实记录)、`spikes/bff_oidc/probe.sh`
 
-- [ ] **步骤 1:真 Keycloak 跑通 Authorization Code + PKCE 流**(`make dev-up` 后,手动浏览器或脚本):拿 code → 换 token;记录 access/refresh/id token 的**实际大小**与 access token **TTL**(realm 默认 `accessTokenLifespan`)。**(M-2)** 若 TTL **> 5min 且 ops 不可调** → 这是偏离 ADR-019(吊销窗口 ≤5min 缓解失效)→ **登记为风险偏离并 escalate owner**(不得默默接受);确认可调到 ≤5min 则记目标值。
-- [ ] **步骤 2:实测 refresh rotation 行为** —— 用同一 refresh token **连续刷新两次**,看第二次是否被拒(Keycloak `Revoke Refresh Token`/rotation 是否开)。结论二选一定死:
+- [x] **步骤 1:真 Keycloak 跑通 Authorization Code + PKCE 流**(`make dev-up` 后,手动浏览器或脚本):拿 code → 换 token;记录 access/refresh/id token 的**实际大小**与 access token **TTL**(realm 默认 `accessTokenLifespan`)。**(M-2)** 若 TTL **> 5min 且 ops 不可调** → 这是偏离 ADR-019(吊销窗口 ≤5min 缓解失效)→ **登记为风险偏离并 escalate owner**(不得默默接受);确认可调到 ≤5min 则记目标值。 ✅ TTL=300s=5min(满足,无需 escalate);access 1078B/refresh 642B/id 1090B
+- [x] **步骤 2:实测 refresh rotation 行为** —— 用同一 refresh token **连续刷新两次**,看第二次是否被拒(Keycloak `Revoke Refresh Token`/rotation 是否开)。结论二选一定死:
   - rotation **开** → **single-flight(per-`sub` 共享结果,非仅串行)**:单副本进程内按 `sub` 加 `asyncio.Lock`,**lock 内 double-check** —— 进锁后先看是否已有并发请求刚刷出的新 token(缓存),有则**复用**、不重复刷(否则后到请求拿失效旧 refresh 去刷→随机登出,这才是 I-2 真死结);
-  - rotation **关** → 无需锁,直接刷新。
-- [ ] **步骤 3:实测 cookie 体积** —— `{access+refresh+exp}` Fernet 加密后字节数;确认 < 4KB(单 cookie 上限)。多组用户(groups full-path claim)取最坏样本。**> 4KB 则方案降级**(只存 refresh + 用 refresh 换 access;或拆 cookie)——记进 probe.md。
-- [ ] **步骤 4:产出 `spikes/bff_oidc/probe.md`**(token 大小/TTL/rotation 结论/cookie 体积/refresh 策略决定)+ 提交 `spike(bff): real Keycloak OIDC code+PKCE / refresh rotation / cookie size facts`
+  - rotation **关** → 无需锁,直接刷新。 ✅ 实测 rotation **关**(旧 refresh 复用仍成功);实现仍选 single-flight 防 prod 开 rotation(probe.md §2)
+- [x] **步骤 3:实测 cookie 体积** —— `{access+refresh+exp}` Fernet 加密后字节数;确认 < 4KB(单 cookie 上限)。多组用户(groups full-path claim)取最坏样本。**> 4KB 则方案降级**(只存 refresh + 用 refresh 换 access;或拆 cookie)——记进 probe.md。 ✅ 2560B<4096(成立,headroom~1500B);降级规则留 seam
+- [x] **步骤 4:产出 `spikes/bff_oidc/probe.md`**(token 大小/TTL/rotation 结论/cookie 体积/refresh 策略决定)+ 提交 `spike(bff): real Keycloak OIDC code+PKCE / refresh rotation / cookie size facts`
 
 ---
 
