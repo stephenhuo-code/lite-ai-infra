@@ -154,7 +154,7 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 | **Plan 3:服务脚手架 + identity-org-service + gateway 反代壳** | 统一 FastAPI 模板(/docs)+ `make api-docs` + 漂移守卫 CI;identity-org 从 gateway 迁出独立;gateway 改纯反代壳 | swagger 能力 + 服务化① | ✅ 已合并 |
 | **Plan 4:metadata-service** | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **出口②** | ✅ 已合并 |
 | **Plan 5:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id + 查状态)+ 集成 | 服务化 | ✅ 已合并(异步作业薄壳,ADR-018;真 DJ 端到端 + dev/prod parity) |
-| **Plan 6:BFF 后端** | gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1) | **出口⑤**(GUI 前置) | ⏳ |
+| **Plan 6:BFF 后端** | gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1) | **出口⑤**(GUI 前置) | 🟡 代码就绪(140u+11i 全绿 + 真 KC code+PKCE 全链路 + 隔离评审修讫);**待 owner 人工验收(runbook)+ 合并** —— BFF 后端就绪,待 Plan 7 前端 |
 | **Plan 7:React/Vite 前端** | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户),调 BFF | **出口⑤** | ⏳ |
 | **Plan 8:Dev Workspace docker** | code-server 半天版 | ④降级 | ⏳ |
 | ~~Plan 6(原):SDK/CLI `laictl`~~ | ⏸ 推迟,**文档已删**(后续 ops 工具,日后重写;commit 9a70c18 留底) | — | ADR-019 |
