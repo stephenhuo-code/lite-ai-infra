@@ -148,3 +148,27 @@ def test_refresh_coordinator_single_flight():
     results = asyncio.run(go())
     assert len(calls) == 1                          # 同一旧 refresh 只真刷一次(double-check 复用)
     assert all(r["access_token"] == "new" for r in results)
+
+
+def test_refresh_coordinator_failure_clears_lock_and_allows_retry():
+    # I-4 + 防泄漏:刷新失败不缓存、清掉本 key 锁;同 key 可重试(不被失败锁卡死)。
+    attempts = []
+
+    def flaky(rt):
+        attempts.append(rt)
+        if len(attempts) == 1:
+            raise RuntimeError("first fails")
+        return {"access_token": "ok", "refresh_token": "rt2", "expires_in": 300}
+
+    coord = RefreshCoordinator(flaky)
+
+    async def go():
+        try:
+            await coord.refresh("rt")
+        except RuntimeError:
+            pass
+        assert "rt" not in coord._locks            # 失败后锁已清(不泄漏)
+        return await coord.refresh("rt")           # 重试成功(未被失败锁卡死)
+
+    r = asyncio.run(go())
+    assert r["access_token"] == "ok" and len(attempts) == 2

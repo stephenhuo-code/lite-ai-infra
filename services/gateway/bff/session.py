@@ -62,7 +62,7 @@ def set_session_only(response, codec: SessionCodec, sd: SessionData, *, secure: 
                         samesite="lax", secure=secure, path="/")
 
 
-def clear_session_cookies(response) -> None:
-    """清会话 + csrf cookie(Max-Age=0):logout / 刷新失败降级(I-4)。"""
-    response.set_cookie(SESSION_COOKIE, "", max_age=0, httponly=True, samesite="lax", path="/")
-    response.set_cookie(CSRF_COOKIE, "", max_age=0, httponly=False, samesite="lax", path="/")
+def clear_session_cookies(response, *, secure: bool = False) -> None:
+    """清会话 + csrf cookie(Max-Age=0):logout / 刷新失败降级(I-4)。secure 与 set 路径一致。"""
+    response.set_cookie(SESSION_COOKIE, "", max_age=0, httponly=True, samesite="lax", secure=secure, path="/")
+    response.set_cookie(CSRF_COOKIE, "", max_age=0, httponly=False, samesite="lax", secure=secure, path="/")

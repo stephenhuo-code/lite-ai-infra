@@ -90,3 +90,13 @@ def test_corrupt_job_missing_spec_is_failclosed(tmp_path):
 def test_unauthenticated_401(tmp_path):
     c, _ = _client(tmp_path)
     assert c.get("/v1/data/jobs").status_code == 401
+
+
+def test_pagination_bounds_enforced(tmp_path):
+    # 契约边界强制(FastAPI 默认不验 schema 边界,须 Query(ge/le)):越界 → 422
+    c, _ = _client(tmp_path)
+    h = _hdr("u-alice", "g-0001")
+    assert c.get("/v1/data/jobs?limit=999999", headers=h).status_code == 422   # > maximum 200
+    assert c.get("/v1/data/jobs?limit=0", headers=h).status_code == 422        # < 1
+    assert c.get("/v1/data/jobs?offset=-5", headers=h).status_code == 422      # 负 offset
+    assert c.get("/v1/data/jobs?limit=200&offset=0", headers=h).status_code == 200

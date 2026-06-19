@@ -76,7 +76,7 @@ def make_auth_router(exchange_code=None) -> APIRouter:
     @router.post("/auth/logout")
     def logout():
         resp = JSONResponse({"ok": True})
-        clear_session_cookies(resp)                       # session + csrf Max-Age=0
+        clear_session_cookies(resp, secure=_secure())     # session + csrf Max-Age=0
         return resp
 
     return router

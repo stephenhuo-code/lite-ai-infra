@@ -4,10 +4,12 @@ from __future__ import annotations
 import httpx
 from fastapi import FastAPI, Request, Response
 
-# C-1(BFF 命门):authorization **不在**透传白名单。bearer 只由 BFF 会话中间件经
-# request.state.bearer 注入(见下);客户端自带的 Authorization 头一律**不读、不转发**,
-# 杜绝"客户端伪造 bearer 绕过会话"。gateway 是 mount_proxy 唯一使用者,安全。
-_FWD_HEADERS = ("x-request-id", "content-type", "x-test-claims")
+# C-1(BFF 命门):**所有客户端可控的鉴权输入都不透传**。bearer 只由 BFF 会话中间件经
+# request.state.bearer 注入(见下);客户端自带的 `authorization` **与** `x-test-claims`
+# 一律**不读、不转发** —— 二者都是"绕过会话冒充身份"的等价 forge 路径(x-test-claims 在
+# 下游 LITEAI_ALLOW_TEST_CLAIMS=1 时会被当真),故 gateway 这道边界统一剥离。
+# 测试 seam 仍可**直连下游**注入 x-test-claims(不经 gateway)。gateway 是 mount_proxy 唯一使用者。
+_FWD_HEADERS = ("x-request-id", "content-type")
 
 
 def mount_proxy(app: FastAPI, prefix: str, base_url: str, client_factory=None):

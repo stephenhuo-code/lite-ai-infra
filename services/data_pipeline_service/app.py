@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from libs.authz.engine import can
 from libs.authz.types import Resource
@@ -38,7 +38,9 @@ def build_app(runner, audit: AuditWriter):
         return runner.get(job_id)
 
     @app.get("/v1/data/jobs")
-    def list_jobs(status: str | None = None, limit: int = 50, offset: int = 0,
+    def list_jobs(status: str | None = None,
+                  limit: int = Query(50, ge=1, le=200),     # 契约 maximum=200,强制(默认不验 schema 边界)
+                  offset: int = Query(0, ge=0),             # 防负 offset 取尾片(契约 default=0)
                   ctx: Context = Depends(context_from_request)):
         ent = enterprise_of(ctx)
         visible = []

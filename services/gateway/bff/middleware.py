@@ -64,11 +64,18 @@ class RefreshCoordinator:
         async with lock:
             if old_rt in self._results:               # double-check:并发已刷 → 复用
                 return self._results[old_rt]
-            tok = await run_in_threadpool(self._fn, old_rt)   # refresh_fn 同步 httpx,不阻塞事件循环
+            try:
+                tok = await run_in_threadpool(self._fn, old_rt)   # refresh_fn 同步 httpx,不阻塞事件循环
+            except Exception:
+                # I-4 刷新失败:不缓存结果,且**清掉本 key 的锁**防泄漏(否则失败的 logged-out
+                # 用户的旧 refresh 会在 _locks 永久留存 → 长期单进程慢泄漏)。下次同 key 重建锁重试。
+                self._locks.pop(old_rt, None)
+                raise
             self._results[old_rt] = tok
-            if len(self._results) > self._cap:        # 防无界增长(FIFO 淘汰最早)
-                self._locks.pop(next(iter(self._results)), None)
-                self._results.pop(next(iter(self._results)))
+            if len(self._results) > self._cap:        # 防无界增长(FIFO 淘汰最早;同 key 同时从两表移除)
+                oldest = next(iter(self._results))
+                self._locks.pop(oldest, None)
+                self._results.pop(oldest, None)
             return tok
 
 
@@ -134,7 +141,7 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
         if _is_protected(path) and sd is None:
             resp = JSONResponse(status_code=401, content={"reason": "unauthenticated"})
             if clear:
-                clear_session_cookies(resp)
+                clear_session_cookies(resp, secure=_secure())
             return resp
         # CSRF 双提交(C-3):变更方法(非豁免)需 X-CSRF-Token == 会话内 csrf,否则 403
         if request.method in _MUTATING and path not in _CSRF_EXEMPT and not _csrf_ok(request, sd):
