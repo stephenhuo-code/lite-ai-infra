@@ -32,6 +32,18 @@ def _is_protected(path: str) -> bool:
     return path.startswith("/v1/") or path == "/auth/me"
 
 
+# CSRF(C-3 双提交):变更方法严格校验 X-CSRF-Token == 会话内 csrf。
+_MUTATING = {"POST", "PUT", "DELETE", "PATCH"}
+# 豁免清单**定死**:/auth/login·/auth/callback(均 GET,本就豁免;列此防误改成非 GET)。
+# **/auth/logout(POST)不豁免**——需 CSRF,防 CSRF 强制登出。所有 GET 豁免(副作用端点严格非 GET)。
+_CSRF_EXEMPT = {"/auth/login", "/auth/callback"}
+
+
+def _csrf_ok(request: Request, sd) -> bool:
+    # 校验 header == 会话内 csrf(非仅 == 明文 cookie,防 cookie 注入篡改双提交一致性)
+    return sd is not None and bool(sd.csrf) and request.headers.get("x-csrf-token", "") == sd.csrf
+
+
 class RefreshCoordinator:
     """I-1 single-flight:并发同一旧 refresh token 的刷新**共享一次结果**(非仅串行)。
     进锁后 double-check:已有并发请求刚刷出结果 → 复用、不重复刷 —— 否则(prod 若开
@@ -124,6 +136,9 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
             if clear:
                 clear_session_cookies(resp)
             return resp
+        # CSRF 双提交(C-3):变更方法(非豁免)需 X-CSRF-Token == 会话内 csrf,否则 403
+        if request.method in _MUTATING and path not in _CSRF_EXEMPT and not _csrf_ok(request, sd):
+            return JSONResponse(status_code=403, content={"reason": "csrf"})
         # ===== call_next 后:刷新出的新会话随当前响应 Set-Cookie 下发(C-2)=====
         response = await call_next(request)
         if new_session is not None:

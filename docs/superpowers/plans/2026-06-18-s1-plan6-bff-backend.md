@@ -189,12 +189,12 @@ def test_logout_clears_cookie(monkeypatch):
 
 **Files:** 修改:`services/gateway/bff/middleware.py`;创建:`tests/gateway/bff/test_csrf.py`
 
-- [ ] **步骤 1:写失败测试**(POST/PUT/DELETE/PATCH 缺/错 `X-CSRF-Token`→403;匹配 `SessionData.csrf`→放行;GET 豁免;**`/auth/logout`(POST)需 CSRF**(缺→403);**`/auth/login`·`/auth/callback` 豁免**)
-- [ ] **步骤 2:跑红**;**步骤 3:实现**:
+- [x] **步骤 1:写失败测试**(POST/PUT/DELETE/PATCH 缺/错 `X-CSRF-Token`→403;匹配 `SessionData.csrf`→放行;GET 豁免;**`/auth/logout`(POST)需 CSRF**(缺→403);**`/auth/login`·`/auth/callback` 豁免**)
+- [x] **步骤 2:跑红**;**步骤 3:实现**:
   - **(I-3)csrf 在登录回调一次生成**(Task 4 callback 建会话时):写进 `SessionData.csrf`(加密会话内)**同时**下发**非 HttpOnly** `csrf_token` 明文 cookie(**同值**,双提交一致性靠这一处唯一写入)。
   - **(C-3)CSRF 豁免清单定死**:豁免 `/auth/login`、`/auth/callback`(均 GET,本豁免);**`/auth/logout`(POST)不豁免、需 `X-CSRF-Token`**(防 CSRF 强制登出);所有 GET 豁免(副作用端点严格非 GET 方成立)。
   - 变更方法校验 `X-CSRF-Token` header == 会话内 `csrf`(非仅 == 明文 cookie,防 cookie 注入)。
-- [ ] **步骤 4:跑绿**;**步骤 5:提交** `feat(bff): double-submit CSRF on mutating requests`
+- [x] **步骤 4:跑绿**(9 passed;全量 131 passed);**步骤 5:提交** `feat(bff): double-submit CSRF on mutating requests`
 
 ---
 
