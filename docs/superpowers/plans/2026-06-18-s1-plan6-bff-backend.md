@@ -25,9 +25,9 @@
 
 **Files:** 创建:`spikes/bff_oidc/probe.md`(事实记录)、`spikes/bff_oidc/probe.sh`
 
-- [ ] **步骤 1:真 Keycloak 跑通 Authorization Code + PKCE 流**(`make dev-up` 后,手动浏览器或脚本):拿 code → 换 token;记录 access/refresh/id token 的**实际大小**与 access token **TTL**(realm 默认 `accessTokenLifespan`)。
+- [ ] **步骤 1:真 Keycloak 跑通 Authorization Code + PKCE 流**(`make dev-up` 后,手动浏览器或脚本):拿 code → 换 token;记录 access/refresh/id token 的**实际大小**与 access token **TTL**(realm 默认 `accessTokenLifespan`)。**(M-2)** 若 TTL **> 5min 且 ops 不可调** → 这是偏离 ADR-019(吊销窗口 ≤5min 缓解失效)→ **登记为风险偏离并 escalate owner**(不得默默接受);确认可调到 ≤5min 则记目标值。
 - [ ] **步骤 2:实测 refresh rotation 行为** —— 用同一 refresh token **连续刷新两次**,看第二次是否被拒(Keycloak `Revoke Refresh Token`/rotation 是否开)。结论二选一定死:
-  - rotation **开** → 实现用 **single-flight**(单副本进程内按 `sub` 加 `asyncio.Lock` 串行刷新);
+  - rotation **开** → **single-flight(per-`sub` 共享结果,非仅串行)**:单副本进程内按 `sub` 加 `asyncio.Lock`,**lock 内 double-check** —— 进锁后先看是否已有并发请求刚刷出的新 token(缓存),有则**复用**、不重复刷(否则后到请求拿失效旧 refresh 去刷→随机登出,这才是 I-2 真死结);
   - rotation **关** → 无需锁,直接刷新。
 - [ ] **步骤 3:实测 cookie 体积** —— `{access+refresh+exp}` Fernet 加密后字节数;确认 < 4KB(单 cookie 上限)。多组用户(groups full-path claim)取最坏样本。**> 4KB 则方案降级**(只存 refresh + 用 refresh 换 access;或拆 cookie)——记进 probe.md。
 - [ ] **步骤 4:产出 `spikes/bff_oidc/probe.md`**(token 大小/TTL/rotation 结论/cookie 体积/refresh 策略决定)+ 提交 `spike(bff): real Keycloak OIDC code+PKCE / refresh rotation / cookie size facts`
@@ -94,6 +94,7 @@ class SessionData:
     access_token: str
     refresh_token: str | None
     expires_at: int                      # epoch 秒(access token 过期点)
+    csrf: str = ""                        # 双提交 CSRF token(登录时一次生成,Task 6;与明文 csrf_token cookie 同值)
     def is_expired(self, now: int, skew: int = 30) -> bool:
         return now >= self.expires_at - skew
 
@@ -150,7 +151,7 @@ def test_logout_clears_cookie(monkeypatch):
     assert 'session=' in r.headers.get("set-cookie","") and "Max-Age=0" in r.headers.get("set-cookie","")
 ```
 
-- [ ] **步骤 2:跑红**;**步骤 3:实现** `oidc.py`(authorize URL 构造 + PKCE S256 + 真 token 交换 `exchange_code`,默认打 Keycloak token 端点用 `lite-ai-web`+secret;可注入 seam)、`routes.py`(三路由:login 生成 state/verifier 存临时签名 cookie + 302;callback 校验 state→exchange→建 `SessionData(exp=now+expires_in)`→set 会话 cookie + 清临时 cookie + 302 `/`;logout 清会话 cookie)。
+- [ ] **步骤 2:跑红**;**步骤 3:实现** `oidc.py`(authorize URL 构造 + PKCE S256 + 真 token 交换 `exchange_code`,默认打 Keycloak token 端点用 `lite-ai-web`+secret;可注入 seam)、`routes.py`(三路由:login 生成 state/verifier 存临时签名 cookie + 302;callback 校验 state→exchange→**生成 csrf**→建 `SessionData(exp=now+expires_in, csrf=…)`→set 加密会话 cookie + **下发非 HttpOnly `csrf_token` 同值明文 cookie**(I-3 唯一写入点)+ 清临时 cookie + 302 `/`;logout 清会话 + csrf cookie)。
 - [ ] **步骤 4:跑绿**;**步骤 5:提交** `feat(bff): OIDC code+PKCE login/callback/logout`
 
 ---
@@ -167,14 +168,19 @@ def test_logout_clears_cookie(monkeypatch):
 # tests/gateway/bff/test_session_mw.py  (要点)
 # - 构会话 cookie(SessionCodec 编码 SessionData),带 cookie 打 /v1/... → 下游 stub 收到 Authorization: Bearer <access>
 # - 无 cookie 打 /v1/... → 401
-# - SessionData.expires_at 已过 + refresh 注入 fake 刷新 → 新 access 注入 + Set-Cookie 更新
-# - GET /auth/me → {user, csrf_token}
+# - 【C-1 红线负向】伪造 Authorization: Bearer forged + 无会话 cookie 打 /v1/... → 401(绝不透传 forged 给下游)
+# - 【C-1 红线负向】有会话 cookie + 同时带客户端 Authorization: Bearer forged → 下游收到的是会话 access(非 forged)
+# - 【C-2】access 过期 + refresh fake 刷新 → 下游收到新 access **且当前响应带 Set-Cookie**(解码出新 access)
+# - 【I-4】refresh 端点返回错误 → 401 + 响应 Set-Cookie session Max-Age=0(清 cookie)
+# - GET /auth/me → {user, is_platform_admin, csrf}(user/memberships 解自会话内 access token,不存 id_token)
 ```
 
 - [ ] **步骤 2:跑红**;**步骤 3:实现**:
-  - `middleware.py`:解会话 cookie → 无/坏 → 受保护路由(`/v1/*`、`/auth/me`)返 401;有效 → 若 `is_expired` 且有 refresh → 刷新(Task 1 策略:rotation 开则 `asyncio.Lock` 单飞)→ 更新 `SessionData` + 重设 cookie;把 access 放 `request.state.bearer`。
-  - `proxy.py`:转发头的 `authorization` 改取自 `request.state.bearer`(非客户端原值)——杜绝客户端伪造 bearer 绕过会话。
-  - `/auth/me`:从 id_token/access 解 `sub` + 调 identity(或直接解 claims)返回 `{user, is_platform_admin, csrf_token}`。
+  - **(C-1,proxy 命门)** `_scaffold/proxy.py`:从 `_FWD_HEADERS` **删除 `"authorization"`**;bearer **只**由 BFF 从 `request.state.bearer` 写入 fwd_headers,`request.state.bearer` 缺失则**不转发任何 authorization**(让下游 401),**绝不回退客户端原值**。gateway 是 mount_proxy 唯一使用者,安全。
+  - **(C-2,中间件两阶段)** `middleware.py` `@app.middleware("http")`,严格分两段:**call_next 前**——解会话 cookie → 无/坏 → 受保护路由(`/v1/*`、`/auth/me`)返 401;有效 → 过期且有 refresh 则刷新 → 设 `request.state.bearer` + 把待下发新会话挂 `request.state.new_session`;**call_next 后**——若 `request.state.new_session` 存在则 `response.set_cookie(...)` 下发到**当前响应**。Task 8 接线须显式定中间件注册顺序(会话中间件包在 proxy 路由外层、request-id 内层)。
+  - **(I-1,单飞共享)** 刷新按 Task 1 结论:rotation 开 → per-`sub` `asyncio.Lock` + **lock 内 double-check**(已被并发请求刷过则**复用其结果**,不重复刷,避免 rotation 让旧 refresh 失效→随机登出);rotation 关 → 直刷。
+  - **(I-4,刷新失败降级)** 刷新调用失败(refresh 也过期/被吊销)→ **清会话 cookie(Max-Age=0)+ 受保护路由返 401**(前端据此跳登录),不得抛 500。
+  - **(M-3)** `/auth/me`:解**会话内 access token** 的 claims 返回 `{user, is_platform_admin, csrf}`(access 已在会话,无需存 id_token、无需多跳 identity)。
 - [ ] **步骤 4:跑绿**;**步骤 5:提交** `feat(bff): session middleware + bearer injection + refresh + /auth/me`
 
 ---
@@ -183,8 +189,11 @@ def test_logout_clears_cookie(monkeypatch):
 
 **Files:** 修改:`services/gateway/bff/middleware.py`;创建:`tests/gateway/bff/test_csrf.py`
 
-- [ ] **步骤 1:写失败测试**(建会话时下发可读 `csrf_token` cookie;POST/PUT/DELETE/PATCH 缺/错 `X-CSRF-Token`→403;匹配→放行;GET 豁免)
-- [ ] **步骤 2:跑红**;**步骤 3:实现**(会话建立时生成 csrf token,存进会话 + 下发**非 HttpOnly** `csrf_token` cookie;变更方法校验 header==会话内 csrf;GET 豁免)。
+- [ ] **步骤 1:写失败测试**(POST/PUT/DELETE/PATCH 缺/错 `X-CSRF-Token`→403;匹配 `SessionData.csrf`→放行;GET 豁免;**`/auth/logout`(POST)需 CSRF**(缺→403);**`/auth/login`·`/auth/callback` 豁免**)
+- [ ] **步骤 2:跑红**;**步骤 3:实现**:
+  - **(I-3)csrf 在登录回调一次生成**(Task 4 callback 建会话时):写进 `SessionData.csrf`(加密会话内)**同时**下发**非 HttpOnly** `csrf_token` 明文 cookie(**同值**,双提交一致性靠这一处唯一写入)。
+  - **(C-3)CSRF 豁免清单定死**:豁免 `/auth/login`、`/auth/callback`(均 GET,本豁免);**`/auth/logout`(POST)不豁免、需 `X-CSRF-Token`**(防 CSRF 强制登出);所有 GET 豁免(副作用端点严格非 GET 方成立)。
+  - 变更方法校验 `X-CSRF-Token` header == 会话内 `csrf`(非仅 == 明文 cookie,防 cookie 注入)。
 - [ ] **步骤 4:跑绿**;**步骤 5:提交** `feat(bff): double-submit CSRF on mutating requests`
 
 ---
@@ -224,11 +233,12 @@ def test_logout_clears_cookie(monkeypatch):
 # seam 开;u-alice@g-0001 提交 2 job、构造一条 e-0001/g-0002 的 job 文件
 # GET /v1/data/jobs → 只见 g-0001 的(can() 过滤);?status=succeeded 只见成功;?limit=1&offset=1 分页
 # total = 过滤后总数(非全量)
+# 【I-2 fail-closed】构造一条 spec.json 缺失的损坏 job(read 返回 enterprise_id=None)→ 必被排除,不漏给任何企业
 ```
 
 - [ ] **步骤 4:跑红**;**步骤 5:实现**:
-  - `JobStore.list_jobs() -> list[dict]`:遍历 `_all_status()` 取每个 public record(按 created_at 倒序);**纯取数,不做授权**。
-  - `app.py` handler:`ent=enterprise_of(ctx)`;对每条 `can(ctx,"data.read",Resource(kind="job",ent,group_id=job.group_id)).allow` 且 `job.enterprise_id==ent` 才纳入(同 metadata list 模式);再 status 过滤 + `offset:offset+limit` 切片;`total`=过滤后条数。**契约注释登记:扫目录 O(n),作业量上千需索引(vN+)。**
+  - **(I-2)** `JobStore.list_jobs() -> list[dict]`:遍历目录 → 对每个 `read(job_id)` **投影**(含 `enterprise_id`/`group_id` —— 这两字段在 **spec.json**,`_all_status()` 只读 status.json 拿不到,**不能用 `_all_status()` 否则无法 can() 过滤→隔离失效**);按 created_at 倒序;**纯取数,不做授权**。
+  - `app.py` handler:`ent=enterprise_of(ctx)`;对每条 **fail-closed** 跳过 `enterprise_id` 为 None/≠ent 的(对照 metadata `_owner_group` fail-closed),再 `can(ctx,"data.read",Resource(kind="job",ent,group_id=job["group_id"])).allow` 才纳入;status 过滤 + `offset:offset+limit` 切片;`total`=过滤后条数。**契约注释登记:扫目录 O(n),作业量上千需索引(vN+)。**
 - [ ] **步骤 6:跑绿 + `make gen` 无 diff + lint-imports**;**步骤 7:提交** `feat(data-pipeline): GET /v1/data/jobs (can()-filtered, paginated)`
 
 ---
@@ -237,7 +247,7 @@ def test_logout_clears_cookie(monkeypatch):
 
 **Files:** 修改:`services/gateway/main.py`(挂 BFF:auth 路由 + 会话/CSRF 中间件 + env)、`scripts/dev_services.sh`(gateway env 加 `BFF_*`/`OIDC_*`)、`README.md`;创建:`tests/integration/test_bff_oidc.py`
 
-- [ ] **步骤 1:接线** `main.py`:`build_gateway(routes=…)` 之上挂 BFF(auth router + 中间件);`dev_services.sh` gateway 分支加 `BFF_SESSION_KEY`(dev 固定值)、`OIDC_CLIENT_ID=lite-ai-web`、`OIDC_CLIENT_SECRET=dev-web-secret`、`OIDC_ISSUER`、`BFF_REDIRECT_URI`。
+- [ ] **步骤 1:接线** `main.py`:`build_gateway(routes=…)` 之上挂 BFF(auth router + 中间件)。**(C-2)显式中间件顺序**:`@app.middleware` 后注册先执行(LIFO)——保证会话中间件**包在 proxy 路由外层**(call_next 前设好 `request.state.bearer`)、在 request-id 中间件内层;`main.py` 注释写死次序并加守护断言/测试。`dev_services.sh` gateway 分支加 `BFF_SESSION_KEY`(dev 固定值)、`OIDC_CLIENT_ID=lite-ai-web`、`OIDC_CLIENT_SECRET=dev-web-secret`、`OIDC_ISSUER`、`BFF_REDIRECT_URI`。
 - [ ] **步骤 2:集成测试**(标 `integration`;真 Keycloak code 流难全自动 → 用真 Keycloak **直接 authorize+登录拿 code** 的脚本化 session,或退而验:会话 cookie 手工构造(真 token 经 `gateway` ROPC 取)→ 带 cookie 打 `/v1/data/jobs` 200 + 注入 bearer 下游通;无 cookie→401;CSRF 缺头→403)。完整浏览器 code 流由人工 runbook 验。
 - [ ] **步骤 3:`make up` 后** `uv run pytest -q -m integration` + `uv run pytest -q && uv run lint-imports && bash scripts/ci_guards.sh` 全绿。
 - [ ] **步骤 4:手动验收**(文末 runbook:真浏览器 OIDC 登录全链路)。贴输出。
@@ -260,8 +270,17 @@ def test_logout_clears_cookie(monkeypatch):
 | `GET /v1/data/jobs` can()+分页(I-1)| Task 7 |
 | 会话逻辑独立模块 `gateway/bff/`(C-3)| Task 3–6 |
 | 独立验收(curl 全链路,M-1)| Task 8 runbook |
+| **🔴 红线:客户端伪造 bearer 不绕过会话(C-1)** | Task 5 proxy 删 authorization 转发 + 负向测试(伪造 bearer+无会话→401)|
+| 中间件两阶段 + 刷新随当前响应下发(C-2)| Task 5 + Task 8 顺序 |
+| single-flight per-sub 共享结果(I-1)| Task 1 定 + Task 5 |
+| `list_jobs` 用 read() 投影 + spec 缺失 fail-closed(I-2)| Task 7 |
+| `SessionData.csrf` 字段 + 登录一次写(I-3)| Task 3 + Task 4 |
+| 刷新失败→清 cookie+401(I-4)| Task 5 |
+| logout 需 CSRF(C-3)| Task 6 + runbook 验收3 |
 
 前端(serve dist + React 控制台)= Plan 7。
+
+> **C-1 是 BFF 命门 / 红线验收项**:BFF 全部安全收益 = "token 不进浏览器 + 客户端不能自带 bearer"。proxy 只要有一条回退客户端 authorization 的路径,BFF 即退化为"带登录页的透传反代"。该负向测试进 Verification Protocol。
 
 ## 自审记录
 
@@ -270,7 +289,8 @@ def test_logout_clears_cookie(monkeypatch):
 - 分层:BFF 在 services 层 gateway 内;`gateway/bff/` 与反代物理隔离(C-3);proxy bearer 改取 `request.state`,杜绝客户端伪造。
 - 隔离:`GET /v1/data/jobs` 经 `can()` 过滤(I-1),不裸暴露跨企业;会话→bearer 后下游仍各自验签(纵深不变)。
 - 安全:BFF 客户端无 ROPC + 窄回调(C-4);prod secret/realm 加固列 DoD 硬门;吊销窗口≤5min 登记风险(C-2)。
-- ROPC 取舍:新增 `lite-ai-web` 给 BFF(无 ROPC);`gateway` 客户端 ROPC 保留给测试/ops —— 不破坏既有集成测试,prod 关 ROPC 列 DoD。
+- ROPC 取舍:新增 `lite-ai-web` 给 BFF(无 ROPC);`gateway` 客户端 ROPC 保留给测试/ops —— 不破坏既有集成测试,prod 关 ROPC 已升格 ADR-019 登记要求(M-1)。
+- **product-architect 复审(2026-06-19)采纳**:C-1(proxy 删 authorization 转发 + 伪造 bearer 负向红线测试)、C-2(中间件两阶段 + 刷新随当前响应 Set-Cookie + 注册顺序)、C-3(logout 需 CSRF,runbook 对齐)、I-1(single-flight per-sub 共享结果)、I-2(list_jobs 用 read() 投影 + fail-closed)、I-3(SessionData.csrf 字段)、I-4(刷新失败→清 cookie+401)、M-1(prod 加固升格 ADR)、M-2(TTL>5min 不可调则 escalate)、M-3(/auth/me 解会话内 access,不存 id_token)—— 已逐条落到对应 Task。
 
 ---
 
@@ -303,11 +323,13 @@ curl -fsS -b "session=<COOKIE>" -H "X-CSRF-Token: $CSRF" -X POST \
 ```
 期望:A=alice+csrf;B=本组作业列表(经 can());C=`401`;D=`403`(CSRF 拦截);E=`202`(下游收到会话注入的 Bearer)。**这就是出口⑤ BFF 侧验收证据(GUI 侧 = Plan 7)。**
 
-**验收 3 — 登出**
+**验收 3 — 登出**(C-3:logout 需 CSRF)
 ```bash
-curl -s -i -b "session=<COOKIE>" -X POST http://localhost:8090/auth/logout | grep -i set-cookie   # session Max-Age=0
+CSRF=<从 csrf_token cookie 读>
+curl -s -i -b "session=<COOKIE>" -H "X-CSRF-Token: $CSRF" -X POST http://localhost:8090/auth/logout | grep -i set-cookie  # session Max-Age=0
+curl -s -o /dev/null -w "%{http_code}\n" -b "session=<COOKIE>" -X POST http://localhost:8090/auth/logout                 # 缺 CSRF → 403
 ```
-期望:`session` cookie 被清(Max-Age=0);再用旧 cookie 打 `/v1/data/jobs` → 401。
+期望:带 CSRF→`session`/`csrf_token` cookie 被清(Max-Age=0),旧 cookie 再打 `/v1/data/jobs`→401;缺 CSRF→`403`。
 
 **收尾:** `make down`。
 > **prod 加固提醒(DoD 硬门)**:`lite-ai-web` secret 走 secret 管理、回调/webOrigins 用 prod 域名、`gateway` 客户端 prod 关 ROPC、cookie `Secure` 开。

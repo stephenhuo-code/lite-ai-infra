@@ -48,7 +48,7 @@ owner 决策(2026-06-18 问答):**跳过 CLI,直接做真 GUI** 来满足出口�
 - 体量远大于 CLI;**S1 范围扩张、工期顺延**(owner:直接延长 S1);S2a/S2b 顺延到 GUI 之后。
 - Python 仓库引入 **node 工具链**(隔离在 `frontend/`)。
 - **无状态 cookie 无中心吊销**:踢人/改组在 access token 过期前不生效 → **吊销窗口 ≤ access TTL(≤5min)**(登记风险,owner 接受);cookie 体积上限(Plan 6 探查实测真 token 大小,token 带 groups full-path claim 多组用户可能膨胀)。
-- BFF 持 **client secret**(confidential client),需密钥管理;realm 回调收窄 + 关 ROPC 为 DoD 硬门(C-4)。
+- BFF 持 **client secret**(confidential client),需密钥管理。**prod realm 加固(登记要求,非仅 Plan DoD;复审 M-1 升格)**:`lite-ai-web` secret 走 secret 管理(非 `dev-web-secret`)、`redirectUris`/`webOrigins` 用 prod 域名、`gateway` 客户端 **prod 关 ROPC**(dev 保留给集成测试)、cookie `Secure` 开。dev 用专用 `lite-ai-web`(窄回调、无 ROPC,C-4)。
 - **refresh 并发刷新**需 single-flight 或关 rotation(I-2,探查实测定)。
 - gateway 职责扩为 **"OIDC 会话终结 + 反代聚合"**(修订 §9.1);会话逻辑模块隔离,留 v2 拆分缝(C-3)。
 - **同源 serving**(gateway serve `dist`)避开 CORS;出口⑤ 在同源拓扑验收(I-4)。
