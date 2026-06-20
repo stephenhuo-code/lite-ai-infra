@@ -40,8 +40,8 @@
 <div class="lead"><b>一句话:</b>让 AI 高速产出,用<b>"隔离验证"</b>兜底正确性。AI 写得快、覆盖广,但<b>对自己的盲点不可见</b>;流程的价值不在让 AI 更聪明,而在每一步都有<b>独立于实现者</b>的闸门(契约、测试门禁、人工 runbook、独立 reviewer)。</div>
 
 <h2>1. 整体流程</h2>
-<p>三层嵌套:<b>项目级</b>(一次性,出整体设计文档)→ <b>每个 Sprint</b>(出 2 周规划,拆成多个 plan)→ <b>每个 Plan</b>(④⑤⑥⑦ 循环)。</p>
-<svg viewBox="0 0 820 760" width="100%" role="img" aria-label="AI 开发流程图(三层:项目级 / Sprint / Plan)"
+<p>三层嵌套:<b>项目级</b>(一次性,出整体设计文档)→ <b>每个 Sprint</b>(出 2 周规划摘要,拆成多个 plan)→ <b>每个 Plan</b>(④ 编写 spec/design → ⑤ DoR 就绪门 ★ → ⑥–⑨ 循环)。<b>详细 spec/design 在进每个 plan 时产出(just-in-time),sprint 文档只给摘要。</b></p>
+<svg viewBox="0 0 820 896" width="100%" role="img" aria-label="AI 开发流程图(三层:项目级 / Sprint / Plan)"
      style="max-width:820px;display:block;margin:8px auto;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -69,56 +69,72 @@
   <line x1="410" y1="168" x2="410" y2="228" stroke="#0d9488" stroke-width="2" marker-end="url(#arrT)"/>
 
   <!-- ===== Sprint 循环(外层)===== -->
-  <rect x="28" y="196" width="764" height="510" rx="16" fill="none" stroke="#0d9488" stroke-width="1.5" stroke-dasharray="2 4"/>
+  <rect x="28" y="196" width="764" height="654" rx="16" fill="none" stroke="#0d9488" stroke-width="1.5" stroke-dasharray="2 4"/>
   <text x="44" y="216" font-size="12" font-weight="700" fill="#0d9488">每个 Sprint ↻(2 周)</text>
 
   <rect x="150" y="228" width="520" height="56" rx="10" fill="#e7faf7" stroke="#0d9488"/>
-  <text x="170" y="251" font-size="14.5" font-weight="700" fill="#0d6b63">③ Sprint 规划文档</text>
-  <text x="170" y="270" font-size="12" fill="#46776f">本 sprint 2 周开发计划 → 拆成多个 plan(有序)</text>
+  <text x="170" y="251" font-size="14.5" font-weight="700" fill="#0d6b63">③ Sprint 规划文档(摘要)</text>
+  <text x="170" y="270" font-size="12" fill="#46776f">本 sprint 2 周计划摘要 → 拆成多个 plan(有序);详细设计留各 plan</text>
 
   <line x1="410" y1="284" x2="410" y2="342" stroke="#7a52c7" stroke-width="2" marker-end="url(#arrG)"/>
 
   <!-- ===== Plan 循环(内层)===== -->
-  <rect x="60" y="312" width="700" height="350" rx="14" fill="none" stroke="#7a52c7" stroke-width="1.5" stroke-dasharray="2 4"/>
+  <rect x="60" y="312" width="700" height="494" rx="14" fill="none" stroke="#7a52c7" stroke-width="1.5" stroke-dasharray="2 4"/>
   <text x="76" y="331" font-size="12" font-weight="700" fill="#7a52c7">每个 Plan ↻</text>
 
+  <!-- ④ 编写 spec/design(普通环节,不高亮)-->
   <rect x="150" y="342" width="520" height="52" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
-  <text x="170" y="363" font-size="14" font-weight="700" fill="#1a1f26">④ writing-plans(单个 plan)</text>
-  <text x="170" y="381" font-size="11.5" fill="#5b6573">任务级 checkbox · 每步 TDD · 必含 runbook · 未知先探针 · 争议补 ADR</text>
+  <text x="170" y="363" font-size="14" font-weight="700" fill="#1a1f26">④ 编写 spec/design</text>
+  <text x="170" y="381" font-size="11.5" fill="#5b6573">产 spec(需求)+ design(设计)· writing-specs;未知先探针</text>
 
-  <rect x="150" y="414" width="520" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
-  <text x="170" y="434" font-size="14" font-weight="700" fill="#1a1f26">⑤ execute</text>
-  <text x="170" y="451" font-size="11.5" fill="#5b6573">交互 / headless · 实时勾选 · 全绿门禁才进下一步</text>
+  <!-- ⑤ DoR 就绪门(★关键闸门,高亮)-->
+  <rect x="150" y="414" width="520" height="52" rx="10" fill="#f4f0fb" stroke="#7a52c7" stroke-width="2"/>
+  <text x="170" y="435" font-size="14" font-weight="700" fill="#5b3aa6">⑤ DoR 就绪门 ★关键闸门</text>
+  <text x="170" y="453" font-size="11.5" fill="#5a4a82">过 8 项就绪门(每项三态,无静默 TBD);未过不进 tasks</text>
 
-  <rect x="150" y="482" width="520" height="52" rx="10" fill="#fff7ed" stroke="#b4541a" stroke-width="2"/>
-  <text x="170" y="503" font-size="14" font-weight="700" fill="#b4541a">⑥ 隔离审查 ★关键闸门</text>
-  <text x="170" y="521" font-size="11.5" fill="#7c4a1e">人跑 spec/runbook + 独立 reviewer(机器自评不算数)</text>
+  <!-- ⑥ writing-plans -->
+  <rect x="150" y="486" width="520" height="52" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
+  <text x="170" y="507" font-size="14" font-weight="700" fill="#1a1f26">⑥ writing-plans(单个 plan)</text>
+  <text x="170" y="525" font-size="11.5" fill="#5b6573">任务级 checkbox · 每步 TDD · 必含 runbook · 争议补 ADR</text>
 
-  <rect x="150" y="554" width="520" height="48" rx="10" fill="#eafaf0" stroke="#1a7f4b"/>
-  <text x="170" y="574" font-size="14" font-weight="700" fill="#1a7f4b">⑦ 合并</text>
-  <text x="170" y="591" font-size="11.5" fill="#3a6b52">CI 绿 · owner 确认 · 回标 spec/计划 checkbox</text>
+  <!-- ⑦ execute -->
+  <rect x="150" y="558" width="520" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
+  <text x="170" y="578" font-size="14" font-weight="700" fill="#1a1f26">⑦ execute</text>
+  <text x="170" y="595" font-size="11.5" fill="#5b6573">交互 / headless · 实时勾选 · 全绿门禁才进下一步</text>
+
+  <!-- ⑧ 隔离审查 ★ -->
+  <rect x="150" y="626" width="520" height="52" rx="10" fill="#fff7ed" stroke="#b4541a" stroke-width="2"/>
+  <text x="170" y="647" font-size="14" font-weight="700" fill="#b4541a">⑧ 隔离审查 ★关键闸门</text>
+  <text x="170" y="665" font-size="11.5" fill="#7c4a1e">人跑 spec/runbook + 独立 reviewer(机器自评不算数)</text>
+
+  <!-- ⑨ 合并 -->
+  <rect x="150" y="698" width="520" height="48" rx="10" fill="#eafaf0" stroke="#1a7f4b"/>
+  <text x="170" y="718" font-size="14" font-weight="700" fill="#1a7f4b">⑨ 合并</text>
+  <text x="170" y="735" font-size="11.5" fill="#3a6b52">CI 绿 · owner 确认 · 回标 spec/计划 checkbox</text>
 
   <g stroke="#2f6feb" stroke-width="2" marker-end="url(#arr)">
     <line x1="410" y1="394" x2="410" y2="414"/>
-    <line x1="410" y1="462" x2="410" y2="482"/>
-    <line x1="410" y1="534" x2="410" y2="554"/>
+    <line x1="410" y1="466" x2="410" y2="486"/>
+    <line x1="410" y1="538" x2="410" y2="558"/>
+    <line x1="410" y1="606" x2="410" y2="626"/>
+    <line x1="410" y1="678" x2="410" y2="698"/>
   </g>
   <!-- 内环:隔离审查 → execute(修 Critical/Important)-->
-  <path d="M670 508 H712 V438 H670" fill="none" stroke="#b4541a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrW)"/>
-  <text x="716" y="473" font-size="10" fill="#b4541a" transform="rotate(90 716 473)">C/I → 修后重验</text>
+  <path d="M670 652 H712 V582 H670" fill="none" stroke="#b4541a" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrW)"/>
+  <text x="716" y="617" font-size="10" fill="#b4541a" transform="rotate(90 716 617)">C/I → 修后重验</text>
   <!-- Plan 环:合并 → 下一个 plan(回 ④)-->
-  <path d="M150 578 H108 V368 H150" fill="none" stroke="#7a52c7" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
-  <text x="104" y="473" font-size="10" fill="#7a52c7" transform="rotate(-90 104 473)" text-anchor="middle">下一个 plan</text>
+  <path d="M150 722 H108 V368 H150" fill="none" stroke="#7a52c7" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrG)"/>
+  <text x="104" y="545" font-size="10" fill="#7a52c7" transform="rotate(-90 104 545)" text-anchor="middle">下一个 plan</text>
   <!-- Sprint 环:plan 全完 → 下一 sprint(回 ③)-->
-  <path d="M150 590 H44 V256 H150" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrT)"/>
-  <text x="40" y="430" font-size="10" fill="#0d9488" transform="rotate(-90 40 430)" text-anchor="middle">plan 全完 → 下一 Sprint</text>
+  <path d="M150 734 H44 V256 H150" fill="none" stroke="#0d9488" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrT)"/>
+  <text x="40" y="495" font-size="10" fill="#0d9488" transform="rotate(-90 40 495)" text-anchor="middle">plan 全完 → 下一 Sprint</text>
 
-  <text x="410" y="734" font-size="12" fill="#5b6573" text-anchor="middle">每个箭头都是一道闸 — 不跳步、不假绿(证据先于断言)</text>
+  <text x="410" y="878" font-size="12" fill="#5b6573" text-anchor="middle">每个箭头都是一道闸 — 不跳步、不假绿(证据先于断言)</text>
 </svg>
 <h2>2. writing-plans:把计划写成可执行、可验收、可续接</h2>
-<p>计划是后续一切的脚手架。<b>所有计划相关的纪律都在这一节。</b>顺序很关键:<b>先探查、再拆分、每步带测试与验收</b>,把正确性前置到计划阶段。</p>
+<p>计划是后续一切的脚手架。<b>所有计划相关的纪律都在这一节。</b>顺序很关键:<b>先探查、过 DoR 就绪门(产 spec/design)、再拆分、每步带测试与验收</b>,把正确性前置到计划阶段。</p>
 
-<svg viewBox="0 0 680 470" width="100%" role="img" aria-label="writing-plans 内部流程"
+<svg viewBox="0 0 680 540" width="100%" role="img" aria-label="writing-plans 内部流程"
      style="max-width:680px;display:block;margin:14px auto;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
   <defs>
     <marker id="wparr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -134,72 +150,82 @@
   <text x="140" y="65" font-size="11.5" fill="#7c4a1e">未知外部依赖:先起真服务跑探针,把真实端点/字段/响应/坑</text>
   <text x="140" y="80" font-size="11.5" fill="#7c4a1e">钉成事实文档 —— 不把猜的 API 写进计划。</text>
 
-  <!-- ② checkbox 拆分 -->
-  <rect x="120" y="104" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
-  <text x="140" y="124" font-size="14" font-weight="700" fill="#1a1f26">② 任务级 checkbox 拆分</text>
-  <text x="140" y="141" font-size="11.5" fill="#5b6573">bite-sized:写测试 / 跑红 / 实现 / 跑绿 / 提交 各一步</text>
+  <!-- ② DoR 就绪门(高亮 + 人)-->
+  <rect x="120" y="104" width="380" height="64" rx="10" fill="#f4f0fb" stroke="#7a52c7" stroke-width="2"/>
+  <text x="140" y="128" font-size="14.5" font-weight="700" fill="#5b3aa6">② DoR 就绪门 ★进 tasks 之前</text>
+  <text x="140" y="146" font-size="11.5" fill="#5a4a82">产 spec(需求)+ design(设计);8 项就绪每项三态</text>
+  <text x="140" y="162" font-size="11.5" fill="#5a4a82">(已决定/显式推迟/待探查),无静默 TBD · writing-specs</text>
 
-  <!-- ③ 每步 TDD -->
-  <rect x="120" y="172" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
-  <text x="140" y="192" font-size="14" font-weight="700" fill="#1a1f26">③ 每步 TDD</text>
-  <text x="140" y="209" font-size="11.5" fill="#5b6573">红 → 绿 → 重构;无测试不合并</text>
-  <rect x="418" y="178" width="74" height="18" rx="9" fill="#eef3ff" stroke="#2f6feb"/>
-  <text x="455" y="190.5" font-size="9.5" fill="#2f6feb" text-anchor="middle" font-weight="700">⚙ 可 headless</text>
+  <!-- ③ checkbox 拆分 -->
+  <rect x="120" y="188" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
+  <text x="140" y="208" font-size="14" font-weight="700" fill="#1a1f26">③ 任务级 checkbox 拆分</text>
+  <text x="140" y="225" font-size="11.5" fill="#5b6573">bite-sized:写测试 / 跑红 / 实现 / 跑绿 / 提交 各一步</text>
 
-  <!-- ④ runbook -->
-  <rect x="120" y="240" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
-  <text x="140" y="260" font-size="14" font-weight="700" fill="#1a1f26">④ 必含手动验收 runbook</text>
-  <text x="140" y="277" font-size="11.5" fill="#5b6573">可照抄命令 + 期望证据;§4 由人照跑验收</text>
-  <rect x="418" y="246" width="66" height="18" rx="9" fill="#eef3ff" stroke="#2f6feb"/>
-  <text x="451" y="258.5" font-size="9.5" fill="#2f6feb" text-anchor="middle" font-weight="700">⚙ AI 生成</text>
+  <!-- ④ 每步 TDD -->
+  <rect x="120" y="256" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
+  <text x="140" y="276" font-size="14" font-weight="700" fill="#1a1f26">④ 每步 TDD</text>
+  <text x="140" y="293" font-size="11.5" fill="#5b6573">红 → 绿 → 重构;无测试不合并</text>
+  <rect x="418" y="262" width="74" height="18" rx="9" fill="#eef3ff" stroke="#2f6feb"/>
+  <text x="455" y="274.5" font-size="9.5" fill="#2f6feb" text-anchor="middle" font-weight="700">⚙ 可 headless</text>
 
-  <!-- ⑤ ADR -->
-  <rect x="120" y="308" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
-  <text x="140" y="328" font-size="14" font-weight="700" fill="#1a1f26">⑤ 争议设计 → ADR</text>
-  <text x="140" y="345" font-size="11.5" fill="#5b6573">正文为最新版,理由 / 历史进 ADR + git</text>
+  <!-- ⑤ runbook -->
+  <rect x="120" y="324" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
+  <text x="140" y="344" font-size="14" font-weight="700" fill="#1a1f26">⑤ 必含手动验收 runbook</text>
+  <text x="140" y="361" font-size="11.5" fill="#5b6573">可照抄命令 + 期望证据;§4 由人照跑验收</text>
+  <rect x="418" y="330" width="66" height="18" rx="9" fill="#eef3ff" stroke="#2f6feb"/>
+  <text x="451" y="342.5" font-size="9.5" fill="#2f6feb" text-anchor="middle" font-weight="700">⚙ AI 生成</text>
 
-  <!-- ⑥ 全绿门禁 -->
-  <rect x="120" y="376" width="380" height="48" rx="10" fill="#eafaf0" stroke="#1a7f4b"/>
-  <text x="140" y="396" font-size="14" font-weight="700" fill="#1a7f4b">⑥ 全绿门禁</text>
-  <text x="140" y="413" font-size="11.5" fill="#3a6b52">测试 / lint / 构建全绿才进下一步</text>
+  <!-- ⑥ ADR -->
+  <rect x="120" y="392" width="380" height="48" rx="10" fill="#f6f8fa" stroke="#cbd5e1"/>
+  <text x="140" y="412" font-size="14" font-weight="700" fill="#1a1f26">⑥ 争议设计 → ADR</text>
+  <text x="140" y="429" font-size="11.5" fill="#5b6573">正文为最新版,理由 / 历史进 ADR + git</text>
 
-  <!-- 人参与徽标:①探查研判 / ⑤ADR拍板(④runbook 由 AI 生成,见 ④ 的标)-->
+  <!-- ⑦ 全绿门禁 -->
+  <rect x="120" y="460" width="380" height="48" rx="10" fill="#eafaf0" stroke="#1a7f4b"/>
+  <text x="140" y="480" font-size="14" font-weight="700" fill="#1a7f4b">⑦ 全绿门禁</text>
+  <text x="140" y="497" font-size="11.5" fill="#3a6b52">测试 / lint / 构建全绿才进下一步</text>
+
+  <!-- 人参与徽标:①探查研判 / ②DoR过门 / ⑥ADR拍板 -->
   <circle cx="478" cy="40" r="11" fill="#7a52c7"/><text x="478" y="44" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
-  <circle cx="478" cy="332" r="11" fill="#7a52c7"/><text x="478" y="336" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
+  <circle cx="478" cy="124" r="11" fill="#7a52c7"/><text x="478" y="128" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
+  <circle cx="478" cy="416" r="11" fill="#7a52c7"/><text x="478" y="420" font-size="11" fill="#fff" text-anchor="middle" font-weight="700">人</text>
 
   <g stroke="#2f6feb" stroke-width="2" marker-end="url(#wparr)">
     <line x1="310" y1="84"  x2="310" y2="104"/>
-    <line x1="310" y1="152" x2="310" y2="172"/>
-    <line x1="310" y1="220" x2="310" y2="240"/>
-    <line x1="310" y1="288" x2="310" y2="308"/>
-    <line x1="310" y1="356" x2="310" y2="376"/>
+    <line x1="310" y1="168" x2="310" y2="188"/>
+    <line x1="310" y1="236" x2="310" y2="256"/>
+    <line x1="310" y1="304" x2="310" y2="324"/>
+    <line x1="310" y1="372" x2="310" y2="392"/>
+    <line x1="310" y1="440" x2="310" y2="460"/>
   </g>
 
   <!-- 右侧贯穿:实时勾选 -->
-  <path d="M512 104 H548 V424 H512" fill="none" stroke="#7a52c7" stroke-width="1.5" stroke-dasharray="4 4"/>
-  <text x="560" y="264" font-size="11" font-weight="700" fill="#7a52c7" transform="rotate(90 560 264)" text-anchor="middle">实时勾选 -[x] + 任务跟踪 · 贯穿全程</text>
+  <path d="M512 188 H548 V508 H512" fill="none" stroke="#7a52c7" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <text x="560" y="348" font-size="11" font-weight="700" fill="#7a52c7" transform="rotate(90 560 348)" text-anchor="middle">实时勾选 -[x] + 任务跟踪 · 贯穿全程</text>
 </svg>
 
 <div class="lead" style="border-left-color:#7a52c7;background:#f4f0fb">
 <b>🙋 需要人参与的环节(不可全交给 AI):</b>
 <ol>
   <li><b>探查结果研判</b>(对应 ①):探针跑完,由人确认事实文档(真实端点/字段/坑)可信、足以支撑写计划——不让 AI 拿不确信的"实测"就开写。</li>
-  <li><b>争议设计拍板 → ADR</b>(对应 ⑤):地基级 / 有争议的设计由<b>人</b>决策并落 ADR,不让 AI 自决。</li>
-  <li><b>计划评审批准</b>(进入执行前):计划成稿后人逐项对 spec 审——覆盖完整、拆分粒度合适、无占位符、runbook 可照抄跑;批准后才进入执行。</li>
+  <li><b>DoR 过门研判</b>(对应 ②):由 owner / 独立评审者判 8 项是否真就绪(无静默 TBD、外部依赖已实测、对外契约已过"第一个消费者")——机器自评不算就绪,过门才进 tasks。</li>
+  <li><b>争议设计拍板 → ADR</b>(对应 ⑥):地基级 / 有争议的设计由<b>人</b>决策并落 ADR,不让 AI 自决。</li>
+  <li><b>计划评审批准</b>(进入执行前):计划成稿后人逐项对 spec/design 审——覆盖完整、拆分粒度合适、无占位符、runbook 可照抄跑;批准后才进入执行。</li>
 </ol>
-<p style="margin:10px 0 0">其余步骤——<b>② 拆分、③ 每步 TDD、④ 生成 runbook、⑥ 全绿门禁</b>——确定性高,可由 AI / headless 无人值守完成。<b>④ 的 runbook 是写计划时由 AI 生成的产物(不需人参与);它"由人照着跑验收"发生在 §4 隔离审查,不在本阶段。</b></p>
+<p style="margin:10px 0 0">其余步骤——<b>③ 拆分、④ 每步 TDD、⑤ 生成 runbook、⑦ 全绿门禁</b>——确定性高,可由 AI / headless 无人值守完成。<b>⑤ 的 runbook 是写计划时由 AI 生成的产物(不需人参与);它"由人照着跑验收"发生在 §4 隔离审查,不在本阶段。</b></p>
 </div>
 
 <ul>
   <li><b>① 探查优先(写计划之前):</b>不把猜的 API 写进计划。未知外部依赖先起真服务、跑通最小链路,把真实端点/字段/响应/坑记成事实文档,后续实现<b>以实测为准</b>。实战中探针常当场逮到外部系统的鉴权/寻址坑——等集成阶段才撞,排查成本翻倍。</li>
-  <li><b>② 任务级 checkbox 拆分:</b>每个任务/步骤 <code>- [ ]</code>,粒度到"可单独勾选/验证"(bite-sized:写测试 / 跑红 / 实现 / 跑绿 / 提交 各一步)。</li>
-  <li><b>③ 每步 TDD:</b>先写测试(红)→ 最小实现(绿)→ 重构;无测试不合并。</li>
-  <li><b>④ 必含手动验收 runbook:</b>可照抄的命令序列 + 每步期望证据,让人不读代码也能复现验收。<b>由 AI 在写计划时生成</b>(不需人参与);<b>无 runbook 的计划不算完成</b>,§4 再由人照着跑做验收。</li>
-  <li><b>⑤ 有争议的设计 → 落 ADR:</b>正文永远是最新版,决策理由与历史进 ADR + git。</li>
-  <li><b>⑥ 全绿门禁:</b>每个任务结束跑项目的测试/lint/构建全绿才进下一步;失败先系统化调试定位根因,不打补丁猜。</li>
+  <li><b>② DoR 就绪门 + spec/design 拆分(进 tasks 之前 · <code>superpowers:writing-specs</code>):</b>写步骤前先产<b>独立 spec.md(需求)+ design.md(设计)</b>,过<b>一道 DoR 就绪门</b>——8 项每项三态之一(<b>已决定 / 显式推迟+理由 / 待探查+探针+决策规则</b>),无静默 TBD:①范围出口 ②接口契约(对外契约冻结前过"第一个消费者":UI→低保真原型 / 程序→SDK·样例;纯内部豁免)③数据模型 ④外部依赖探查事实(实测成文)⑤行为·边界·并发·威胁 ⑥NFR(安全/隔离/性能/parity/拓扑)⑦验收与测试策略(runbook)⑧关键决策留痕(ADR)。<b>详细设计 just-in-time 进每个 plan</b>(sprint 文档只给摘要;事实/探针/原型在进 plan 那刻才存在,前置=瀑布+漂移)。需求(spec)与设计(design)分开,可独立把关质量。</li>
+  <li><b>③ 任务级 checkbox 拆分:</b>每个任务/步骤 <code>- [ ]</code>,粒度到"可单独勾选/验证"(bite-sized:写测试 / 跑红 / 实现 / 跑绿 / 提交 各一步)。</li>
+  <li><b>④ 每步 TDD:</b>先写测试(红)→ 最小实现(绿)→ 重构;无测试不合并。</li>
+  <li><b>⑤ 必含手动验收 runbook:</b>可照抄的命令序列 + 每步期望证据,让人不读代码也能复现验收。<b>由 AI 在写计划时生成</b>(不需人参与);<b>无 runbook 的计划不算完成</b>,§4 再由人照着跑做验收。</li>
+  <li><b>⑥ 有争议的设计 → 落 ADR:</b>正文永远是最新版,决策理由与历史进 ADR + git。</li>
+  <li><b>⑦ 全绿门禁:</b>每个任务结束跑项目的测试/lint/构建全绿才进下一步;失败先系统化调试定位根因,不打补丁猜。</li>
   <li><b>贯穿全程 · 实时更新状态:</b>每完成一步即勾 <code>- [x]</code> + 同步任务跟踪(in_progress/completed)——进度随时可见、可中断可续;<b>不做完一批才补勾</b>(无人值守跑完忘回填是典型反例)。</li>
 </ul>
-<div class="key"><b>一句话:</b>把探针、checkbox、TDD、runbook、ADR、全绿门禁<b>都前置进计划</b>,正确性在计划阶段就可检验,而不是堆到最后。</div>
+<div class="key"><b>一句话:</b>把探针、<b>DoR(spec/design)</b>、checkbox、TDD、runbook、ADR、全绿门禁<b>都前置进计划</b>,正确性在计划阶段就可检验,而不是堆到最后。</div>
 
 <h2>3. 执行:交互 vs headless</h2>
 <table>
