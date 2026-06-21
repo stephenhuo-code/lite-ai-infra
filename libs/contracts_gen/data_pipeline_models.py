@@ -47,7 +47,7 @@ class JobList(BaseModel):
 class RawUploadRequest(BaseModel):
     dataset: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
     group_id: constr(pattern=r'^g-[0-9a-z]+$')
-    filename: constr(pattern=r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
+    filename: str
     multipart: bool | None = False
     parts: conint(ge=1, le=10000) | None = None
 

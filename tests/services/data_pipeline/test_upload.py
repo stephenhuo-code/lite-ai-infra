@@ -88,3 +88,82 @@ def test_gc_aborts_multipart_and_deletes_stale_pending(tmp_path):
     assert g["raw_id"] in reaped
     assert (g["oss_key"], "UP-1") in s3.aborted   # 孤儿分片 abort(防漏钱)
     assert up.get_record(g["raw_id"]) is None      # 记录已删
+
+
+import json
+from fastapi.testclient import TestClient
+from services.data_pipeline_service.app import build_app
+from libs.audit.oss_audit import AuditWriter
+
+class MemSink:
+    def __init__(self): self.items = []
+    def put(self, key, body): self.items.append((key, body))
+
+def _client(tmp_path, s3, monkeypatch):
+    monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
+    sink = MemSink()
+    up = _uploader(tmp_path, s3)
+    runner = None   # 上传端点不依赖 runner
+    return TestClient(build_app(runner=runner, audit=AuditWriter(sink), uploader=up)), up, sink
+
+def _hdr(sub, groups): return {"x-test-claims": json.dumps({"sub": sub, "groups": groups})}
+
+def test_request_upload_returns_grant(tmp_path, monkeypatch):
+    c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)
+    r = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+               json={"dataset": "cc3m", "group_id": "g-0001", "filename": "part-0.tar"})
+    assert r.status_code == 200
+    g = r.json()
+    assert g["oss_key"] == "e-0001/g-0001/raw/cc3m/part-0.tar" and g["url"]
+
+def test_request_upload_cross_group_403_no_record_audited(tmp_path, monkeypatch):
+    c, up, sink = _client(tmp_path, FakeS3(), monkeypatch)
+    r = c.post("/v1/data/raw", headers=_hdr("u-x", ["/e-0001/g-0002/members"]),
+               json={"dataset": "cc3m", "group_id": "g-0001", "filename": "part-0.tar"})
+    assert r.status_code == 403
+    assert up.list_raw() == []                                   # 零副作用
+    assert json.loads(sink.items[0][1])["decision"] == "deny"    # deny 审计
+
+def test_request_upload_bad_filename_400(tmp_path, monkeypatch):
+    c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)
+    r = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+               json={"dataset": "cc3m", "group_id": "g-0001", "filename": "../escape"})
+    assert r.status_code == 400 and up.list_raw() == []
+
+def test_complete_only_by_id_marks_ready(tmp_path, monkeypatch):
+    s3 = FakeS3(); c, up, _ = _client(tmp_path, s3, monkeypatch)
+    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+               json={"dataset": "cc3m", "group_id": "g-0001", "filename": "part-0.tar"}).json()
+    s3.existing[g["oss_key"]] = 4096                              # 模拟已直传
+    r = c.post(f"/v1/data/raw/{g['raw_id']}/complete", headers=_hdr("u-a", ["/e-0001/g-0001/members"]), json={})
+    assert r.status_code == 200 and r.json()["status"] == "ready" and r.json()["size"] == 4096
+
+def test_complete_cross_group_403(tmp_path, monkeypatch):
+    s3 = FakeS3(); c, up, _ = _client(tmp_path, s3, monkeypatch)
+    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+               json={"dataset": "cc3m", "group_id": "g-0001", "filename": "part-0.tar"}).json()
+    s3.existing[g["oss_key"]] = 4096
+    r = c.post(f"/v1/data/raw/{g['raw_id']}/complete",        # 另一组用户拿到 id 也不行
+               headers=_hdr("u-b", ["/e-0001/g-0002/members"]), json={})
+    assert r.status_code == 403
+
+def test_complete_object_missing_409(tmp_path, monkeypatch):
+    c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)        # 对象从未上传
+    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+               json={"dataset": "cc3m", "group_id": "g-0001", "filename": "part-0.tar"}).json()
+    r = c.post(f"/v1/data/raw/{g['raw_id']}/complete", headers=_hdr("u-a", ["/e-0001/g-0001/members"]), json={})
+    assert r.status_code == 409
+
+def test_complete_unknown_id_404(tmp_path, monkeypatch):
+    c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)
+    r = c.post("/v1/data/raw/nope/complete", headers=_hdr("u-a", ["/e-0001/g-0001/members"]), json={})
+    assert r.status_code == 404
+
+def test_list_raw_can_filter_cross_group_hidden(tmp_path, monkeypatch):
+    c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)
+    c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+           json={"dataset": "cc3m", "group_id": "g-0001", "filename": "a.tar"})
+    rows = c.get("/v1/data/raw", headers=_hdr("u-b", ["/e-0001/g-0002/members"])).json()
+    assert rows["raw"] == [] and rows["total"] == 0             # 跨组不可见
+    own = c.get("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"])).json()
+    assert own["total"] == 1 and own["raw"][0]["group_id"] == "g-0001"

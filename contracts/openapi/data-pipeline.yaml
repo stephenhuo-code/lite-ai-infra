@@ -94,7 +94,7 @@ components:
       properties:
         dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}        # 数据集名(=raw 前缀段)
         group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
-        filename: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}  # 单段文件名(无 '/' → 无穿越)
+        filename: {type: string}   # 单段文件名;服务端 raw_object_key 为 C-1 权威校验(无 '/' 防穿越,首字符非 '.'),非法→400(ADR-020 C-1)
         multipart: {type: boolean, default: false}
         parts: {type: [integer, 'null'], minimum: 1, maximum: 10000}           # multipart 时分片数
     UploadGrant:
