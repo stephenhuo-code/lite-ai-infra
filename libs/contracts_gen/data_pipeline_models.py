@@ -42,3 +42,53 @@ class Job(BaseModel):
 class JobList(BaseModel):
     jobs: list[Job]
     total: int
+
+
+class RawUploadRequest(BaseModel):
+    dataset: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
+    group_id: constr(pattern=r'^g-[0-9a-z]+$')
+    filename: constr(pattern=r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
+    multipart: bool | None = False
+    parts: conint(ge=1, le=10000) | None = None
+
+
+class UploadGrant(BaseModel):
+    raw_id: str
+    oss_key: str
+    url: str | None = None
+    upload_id: str | None = None
+    part_urls: list[str] | None = None
+    expires_in: int
+
+
+class CompletePart(BaseModel):
+    part_number: conint(ge=1)
+    etag: str
+
+
+class CompleteUploadRequest(BaseModel):
+    parts: list[CompletePart] | None = None
+
+
+class Status1(Enum):
+    pending = 'pending'
+    ready = 'ready'
+    failed = 'failed'
+
+
+class RawDataset(BaseModel):
+    id: str
+    name: str
+    group_id: constr(pattern=r'^g-[0-9a-z]+$')
+    enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
+    oss_key: str
+    status: Status1
+    size: int | None = None
+    error: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class RawDatasetList(BaseModel):
+    raw: list[RawDataset]
+    total: int

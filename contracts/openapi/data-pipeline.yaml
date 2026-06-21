@@ -27,6 +27,34 @@ paths:
         '200': {description: job, content: {application/json: {schema: {$ref: '#/components/schemas/Job'}}}}
         '403': {description: forbidden}
         '404': {description: not found}
+  /v1/data/raw:
+    post:
+      summary: 请求上传原始数据(can() 过 → 服务端拼 key → 返回 presigned 直传 URL;ADR-020)
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/RawUploadRequest'}}}}
+      responses:
+        '200': {description: grant, content: {application/json: {schema: {$ref: '#/components/schemas/UploadGrant'}}}}
+        '400': {description: invalid dataset/filename}
+        '401': {description: unauthenticated}
+        '403': {description: forbidden}
+    get:
+      summary: 列本企业/组原始数据集(必经 can() 过滤;分页)
+      parameters:
+        - {name: status, in: query, required: false, schema: {type: string, enum: [pending, ready, failed]}}
+        - {name: limit, in: query, required: false, schema: {type: integer, default: 50, maximum: 200}}
+        - {name: offset, in: query, required: false, schema: {type: integer, default: 0}}
+      responses:
+        '200': {description: list, content: {application/json: {schema: {$ref: '#/components/schemas/RawDatasetList'}}}}
+        '401': {description: unauthenticated}
+  /v1/data/raw/{raw_id}/complete:
+    post:
+      summary: 完成上传(入参仅 path id;服务端按记录再 can() + 校验对象;ADR-020 C-2)
+      parameters: [{name: raw_id, in: path, required: true, schema: {type: string}}]
+      requestBody: {required: false, content: {application/json: {schema: {$ref: '#/components/schemas/CompleteUploadRequest'}}}}
+      responses:
+        '200': {description: rawdataset, content: {application/json: {schema: {$ref: '#/components/schemas/RawDataset'}}}}
+        '403': {description: forbidden}
+        '404': {description: not found}
+        '409': {description: object missing / complete failed}
 components:
   schemas:
     PrepareJobRequest:
@@ -60,3 +88,52 @@ components:
       properties:
         jobs: {type: array, items: {$ref: '#/components/schemas/Job'}}
         total: {type: integer}     # 过滤后(can() + status)总数,非全量
+    RawUploadRequest:
+      type: object
+      required: [dataset, group_id, filename]
+      properties:
+        dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}        # 数据集名(=raw 前缀段)
+        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
+        filename: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}  # 单段文件名(无 '/' → 无穿越)
+        multipart: {type: boolean, default: false}
+        parts: {type: [integer, 'null'], minimum: 1, maximum: 10000}           # multipart 时分片数
+    UploadGrant:
+      type: object
+      required: [raw_id, oss_key, expires_in]
+      properties:
+        raw_id: {type: string}
+        oss_key: {type: string}
+        url: {type: [string, 'null']}                                          # 单传:一条 presigned PUT URL
+        upload_id: {type: [string, 'null']}                                    # multipart:OSS UploadId
+        part_urls: {type: [array, 'null'], items: {type: string}}             # multipart:逐片 presigned URL(序与 PartNumber 对应)
+        expires_in: {type: integer}                                            # 秒,TTL≤900(ADR-020 §4)
+    CompletePart:
+      type: object
+      required: [part_number, etag]
+      properties:
+        part_number: {type: integer, minimum: 1}
+        etag: {type: string}
+    CompleteUploadRequest:
+      type: object
+      properties:
+        parts: {type: [array, 'null'], items: {$ref: '#/components/schemas/CompletePart'}}   # 单传留空;multipart 带各片 ETag
+    RawDataset:
+      type: object
+      required: [id, name, group_id, enterprise_id, oss_key, status]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
+        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        oss_key: {type: string}
+        status: {type: string, enum: [pending, ready, failed]}
+        size: {type: [integer, 'null']}
+        error: {type: [string, 'null']}
+        created_at: {type: [string, 'null']}
+        updated_at: {type: [string, 'null']}
+    RawDatasetList:
+      type: object
+      required: [raw, total]
+      properties:
+        raw: {type: array, items: {$ref: '#/components/schemas/RawDataset'}}
+        total: {type: integer}     # 过滤后(can()+status)总数
