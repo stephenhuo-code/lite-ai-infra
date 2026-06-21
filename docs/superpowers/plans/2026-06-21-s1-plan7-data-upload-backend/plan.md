@@ -985,6 +985,8 @@ git commit -m "chore(data-pipeline): 全绿门禁 + 上传后端验收留痕"
 - [ ] **R10 GC**:造一条 pending(请求上传不 complete),`RAW_PENDING_TTL=0 uv run python scripts/raw_gc.py` → 记录被清;multipart 的孤儿分片被 abort。
 
 > **prod 上线 DoD 硬门(非本地可测,显式登记;ADR-020 §5/§6)**:① 阿里云 OSS bucket 配 **CORS**(允许前端域名 Origin、`PUT`、暴露 `ETag`);② **virtual-hosted addressing + multipart ETag 行为 staging 复验**;③ prod OSS 域名进前端 **CSP `connect-src`**。漏了 prod 上传必跨域失败。
+>
+> **显式登记·本轮未实现(deferred,ADR-020 §4 M-2 标"可签/可选")**:presign **content-length-range** 对象大小上限未签 —— 现 `RawUploadRequest` 无 `size` 入参,且单传 presigned PUT(`generate_presigned_url`)无法施加 length-range(需改 presigned POST,变更契约+客户端流程,超本 plan 范围)。风险:presigned URL 泄露窗口(≤15min)内可向该写死 key 写超额对象(配额/计费滥用面)。缓解现状:短 TTL + key 写死 + 单租户隔离。vN+ 若启用:`RawUploadRequest` 加 `size` → 单传走 `generate_presigned_post` 带 `content-length-range`,multipart 各片大小由 part 数+总 size 推。
 
 ---
 

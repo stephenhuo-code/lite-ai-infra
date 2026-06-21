@@ -16,11 +16,11 @@ from services.data_pipeline_service.jobs import JobSpec
 from services.data_pipeline_service.upload import ObjectMissing
 
 def _audit(audit: AuditWriter, ctx: Context, ent: str, gid: str, resource_uri: str,
-           action: str, decision: str, reason: str) -> None:
+           action: str, decision: str, reason: str, metadata: dict | None = None) -> None:
     audit.write(AuditEvent(ts=datetime.now(timezone.utc).isoformat(), enterprise_id=ent, group_id=gid,
                            actor_user=ctx.user, actor_role=ctx.role_in(EnterpriseId(ent), GroupId(gid)) or "none",
                            action=action, resource_uri=resource_uri, decision=decision,
-                           override=False, reason=reason, metadata={}))
+                           override=False, reason=reason, metadata=metadata or {}))
 
 def build_app(runner, audit: AuditWriter, uploader=None):
     app = make_service_app(title="data-pipeline-service", version="0.1.0")
@@ -87,7 +87,10 @@ def build_app(runner, audit: AuditWriter, uploader=None):
                                           multipart=bool(body.multipart), parts=body.parts)
         except ValueError as e:                               # 文件名/数据集名非法
             return JSONResponse(status_code=400, content={"reason": str(e)})
-        _audit(audit, ctx, ent, body.group_id, f"raw/{body.dataset}", "data.upload", "allow", "")
+        # presign allow 审计带 key+TTL+raw_id(ADR-020 I-2):GC 扫 pending 超时时可据此对账
+        # "授权了但结果未知"的中间态(字节已落 OSS 但 complete 丢失)。
+        _audit(audit, ctx, ent, body.group_id, f"raw/{body.dataset}", "data.upload", "allow", "",
+               metadata={"raw_id": grant["raw_id"], "oss_key": grant["oss_key"], "expires_in": grant["expires_in"]})
         return grant
 
     @app.post("/v1/data/raw/{raw_id}/complete")
@@ -108,7 +111,8 @@ def build_app(runner, audit: AuditWriter, uploader=None):
         except ObjectMissing as e:
             _audit(audit, ctx, ent, rec["group_id"], f"raw/{rec['name']}", "data.upload", "deny", "object-missing")
             return JSONResponse(status_code=409, content={"reason": str(e)})
-        _audit(audit, ctx, ent, rec["group_id"], f"raw/{rec['name']}", "data.upload", "allow", "complete")
+        _audit(audit, ctx, ent, rec["group_id"], f"raw/{rec['name']}", "data.upload", "allow", "complete",
+               metadata={"raw_id": raw_id, "oss_key": rec["oss_key"], "size": out.get("size")})
         return out
 
     @app.get("/v1/data/raw")

@@ -89,6 +89,24 @@ def test_gc_aborts_multipart_and_deletes_stale_pending(tmp_path):
     assert (g["oss_key"], "UP-1") in s3.aborted   # 孤儿分片 abort(防漏钱)
     assert up.get_record(g["raw_id"]) is None      # 记录已删
 
+def test_gc_reconciles_orphan_single_pending_to_ready(tmp_path):
+    s3 = FakeS3()
+    up = _uploader(tmp_path, s3)
+    g = up.create_grant(name="cc3m", enterprise_id="e-0001", group_id="g-0001",
+                        sub="u-a", filename="part-0.tar", multipart=False, parts=None)
+    s3.existing[g["oss_key"]] = 4096          # 字节已落 OSS,但 complete 回调丢失(中间态)
+    reaped = up.gc(ttl_seconds=0)
+    assert g["raw_id"] not in reaped          # 对账:未误删已上传数据
+    rec = up.get_record(g["raw_id"])
+    assert rec["status"] == "ready" and rec["size"] == 4096   # 补登 ready(ADR-020 I-2 对账)
+
+def test_gc_deletes_orphan_single_pending_without_object(tmp_path):
+    up = _uploader(tmp_path, FakeS3())        # 对象从未上传 → 真孤儿
+    g = up.create_grant(name="cc3m", enterprise_id="e-0001", group_id="g-0001",
+                        sub="u-a", filename="part-0.tar", multipart=False, parts=None)
+    reaped = up.gc(ttl_seconds=0)
+    assert g["raw_id"] in reaped and up.get_record(g["raw_id"]) is None
+
 
 import json
 from fastapi.testclient import TestClient
@@ -115,6 +133,15 @@ def test_request_upload_returns_grant(tmp_path, monkeypatch):
     assert r.status_code == 200
     g = r.json()
     assert g["oss_key"] == "e-0001/g-0001/raw/cc3m/part-0.tar" and g["url"]
+
+def test_request_upload_allow_audit_carries_key_ttl_id(tmp_path, monkeypatch):
+    c, up, sink = _client(tmp_path, FakeS3(), monkeypatch)
+    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+               json={"dataset": "cc3m", "group_id": "g-0001", "filename": "part-0.tar"}).json()
+    ev = json.loads(sink.items[-1][1])                          # presign allow 审计
+    assert ev["decision"] == "allow"
+    md = ev["metadata"]                                         # ADR-020 I-2:带 key+TTL+raw_id 供 GC 对账
+    assert md["raw_id"] == g["raw_id"] and md["oss_key"] == g["oss_key"] and md["expires_in"] == 900
 
 def test_request_upload_cross_group_403_no_record_audited(tmp_path, monkeypatch):
     c, up, sink = _client(tmp_path, FakeS3(), monkeypatch)

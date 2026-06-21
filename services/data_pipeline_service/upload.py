@@ -78,8 +78,11 @@ class Uploader:
     def list_raw(self) -> list[dict]:
         return self.raw_store.list_raw()
 
-    # ---- GC:清超时 pending + abort 孤儿分片 + 对账(ADR-020 §3 / I-2)----
+    # ---- GC:对账 + 清超时 pending + abort 孤儿分片(ADR-020 §3 / I-2)----
     def gc(self, ttl_seconds: int) -> list[str]:
+        """对超时 pending 先**对账**(ADR-020 I-2:核对 OSS 对象是否存在):
+        单传记录若对象已落 OSS(complete 回调丢失的中间态)→ 补登 ready,不误删已上传数据;
+        否则真孤儿 → multipart abort 计费分片 + 删记录。返回被回收(删除)的 id 列表。"""
         reaped: list[str] = []
         now = _now_epoch()
         for rec in self.raw_store.list_raw():
@@ -93,6 +96,13 @@ class Uploader:
             if age < ttl_seconds:
                 continue
             spec = self.raw_store.load_spec(rec["id"])
+            if spec and not spec.upload_id:             # 单传:对账——对象=key 本身,存在即"授权了且已落"
+                try:
+                    head = self.s3.head_object(Bucket=self.bucket, Key=spec.oss_key)
+                    self.raw_store.update(rec["id"], "ready", size=head.get("ContentLength"))
+                    continue                            # 补登 ready,不删(挽回丢失 complete 的字节)
+                except ClientError:
+                    pass                                # 对象不存在 → 真孤儿,落到下方删除
             if spec and spec.upload_id:                 # 孤儿 multipart → abort(防 OSS 计费分片漏钱)
                 try:
                     self.s3.abort_multipart_upload(Bucket=self.bucket, Key=spec.oss_key, UploadId=spec.upload_id)
