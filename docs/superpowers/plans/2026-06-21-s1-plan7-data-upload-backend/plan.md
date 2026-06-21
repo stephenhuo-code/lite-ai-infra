@@ -37,7 +37,7 @@
 - Modify(生成,勿手改): `libs/contracts_gen/data_pipeline_models.py`
 - Test: `tests/test_codegen.py`(已存在;确认 drift 守卫覆盖新模型)
 
-- [ ] **Step 1: 在 `data-pipeline.yaml` 的 `paths:` 末尾(`/v1/data/jobs/{job_id}` 之后、`components:` 之前)插入三端点**
+- [x] **Step 1: 在 `data-pipeline.yaml` 的 `paths:` 末尾(`/v1/data/jobs/{job_id}` 之后、`components:` 之前)插入三端点**
 
 ```yaml
   /v1/data/raw:
@@ -70,7 +70,7 @@
         '409': {description: object missing / complete failed}
 ```
 
-- [ ] **Step 2: 在 `components.schemas:`(`JobList` 之后)追加 schemas**
+- [x] **Step 2: 在 `components.schemas:`(`JobList` 之后)追加 schemas**
 
 ```yaml
     RawUploadRequest:
@@ -124,22 +124,22 @@
         total: {type: integer}     # 过滤后(can()+status)总数
 ```
 
-- [ ] **Step 3: 重生成 pydantic 模型**
+- [x] **Step 3: 重生成 pydantic 模型**
 
 Run: `make gen`
 Expected: 无报错;`libs/contracts_gen/data_pipeline_models.py` 顶部注释不变,新增 `RawUploadRequest`、`UploadGrant`、`CompletePart`、`CompleteUploadRequest`、`RawDataset`、`RawDatasetList` 类。
 
-- [ ] **Step 4: 验证模型已生成且可导入**
+- [x] **Step 4: 验证模型已生成且可导入**
 
 Run: `uv run python -c "from libs.contracts_gen.data_pipeline_models import RawUploadRequest, UploadGrant, RawDataset, RawDatasetList, CompleteUploadRequest; print('ok')"`
 Expected: 打印 `ok`(无 ImportError)。
 
-- [ ] **Step 5: 跑既有 codegen drift 守卫确认未漂移**
+- [x] **Step 5: 跑既有 codegen drift 守卫确认未漂移**
 
 Run: `uv run pytest tests/test_codegen.py -q`
 Expected: PASS(生成产物与契约一致;若该测试比对 `make gen` 输出,确保已提交重生成结果)。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add contracts/openapi/data-pipeline.yaml libs/contracts_gen/data_pipeline_models.py
@@ -154,7 +154,7 @@ git commit -m "feat(data-pipeline): 冻结上传契约(请求上传/complete/列
 - Modify: `pipelines/data_prep/paths.py:1-8`(加文件名正则)、`:26`(加方法)
 - Test: `tests/pipelines/test_paths.py`(若不存在则创建)
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建/追加 `tests/pipelines/test_paths.py`:
 
@@ -176,12 +176,12 @@ def test_raw_object_key_rejects_traversal(bad):
         _p().raw_object_key(bad)
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/pipelines/test_paths.py -q`
 Expected: FAIL（`AttributeError: 'DatasetPaths' object has no attribute 'raw_object_key'`）。
 
-- [ ] **Step 3: 实现 —— `paths.py` 顶部加文件名正则,类内加方法**
+- [x] **Step 3: 实现 —— `paths.py` 顶部加文件名正则,类内加方法**
 
 `pipelines/data_prep/paths.py` 第 8 行 `_RE_DATASET = ...` 之后加:
 
@@ -200,12 +200,12 @@ _RE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")  # 单段文件
         return self.raw_prefix + filename
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/pipelines/test_paths.py -q`
 Expected: PASS（含全部 parametrize 拒绝用例）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add pipelines/data_prep/paths.py tests/pipelines/test_paths.py
@@ -220,7 +220,7 @@ git commit -m "feat(paths): raw_object_key 文件名段隔离校验 (ADR-020 C-1
 - Create: `services/data_pipeline_service/raw_store.py`
 - Test: `tests/services/data_pipeline/test_raw_store.py`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建 `tests/services/data_pipeline/test_raw_store.py`:
 
@@ -265,12 +265,12 @@ def test_delete_removes_record(tmp_path):
     assert s.read("raw-1") is None
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/services/data_pipeline/test_raw_store.py -q`
 Expected: FAIL（`ModuleNotFoundError: services.data_pipeline_service.raw_store`）。
 
-- [ ] **Step 3: 实现 `raw_store.py`(镜像 `jobs.py` 的原子 status-file 模式)**
+- [x] **Step 3: 实现 `raw_store.py`(镜像 `jobs.py` 的原子 status-file 模式)**
 
 ```python
 from __future__ import annotations
@@ -356,12 +356,12 @@ class RawDatasetStore:
         shutil.rmtree(self.raw_dir(raw_id), ignore_errors=True)
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/services/data_pipeline/test_raw_store.py -q`
 Expected: PASS（6 项）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/data_pipeline_service/raw_store.py tests/services/data_pipeline/test_raw_store.py
@@ -378,7 +378,7 @@ git commit -m "feat(data-pipeline): RawDatasetStore status-file 持久化 (ADR-0
 
 测试用 **FakeS3**(实现 boto3 用到的方法子集);不连真 MinIO(那是 Task 7 集成)。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建 `tests/services/data_pipeline/test_upload.py`:
 
@@ -475,12 +475,12 @@ def test_gc_aborts_multipart_and_deletes_stale_pending(tmp_path):
     assert up.get_record(g["raw_id"]) is None      # 记录已删
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/services/data_pipeline/test_upload.py -q`
 Expected: FAIL（`ModuleNotFoundError: services.data_pipeline_service.upload`）。
 
-- [ ] **Step 3: 实现 `upload.py`**
+- [x] **Step 3: 实现 `upload.py`**
 
 ```python
 from __future__ import annotations
@@ -588,12 +588,12 @@ class Uploader:
         return reaped
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/services/data_pipeline/test_upload.py -q`
 Expected: PASS（7 项 Uploader 单元）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/data_pipeline_service/upload.py tests/services/data_pipeline/test_upload.py
@@ -609,7 +609,7 @@ git commit -m "feat(data-pipeline): Uploader presign/complete/list/gc (ADR-020 C
 - Modify: `services/data_pipeline_service/main.py`(构造 Uploader 注入)
 - Test: `tests/services/data_pipeline/test_upload.py`(追加端点测试)
 
-- [ ] **Step 1: 写失败测试(追加到 `test_upload.py` 末尾)**
+- [x] **Step 1: 写失败测试(追加到 `test_upload.py` 末尾)**
 
 ```python
 import json
@@ -691,12 +691,12 @@ def test_list_raw_can_filter_cross_group_hidden(tmp_path, monkeypatch):
     assert own["total"] == 1 and own["raw"][0]["group_id"] == "g-0001"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/services/data_pipeline/test_upload.py -q`
 Expected: FAIL（`build_app() got an unexpected keyword argument 'uploader'`）。
 
-- [ ] **Step 3: 改 `app.py` —— `_audit` 通用化 + `build_app(uploader=None)` + 三 handler**
+- [x] **Step 3: 改 `app.py` —— `_audit` 通用化 + `build_app(uploader=None)` + 三 handler**
 
 把 `app.py:16-20` 的 `_audit_deny` 替换为通用 `_audit`(兼容既有 prepare 调用):
 
@@ -789,7 +789,7 @@ from services.data_pipeline_service.upload import ObjectMissing
 
 (把原 `from libs.contracts_gen.data_pipeline_models import PrepareJobRequest` 替换为上面这行;保留其余 import 不变。)
 
-- [ ] **Step 4: 改 `main.py` —— 构造 Uploader 注入 `build_app`**
+- [x] **Step 4: 改 `main.py` —— 构造 Uploader 注入 `build_app`**
 
 把 `main.py` 末尾两行(`_runner = ...` 与 `app = build_app(...)`)之间/之后改为:
 
@@ -805,12 +805,12 @@ app = build_app(runner=_runner, audit=AuditWriter(OssAuditSink(bucket=os.environ
                 uploader=_uploader)
 ```
 
-- [ ] **Step 5: 跑全套单元测试确认通过(含既有 prepare/jobs 测试未被破坏)**
+- [x] **Step 5: 跑全套单元测试确认通过(含既有 prepare/jobs 测试未被破坏)**
 
 Run: `uv run pytest tests/services/data_pipeline/ -q`
 Expected: PASS（含 `test_app.py` 既有用例 —— `_audit` 改名后 deny 审计仍写出,既有断言 `decision=="deny"` 不变）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add services/data_pipeline_service/app.py services/data_pipeline_service/main.py tests/services/data_pipeline/test_upload.py
@@ -825,7 +825,7 @@ git commit -m "feat(data-pipeline): 上传三端点接入 app + wiring (ADR-020)
 - Create: `scripts/raw_gc.py`(一次性 GC 调用;调度周期留运维 cron,ADR-020 §3)
 - Test: GC 逻辑已在 Task 4 `test_gc_aborts_multipart_and_deletes_stale_pending` 覆盖;本任务只加可执行入口 + 冒烟。
 
-- [ ] **Step 1: 实现 `scripts/raw_gc.py`**
+- [x] **Step 1: 实现 `scripts/raw_gc.py`**
 
 ```python
 """清理超时未完成的 pending 原始上传(ADR-020 §3):abort 孤儿分片 + 删记录。
@@ -853,12 +853,12 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 2: 冒烟(导入即可,不连真 OSS)**
+- [x] **Step 2: 冒烟(导入即可,不连真 OSS)**
 
 Run: `uv run python -c "import scripts.raw_gc; print('ok')"`
 Expected: 打印 `ok`（仅导入,不执行 main → 不需要 env/OSS）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/raw_gc.py
@@ -874,7 +874,7 @@ git commit -m "feat(data-pipeline): raw_gc 运维 GC 入口 (ADR-020 §3)"
 
 验证探查链路在**真服务端口**重现:请求上传 → httpx 直 PUT presigned URL → complete → list 见 ready。
 
-- [ ] **Step 1: 写测试**
+- [x] **Step 1: 写测试**
 
 ```python
 import json, httpx, pytest
@@ -932,12 +932,12 @@ def test_presigned_multipart_roundtrip_on_minio(tmp_path, minio_s3, minio_bucket
     assert out["status"] == "ready" and out["size"] == len(part) * 2
 ```
 
-- [ ] **Step 2: 确保 dev 服务在跑后执行集成测试**
+- [x] **Step 2: 确保 dev 服务在跑后执行集成测试**
 
 Run: `make dev-up && uv run pytest tests/integration/test_raw_upload_e2e.py -q -m integration`
 Expected: PASS（2 项;若 MinIO 未起,fixture `minio_s3` 自动 skip 而非 fail）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/integration/test_raw_upload_e2e.py
@@ -951,16 +951,16 @@ git commit -m "test(data-pipeline): 真 MinIO presigned 单/分片端到端集�
 **Files:**
 - 无新代码;跑仓库全绿门禁 + 补 runbook 段。
 
-- [ ] **Step 1: 按 CLAUDE.md 跑全绿门禁**
+- [x] **Step 1: 按 CLAUDE.md 跑全绿门禁**
 
 Run: `make gen && make lint && uv run pytest -q`(以仓库 `Makefile`/`CLAUDE.md` 定义的"全绿"为准)
 Expected: 全绿;契约无 drift(`tests/test_codegen.py`)、既有 data_pipeline 测试不破。
 
-- [ ] **Step 2: 把下方"手动验收 runbook"段确认已在本 plan(见文末),执行一次留痕**
+- [x] **Step 2: 把下方"手动验收 runbook"段确认已在本 plan(见文末),执行一次留痕**
 
 (runbook 见文末 ## 手动验收 runbook;owner/执行者按步骤过一遍,勾选实时状态 ADR-017。)
 
-- [ ] **Step 3: 最终 Commit(若 lint 有自动修正)**
+- [x] **Step 3: 最终 Commit(若 lint 有自动修正)**
 
 ```bash
 git add -A
