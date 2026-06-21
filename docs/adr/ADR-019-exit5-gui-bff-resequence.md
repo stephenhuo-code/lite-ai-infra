@@ -36,8 +36,9 @@ owner 决策(2026-06-18 问答):**跳过 CLI,直接做真 GUI** 来满足出口�
 
 7. **计划拆分**(编号承口径 A):
    - **Plan 6 → BFF 后端**:gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1)。
-   - **Plan 7 → React/Vite 前端**:数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户;数据集上传页按 #11 决定是否纳入)。
-   - **Plan 8 → Dev Workspace docker**(出口④ stretch,顺延一位)。
+   - **Plan 7 → 数据上传后端**(**2026-06-21 新增,承 ADR-020**):#11 上传字节落本组 `raw/` 的 presigned 直传后端(请求上传/complete/列原始数据三端点 + RawDataset + can()+审计)。**owner 决:#11 纳入本轮 → 上传后端拆为独立 plan,先于前端**。
+   - **Plan 8 → React/Vite 前端**(原 Plan 7):数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户 + **数据集上传页**,消费 Plan 7 上传后端契约)。
+   - **Plan 9 → Dev Workspace docker**(原 Plan 8;出口④ stretch,再顺延一位)。
    - 原 CLI Plan 6 文档**已删**(推迟为后续 ops 工具,日后重写;commit 9a70c18 留底)。
 
 ## Consequences
@@ -57,6 +58,7 @@ owner 决策(2026-06-18 问答):**跳过 CLI,直接做真 GUI** 来满足出口�
 
 ## 修订记录
 
+- **2026-06-21(承 ADR-020 计划重排)**:owner 决"#11 数据集上传纳入本轮",上传后端拆为**独立 Plan 7(数据上传后端,先行)**;原 Plan 7 前端顺延为 **Plan 8**、原 Plan 8 Dev Workspace 顺延为 **Plan 9**(见 Decision §7 + ADR-020)。
 - **2026-06-18(product-architect 隔离复审采纳)**:C-1 范围定性=直接延长 S1(已入 Decision §6 + Consequences);C-2 会话存储论证更正(独立取舍非 ADR-013 要求)+ ≤5min TTL + 吊销窗口登记;C-3 显式修订 spec §9.1 BFF 定义 + 会话逻辑模块隔离;C-4 realm 加固为 DoD 硬门;I-1 列作业 can() 过滤+分页;I-2 refresh 并发探查任务;I-3 callback state/PKCE + CSRF;I-4 gateway serve dist 同源验收。复审结论"需改后用",上述修订后方可作 Plan 6/7 地基。
 
 ## Alternatives considered
