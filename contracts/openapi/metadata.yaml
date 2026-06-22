@@ -55,6 +55,9 @@ components:
         comment: {type: [string, 'null']}
         created_at: {type: [string, 'null']}
         created_by: {type: [string, 'null']}
+        format: {type: [string, 'null']}          # Lance / 原始 / parquet…
+        num_samples: {type: [integer, 'null']}    # 样本数(行数)
+        size_bytes: {type: [integer, 'null']}     # 占用字节
     DatasetList:
       type: object
       properties: {datasets: {type: array, items: {$ref: '#/components/schemas/Dataset'}}}
@@ -67,3 +70,6 @@ components:
         location: {type: string}
         scope: {type: string, enum: [private, shared], default: private}
         comment: {type: [string, 'null']}
+        format: {type: [string, 'null']}
+        num_samples: {type: [integer, 'null'], minimum: 0}
+        size_bytes: {type: [integer, 'null'], minimum: 0}

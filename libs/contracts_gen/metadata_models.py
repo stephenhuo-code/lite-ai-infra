@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, constr
+from pydantic import BaseModel, conint, constr
 
 
 class NameList(BaseModel):
@@ -27,6 +27,9 @@ class Dataset(BaseModel):
     comment: str | None = None
     created_at: str | None = None
     created_by: str | None = None
+    format: str | None = None
+    num_samples: int | None = None
+    size_bytes: int | None = None
 
 
 class DatasetList(BaseModel):
@@ -39,3 +42,6 @@ class RegisterDataset(BaseModel):
     location: str
     scope: Scope | None = 'private'
     comment: str | None = None
+    format: str | None = None
+    num_samples: conint(ge=0) | None = None
+    size_bytes: conint(ge=0) | None = None
