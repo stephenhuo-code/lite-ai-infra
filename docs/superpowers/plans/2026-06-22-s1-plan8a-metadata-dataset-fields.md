@@ -216,25 +216,37 @@ git commit -m "test(metadata): 真 Gravitino 三字段存取往返集成 (Plan 8
 Run: `make gen && make lint && uv run pytest -q`
 Expected: 全绿;契约无 drift(`tests/test_codegen.py`)、分层 KEPT、既有 metadata 测试不破。
 
-- [ ] **Step 2: 手动验收 runbook(后端无界面 → 执行者代跑,owner 看大白话结果确认)**
+- [ ] **Step 2: 手动验收(照着一步步跑,每步看是不是绿)**
 
-> 8a 是纯后端改动,**没有界面可点**。验收方式:执行者(AI / 工程)跑下面的检查,把结果用大白话摆给 owner;**owner 不必手敲命令,只判"现象对不对"**(宪法 §3.4 / ADR-015)。
+> 8a 没界面,验收 = 下面 **3 步照抄运行**,每步看结果。**验的是**:数据集能带"格式 / 样本数 / 大小"三个标签——存得住、原样查得回、不打标签或老数据也不报错。
+> 在仓库根目录、`s1-plan8a-metadata-fields` 分支上跑。
 
-**给 owner 看的(大白话:验什么 / 该看到什么):**
+**第 1 步 · 起本地依赖**(第 3 步的"真 Gravitino"要用):
 
-| # | 验什么(人话) | owner 该看到 |
-|---|---|---|
-| R1 | 存一个数据集,给它标上 **格式=Lance、样本数=300、大小=67891** | 存进去了,而且查出来这三个标注**原样回来**(样本数是数字 300,不是文字) |
-| R2 | 存一个**不打这三个标注**的数据集 | 查出来三项显示"**空**",不报错 |
-| R3 | 查一个**以前就有的、没这三项的老数据集** | 三项显示"空",系统**不崩** |
-| R4 | 在**真 Gravitino**(不是模拟)上存→取 | 三个标注往返一致 |
+```bash
+make dev-up
+```
+**该看到**:容器(MinIO / Gravitino / Keycloak)起来,命令结束无报错。
 
-**一句话验收**:数据集能带"格式/样本数/大小"三个标签,存得住、查得回、老数据不报错 → **8a 通过**。
+**第 2 步 · 验「存带标签 / 不带标签 / 老数据」(R1+R2+R3)**:
 
-<details><summary>执行者命令附录(owner 不用看)</summary>
+```bash
+uv run pytest tests/services/metadata/test_app.py -q
+```
+**该看到**:`... passed`(全绿)。其中这三条就是三个场景:
+- `test_register_persists_and_returns_three_fields` → **R1**:存 格式=Lance/样本数=300/大小=67891,原样查回(样本数是数字)。
+- `test_register_without_three_fields_returns_null` → **R2**:不打标签,查回是"空"。
+- `test_existing_dataset_projection_has_null_three_fields` → **R3**:老数据,显示"空"不崩。
 
-> 前置 `make dev-up`;起服务 `uv run uvicorn services.metadata_service.main:app --port 8002`;鉴权 `x-test-claims`(`LITEAI_ALLOW_TEST_CLAIMS=1`)。R1–R3 对 `POST/GET /v1/catalogs/data/schemas/datasets/datasets`(带/不带 `format,num_samples,size_bytes`,断言 201 + 字段回显/为 null);R4 = `uv run pytest tests/integration/test_metadata_gravitino.py -m integration`(真 Gravitino 三字段往返)。等价于自动化 `test_register_persists_and_returns_three_fields` 等用例。
-</details>
+**第 3 步 · 验「真 Gravitino 存→取 往返」(R4)**:
+
+```bash
+uv run pytest tests/integration/test_metadata_gravitino.py -m integration -q
+```
+**该看到**:`... passed`,含 `test_real_gravitino_three_fields_roundtrip`(= R4)。
+
+**两步测试都绿 → 8a 通过**,可告诉我合并。
+> 想"亲眼看到实际数值"(存进去/查出来的 JSON)而不只看测试绿?告诉我,我给你加一条"起服务 + 一条命令打印实际字段"的步骤。
 
 - [ ] **Step 3: 最终 Commit(若 lint 自动修正)**
 
