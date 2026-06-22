@@ -69,3 +69,17 @@ def test_real_gravitino_cross_group_isolation(gravitino_url, minio_s3, monkeypat
     listed = [d["name"] for d in client.get(base, headers=alice).json()["datasets"]]
     assert n not in listed  # can() 过滤掉跨组
     assert client.get(f"{base}/{n}", headers=alice).status_code == 403  # 直查跨组拒绝
+
+
+def test_real_gravitino_three_fields_roundtrip(gravitino_url, minio_s3):
+    g = GravitinoClient(base_url=gravitino_url)
+    _ensure_tree(g, minio_s3)
+    from services.metadata_service.app import _dataset
+    n = f"it_{uuid.uuid4().hex[:6]}"
+    loc = f"s3a://{_CATALOG_BUCKET}/e-0001/g-0001/processed/{n}.lance"
+    g.create_fileset("e_0001", "data", "datasets", n, location=loc, comment="it",
+                     properties={"owner_group": "g-0001", "owner_user": "u-alice", "scope": "private",
+                                 "format": "Lance", "num_samples": "300", "size_bytes": "67891"})
+    fs = g.get_fileset("e_0001", "data", "datasets", n)
+    d = _dataset("e-0001", fs)
+    assert d["format"] == "Lance" and d["num_samples"] == 300 and d["size_bytes"] == 67891
