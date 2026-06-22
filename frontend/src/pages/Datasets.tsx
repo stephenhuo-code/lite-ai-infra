@@ -1,0 +1,177 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+// 注:加载逻辑用 Promise.then(setState) 回调形态(非 async/await 后同步 setState),
+// 以满足 react-hooks/set-state-in-effect(参照 auth/useOrgs.ts 的 fetch-on-mount 写法)。
+import { api } from '../api/client'
+import type { components as MetaComp } from '../api/types-metadata'
+import type { components as PipeComp } from '../api/types-datapipeline'
+import { UploadModal } from './UploadModal'
+
+// 数据集页(US1 列表 + 搜索 / US2 上传)。
+// 列表 = metadata 已处理数据集(GET /v1/catalogs/data/schemas/datasets/datasets,
+// ADR-016 v1 catalog=data、schema=datasets)+ Plan7 原始数据(GET /v1/data/raw,标「原始」)合并。
+// 列 = 名称/描述/格式/样本数/大小/创建人/操作。缺值显「—」不报错(FR-008)。
+// 禁出现 模态/标签/用户组 列(spec FR-012 + 组织模型:组=权限维度、非数据所在地)。
+// 视觉照高保真原型 2026-06-22-data-domain-hifi.html 数据集页(靛蓝 #6366F1)。
+
+type Dataset = MetaComp['schemas']['Dataset']
+type RawDataset = PipeComp['schemas']['RawDataset']
+
+// 合并后的统一行模型(字段名以生成类型为准)。
+type Row = {
+  key: string
+  name: string
+  desc: string | null
+  format: string | null // 原始数据固定「原始」
+  numSamples: number | null
+  sizeBytes: number | null
+  createdBy: string | null
+  raw: boolean
+}
+
+// 纯转换:把两端响应合并成统一行模型(无 setState,便于在 .then 回调里调用)。
+function toRows(
+  meta: MetaComp['schemas']['DatasetList'],
+  raw: PipeComp['schemas']['RawDatasetList'],
+): Row[] {
+  const metaRows: Row[] = (meta.datasets ?? []).map((d: Dataset) => ({
+    key: `meta:${d.name}`,
+    name: d.name,
+    desc: d.comment ?? null,
+    format: d.format ?? null,
+    numSamples: d.num_samples ?? null,
+    sizeBytes: d.size_bytes ?? null,
+    createdBy: d.created_by ?? d.owner ?? null,
+    raw: false,
+  }))
+  const rawRows: Row[] = (raw.raw ?? []).map((r: RawDataset) => ({
+    key: `raw:${r.id}`,
+    name: r.name,
+    desc: null,
+    format: '原始',
+    numSamples: null,
+    sizeBytes: r.size ?? null,
+    createdBy: null,
+    raw: true,
+  }))
+  return [...metaRows, ...rawRows]
+}
+
+function dash(v: string | number | null | undefined): string {
+  return v === null || v === undefined || v === '' ? '—' : String(v)
+}
+
+function fmtBytes(b: number | null): string {
+  if (b === null || b === undefined) return '—'
+  if (b < 1024) return `${b} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let v = b / 1024
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  return `${v.toFixed(1)} ${units[i]}`
+}
+
+function fmtNum(n: number | null): string {
+  return n === null || n === undefined ? '—' : n.toLocaleString('en-US')
+}
+
+export function Datasets() {
+  const [rows, setRows] = useState<Row[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [q, setQ] = useState('')
+  const [showUpload, setShowUpload] = useState(false)
+
+  const load = useCallback(() => {
+    return Promise.all([
+      api.get('/v1/catalogs/data/schemas/datasets/datasets') as Promise<MetaComp['schemas']['DatasetList']>,
+      api.get('/v1/data/raw') as Promise<PipeComp['schemas']['RawDatasetList']>,
+    ])
+      .then(([meta, raw]) => setRows(toRows(meta, raw)))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    if (!term) return rows
+    return rows.filter(r => r.name.toLowerCase().includes(term))
+  }, [rows, q])
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <button
+          onClick={() => setShowUpload(true)}
+          className="bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors"
+        >
+          <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" /></svg>
+          上传数据集
+        </button>
+        <div className="ml-auto relative">
+          <svg className="w-[18px] h-[18px] text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+          <input
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="搜索数据集名称"
+            aria-label="搜索数据集名称"
+            className="w-64 rounded-xl border border-slate-300 pl-10 pr-3 py-2 text-sm focus:border-[#6366F1] outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200/70 rounded-2xl overflow-hidden shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50/70 text-slate-500 text-xs">
+            <tr className="text-left">
+              <th className="font-medium px-5 py-3">名称</th>
+              <th className="font-medium px-5 py-3">描述</th>
+              <th className="font-medium px-5 py-3">格式</th>
+              <th className="font-medium px-5 py-3">样本数</th>
+              <th className="font-medium px-5 py-3">大小</th>
+              <th className="font-medium px-5 py-3">创建人</th>
+              <th className="font-medium px-5 py-3">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {loading && (
+              <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-400">加载中…</td></tr>
+            )}
+            {!loading && error && (
+              <tr><td colSpan={7} className="px-5 py-8 text-center text-red-500">加载失败:{error}</td></tr>
+            )}
+            {!loading && !error && filtered.length === 0 && (
+              <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-400">暂无数据集</td></tr>
+            )}
+            {!loading && !error && filtered.map(r => (
+              <tr key={r.key}>
+                <td className="px-5 py-3">
+                  <div className="font-medium text-[#4F46E5] flex items-center gap-2">
+                    {r.name}
+                    {r.raw && <span className="text-[10px] font-normal text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">原始</span>}
+                  </div>
+                </td>
+                <td className="px-5 py-3 text-slate-500">{dash(r.desc)}</td>
+                <td className="px-5 py-3 text-slate-500">{dash(r.format)}</td>
+                <td className="px-5 py-3 text-xs text-slate-600">{fmtNum(r.numSamples)}</td>
+                <td className="px-5 py-3 text-slate-500">{fmtBytes(r.sizeBytes)}</td>
+                <td className="px-5 py-3 text-slate-600">{dash(r.createdBy)}</td>
+                <td className="px-5 py-3">
+                  <button className="text-xs text-[#4F46E5] hover:underline">详情</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {showUpload && (
+        <UploadModal
+          onClose={() => setShowUpload(false)}
+          onDone={() => { setLoading(true); setError(''); void load() }}
+        />
+      )}
+    </div>
+  )
+}
