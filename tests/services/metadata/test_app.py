@@ -78,7 +78,8 @@ def test_dataset_projection_has_audit_and_comment():
     d = _client().get(f"{_DS}/cc3m", headers=_ALICE).json()
     assert d == {"name": "cc3m", "enterprise_id": "e-0001", "group_id": "g-0001", "owner": "u-alice",
                  "scope": "private", "location": "s3a://b/e-0001/g-0001/processed/cc3m.lance",
-                 "comment": "c", "created_at": "2026-06-13T00:00:00Z", "created_by": "u-alice"}
+                 "comment": "c", "created_at": "2026-06-13T00:00:00Z", "created_by": "u-alice",
+                 "format": None, "num_samples": None, "size_bytes": None}
 
 
 def test_get_cross_group_403():
@@ -154,3 +155,39 @@ def test_docs_and_contract():
     assert c.get("/docs").status_code == 200
     contract = yaml.safe_load(pathlib.Path("contracts/openapi/metadata.yaml").read_text())
     assert_openapi_subset_of_contract(c.app.openapi(), contract)
+
+
+def test_register_persists_and_returns_three_fields():
+    c = _client()
+    r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
+               headers=_h("u-alice", ["/e-0001/g-0001/members"]),
+               json={"name": "cc3m_clean", "group_id": "g-0001",
+                     "location": "s3a://b/e-0001/g-0001/processed/cc3m_clean.lance",
+                     "format": "Lance", "num_samples": 300, "size_bytes": 67891})
+    assert r.status_code == 201
+    body = r.json()
+    assert body["format"] == "Lance" and body["num_samples"] == 300 and body["size_bytes"] == 67891
+    # 读取也带回(类型为 int,非字符串)
+    g = c.get("/v1/catalogs/data/schemas/datasets/datasets/cc3m_clean",
+              headers=_h("u-alice", ["/e-0001/g-0001/members"])).json()
+    assert g["num_samples"] == 300 and isinstance(g["num_samples"], int)
+    assert g["size_bytes"] == 67891 and g["format"] == "Lance"
+
+
+def test_register_without_three_fields_returns_null():
+    c = _client()
+    r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
+               headers=_h("u-alice", ["/e-0001/g-0001/members"]),
+               json={"name": "plain_ds", "group_id": "g-0001",
+                     "location": "s3a://b/e-0001/g-0001/processed/plain_ds.lance"})
+    assert r.status_code == 201
+    body = r.json()
+    assert body["format"] is None and body["num_samples"] is None and body["size_bytes"] is None
+
+
+def test_existing_dataset_projection_has_null_three_fields():
+    # FakeG 预置的 cc3m(无这 3 个 property)→ 投影出 None,不报错
+    c = _client()
+    g = c.get("/v1/catalogs/data/schemas/datasets/datasets/cc3m",
+              headers=_h("u-alice", ["/e-0001/g-0001/members"])).json()
+    assert g["format"] is None and g["num_samples"] is None and g["size_bytes"] is None

@@ -36,10 +36,17 @@ def _resource(ent: str, fs: dict) -> Resource:
 
 def _dataset(ent: str, fs: dict) -> dict:
     p, a = fs.get("properties", {}), fs.get("audit", {})
+
+    def _int(v):
+        return int(v) if v not in (None, "") else None
+
     return {"name": fs["name"], "enterprise_id": ent, "group_id": p.get("owner_group"),
             "owner": p.get("owner_user"), "scope": p.get("scope", "private"),
             "location": fs.get("storageLocation", ""), "comment": fs.get("comment") or None,
-            "created_at": a.get("createTime"), "created_by": a.get("creator")}
+            "created_at": a.get("createTime"), "created_by": a.get("creator"),
+            "format": p.get("format") or None,
+            "num_samples": _int(p.get("num_samples")),
+            "size_bytes": _int(p.get("size_bytes"))}
 
 
 def build_app(gravitino):
@@ -92,11 +99,16 @@ def build_app(gravitino):
         d = can(ctx, "dataset.register", res)
         if not d.allow:
             return JSONResponse(status_code=403, content={"reason": d.reason})
+        props = {"owner_group": body.group_id, "owner_user": ctx.user, "scope": scope}
+        if body.format is not None:
+            props["format"] = body.format
+        if body.num_samples is not None:
+            props["num_samples"] = str(body.num_samples)
+        if body.size_bytes is not None:
+            props["size_bytes"] = str(body.size_bytes)
         try:
             fs = gravitino.create_fileset(ml, catalog, schema, body.name, body.location,
-                                          comment=body.comment or "",
-                                          properties={"owner_group": body.group_id, "owner_user": ctx.user,
-                                                      "scope": scope})
+                                          comment=body.comment or "", properties=props)
         except GravitinoError as e:
             if _is_conflict(e):            # 已存在 → 409 Conflict(不逃逸成 500)
                 return JSONResponse(status_code=409, content={"reason": "dataset already exists"})
