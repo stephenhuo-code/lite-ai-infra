@@ -30,3 +30,8 @@ install_bff(app)
 #    request-id 在最外 → 含 401/403 在内的每个响应都带 x-request-id + 日志。
 #    守护测试见 tests/gateway/bff/test_wiring.py(断言两中间件相对次序)。
 install_request_id(app)
+
+# 4) serve 前端 dist + SPA history fallback —— catch-all 必须最后挂(否则吞 API)。
+#    dist_dir 不存在(纯后端/测试/dev)→ install_static 直接返回、不影响 gateway。
+from services.gateway.static import install_static
+install_static(app, dist_dir=os.environ.get("FRONTEND_DIST", "frontend/dist"))
