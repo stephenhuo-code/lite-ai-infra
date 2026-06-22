@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { api } from '../api/client'
 
-// 可折叠应用外壳(US1 鉴权壳):侧栏 w-64↔w-16、顶栏(企业名 + 登出)、<Outlet/>。
+// 可折叠应用外壳(US1 鉴权壳):侧栏 w-64↔w-16、顶栏(登出)、<Outlet/>。
 // 视觉照高保真原型 docs/superpowers/prototypes/2026-06-22-data-domain-hifi.html(靛蓝 #6366F1)。
+// 顶栏不显示企业名:后端无 enterprise_name 字段(vN+ 缺口),不假装显示企业名,
+// 也不保留死 prop。折叠/登出/导航行为保持不动。
 
 type NavItem = { to: string; label: string; group?: string; icon: React.ReactNode }
 
@@ -32,7 +34,7 @@ async function logout() {
   window.location.assign('/auth/login')
 }
 
-export function Shell({ enterprise }: { enterprise?: string }) {
+export function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const asideWidth = collapsed ? 'w-16' : 'w-64'
 
@@ -84,8 +86,6 @@ export function Shell({ enterprise }: { enterprise?: string }) {
       <main className="flex-1 min-w-0">
         <header className="h-16 sticky top-0 z-20 bg-white/85 backdrop-blur border-b border-slate-200/70 flex items-center gap-3 px-7">
           <div className="ml-auto flex items-center gap-3">
-            {enterprise && <span className="text-sm text-slate-500">{enterprise}</span>}
-            <span className="h-4 w-px bg-slate-200" />
             <button
               onClick={logout}
               className="text-sm text-red-600 hover:bg-slate-50 rounded-xl px-3 py-1.5"
