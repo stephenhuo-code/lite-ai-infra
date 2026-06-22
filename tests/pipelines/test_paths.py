@@ -16,3 +16,16 @@ def test_dataset_name_validated():
         DatasetPaths(bucket="b", enterprise_id=E, group_id=G, dataset="Bad Name!")
     with pytest.raises(ValueError):
         DatasetPaths(bucket="b", enterprise_id=E, group_id=G, dataset="a/../b")
+
+
+def _p(dataset="cc3m"):
+    return DatasetPaths(bucket="lite-ai", enterprise_id=EnterpriseId("e-0001"),
+                        group_id=GroupId("g-0001"), dataset=dataset)
+
+def test_raw_object_key_builds_isolated_path():
+    assert _p().raw_object_key("part-0.tar") == "e-0001/g-0001/raw/cc3m/part-0.tar"
+
+@pytest.mark.parametrize("bad", ["../x", "a/b", "/etc/passwd", "..", ".hidden", ""])
+def test_raw_object_key_rejects_traversal(bad):
+    with pytest.raises(ValueError):
+        _p().raw_object_key(bad)

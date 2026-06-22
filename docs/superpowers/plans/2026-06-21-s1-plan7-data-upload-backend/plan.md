@@ -37,7 +37,7 @@
 - Modify(生成,勿手改): `libs/contracts_gen/data_pipeline_models.py`
 - Test: `tests/test_codegen.py`(已存在;确认 drift 守卫覆盖新模型)
 
-- [ ] **Step 1: 在 `data-pipeline.yaml` 的 `paths:` 末尾(`/v1/data/jobs/{job_id}` 之后、`components:` 之前)插入三端点**
+- [x] **Step 1: 在 `data-pipeline.yaml` 的 `paths:` 末尾(`/v1/data/jobs/{job_id}` 之后、`components:` 之前)插入三端点**
 
 ```yaml
   /v1/data/raw:
@@ -70,7 +70,7 @@
         '409': {description: object missing / complete failed}
 ```
 
-- [ ] **Step 2: 在 `components.schemas:`(`JobList` 之后)追加 schemas**
+- [x] **Step 2: 在 `components.schemas:`(`JobList` 之后)追加 schemas**
 
 ```yaml
     RawUploadRequest:
@@ -124,22 +124,22 @@
         total: {type: integer}     # 过滤后(can()+status)总数
 ```
 
-- [ ] **Step 3: 重生成 pydantic 模型**
+- [x] **Step 3: 重生成 pydantic 模型**
 
 Run: `make gen`
 Expected: 无报错;`libs/contracts_gen/data_pipeline_models.py` 顶部注释不变,新增 `RawUploadRequest`、`UploadGrant`、`CompletePart`、`CompleteUploadRequest`、`RawDataset`、`RawDatasetList` 类。
 
-- [ ] **Step 4: 验证模型已生成且可导入**
+- [x] **Step 4: 验证模型已生成且可导入**
 
 Run: `uv run python -c "from libs.contracts_gen.data_pipeline_models import RawUploadRequest, UploadGrant, RawDataset, RawDatasetList, CompleteUploadRequest; print('ok')"`
 Expected: 打印 `ok`(无 ImportError)。
 
-- [ ] **Step 5: 跑既有 codegen drift 守卫确认未漂移**
+- [x] **Step 5: 跑既有 codegen drift 守卫确认未漂移**
 
 Run: `uv run pytest tests/test_codegen.py -q`
 Expected: PASS(生成产物与契约一致;若该测试比对 `make gen` 输出,确保已提交重生成结果)。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add contracts/openapi/data-pipeline.yaml libs/contracts_gen/data_pipeline_models.py
@@ -154,7 +154,7 @@ git commit -m "feat(data-pipeline): 冻结上传契约(请求上传/complete/列
 - Modify: `pipelines/data_prep/paths.py:1-8`(加文件名正则)、`:26`(加方法)
 - Test: `tests/pipelines/test_paths.py`(若不存在则创建)
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建/追加 `tests/pipelines/test_paths.py`:
 
@@ -176,12 +176,12 @@ def test_raw_object_key_rejects_traversal(bad):
         _p().raw_object_key(bad)
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/pipelines/test_paths.py -q`
 Expected: FAIL（`AttributeError: 'DatasetPaths' object has no attribute 'raw_object_key'`）。
 
-- [ ] **Step 3: 实现 —— `paths.py` 顶部加文件名正则,类内加方法**
+- [x] **Step 3: 实现 —— `paths.py` 顶部加文件名正则,类内加方法**
 
 `pipelines/data_prep/paths.py` 第 8 行 `_RE_DATASET = ...` 之后加:
 
@@ -200,12 +200,12 @@ _RE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")  # 单段文件
         return self.raw_prefix + filename
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/pipelines/test_paths.py -q`
 Expected: PASS（含全部 parametrize 拒绝用例）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add pipelines/data_prep/paths.py tests/pipelines/test_paths.py
@@ -220,7 +220,7 @@ git commit -m "feat(paths): raw_object_key 文件名段隔离校验 (ADR-020 C-1
 - Create: `services/data_pipeline_service/raw_store.py`
 - Test: `tests/services/data_pipeline/test_raw_store.py`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建 `tests/services/data_pipeline/test_raw_store.py`:
 
@@ -265,12 +265,12 @@ def test_delete_removes_record(tmp_path):
     assert s.read("raw-1") is None
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/services/data_pipeline/test_raw_store.py -q`
 Expected: FAIL（`ModuleNotFoundError: services.data_pipeline_service.raw_store`）。
 
-- [ ] **Step 3: 实现 `raw_store.py`(镜像 `jobs.py` 的原子 status-file 模式)**
+- [x] **Step 3: 实现 `raw_store.py`(镜像 `jobs.py` 的原子 status-file 模式)**
 
 ```python
 from __future__ import annotations
@@ -356,12 +356,12 @@ class RawDatasetStore:
         shutil.rmtree(self.raw_dir(raw_id), ignore_errors=True)
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/services/data_pipeline/test_raw_store.py -q`
 Expected: PASS（6 项）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/data_pipeline_service/raw_store.py tests/services/data_pipeline/test_raw_store.py
@@ -378,7 +378,7 @@ git commit -m "feat(data-pipeline): RawDatasetStore status-file 持久化 (ADR-0
 
 测试用 **FakeS3**(实现 boto3 用到的方法子集);不连真 MinIO(那是 Task 7 集成)。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建 `tests/services/data_pipeline/test_upload.py`:
 
@@ -475,12 +475,12 @@ def test_gc_aborts_multipart_and_deletes_stale_pending(tmp_path):
     assert up.get_record(g["raw_id"]) is None      # 记录已删
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/services/data_pipeline/test_upload.py -q`
 Expected: FAIL（`ModuleNotFoundError: services.data_pipeline_service.upload`）。
 
-- [ ] **Step 3: 实现 `upload.py`**
+- [x] **Step 3: 实现 `upload.py`**
 
 ```python
 from __future__ import annotations
@@ -588,12 +588,12 @@ class Uploader:
         return reaped
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/services/data_pipeline/test_upload.py -q`
 Expected: PASS（7 项 Uploader 单元）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/data_pipeline_service/upload.py tests/services/data_pipeline/test_upload.py
@@ -609,7 +609,7 @@ git commit -m "feat(data-pipeline): Uploader presign/complete/list/gc (ADR-020 C
 - Modify: `services/data_pipeline_service/main.py`(构造 Uploader 注入)
 - Test: `tests/services/data_pipeline/test_upload.py`(追加端点测试)
 
-- [ ] **Step 1: 写失败测试(追加到 `test_upload.py` 末尾)**
+- [x] **Step 1: 写失败测试(追加到 `test_upload.py` 末尾)**
 
 ```python
 import json
@@ -691,12 +691,12 @@ def test_list_raw_can_filter_cross_group_hidden(tmp_path, monkeypatch):
     assert own["total"] == 1 and own["raw"][0]["group_id"] == "g-0001"
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/services/data_pipeline/test_upload.py -q`
 Expected: FAIL（`build_app() got an unexpected keyword argument 'uploader'`）。
 
-- [ ] **Step 3: 改 `app.py` —— `_audit` 通用化 + `build_app(uploader=None)` + 三 handler**
+- [x] **Step 3: 改 `app.py` —— `_audit` 通用化 + `build_app(uploader=None)` + 三 handler**
 
 把 `app.py:16-20` 的 `_audit_deny` 替换为通用 `_audit`(兼容既有 prepare 调用):
 
@@ -789,7 +789,7 @@ from services.data_pipeline_service.upload import ObjectMissing
 
 (把原 `from libs.contracts_gen.data_pipeline_models import PrepareJobRequest` 替换为上面这行;保留其余 import 不变。)
 
-- [ ] **Step 4: 改 `main.py` —— 构造 Uploader 注入 `build_app`**
+- [x] **Step 4: 改 `main.py` —— 构造 Uploader 注入 `build_app`**
 
 把 `main.py` 末尾两行(`_runner = ...` 与 `app = build_app(...)`)之间/之后改为:
 
@@ -805,12 +805,12 @@ app = build_app(runner=_runner, audit=AuditWriter(OssAuditSink(bucket=os.environ
                 uploader=_uploader)
 ```
 
-- [ ] **Step 5: 跑全套单元测试确认通过(含既有 prepare/jobs 测试未被破坏)**
+- [x] **Step 5: 跑全套单元测试确认通过(含既有 prepare/jobs 测试未被破坏)**
 
 Run: `uv run pytest tests/services/data_pipeline/ -q`
 Expected: PASS（含 `test_app.py` 既有用例 —— `_audit` 改名后 deny 审计仍写出,既有断言 `decision=="deny"` 不变）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add services/data_pipeline_service/app.py services/data_pipeline_service/main.py tests/services/data_pipeline/test_upload.py
@@ -825,7 +825,7 @@ git commit -m "feat(data-pipeline): 上传三端点接入 app + wiring (ADR-020)
 - Create: `scripts/raw_gc.py`(一次性 GC 调用;调度周期留运维 cron,ADR-020 §3)
 - Test: GC 逻辑已在 Task 4 `test_gc_aborts_multipart_and_deletes_stale_pending` 覆盖;本任务只加可执行入口 + 冒烟。
 
-- [ ] **Step 1: 实现 `scripts/raw_gc.py`**
+- [x] **Step 1: 实现 `scripts/raw_gc.py`**
 
 ```python
 """清理超时未完成的 pending 原始上传(ADR-020 §3):abort 孤儿分片 + 删记录。
@@ -853,12 +853,12 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 2: 冒烟(导入即可,不连真 OSS)**
+- [x] **Step 2: 冒烟(导入即可,不连真 OSS)**
 
 Run: `uv run python -c "import scripts.raw_gc; print('ok')"`
 Expected: 打印 `ok`（仅导入,不执行 main → 不需要 env/OSS）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/raw_gc.py
@@ -874,7 +874,7 @@ git commit -m "feat(data-pipeline): raw_gc 运维 GC 入口 (ADR-020 §3)"
 
 验证探查链路在**真服务端口**重现:请求上传 → httpx 直 PUT presigned URL → complete → list 见 ready。
 
-- [ ] **Step 1: 写测试**
+- [x] **Step 1: 写测试**
 
 ```python
 import json, httpx, pytest
@@ -932,12 +932,12 @@ def test_presigned_multipart_roundtrip_on_minio(tmp_path, minio_s3, minio_bucket
     assert out["status"] == "ready" and out["size"] == len(part) * 2
 ```
 
-- [ ] **Step 2: 确保 dev 服务在跑后执行集成测试**
+- [x] **Step 2: 确保 dev 服务在跑后执行集成测试**
 
 Run: `make dev-up && uv run pytest tests/integration/test_raw_upload_e2e.py -q -m integration`
 Expected: PASS（2 项;若 MinIO 未起,fixture `minio_s3` 自动 skip 而非 fail）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/integration/test_raw_upload_e2e.py
@@ -951,16 +951,16 @@ git commit -m "test(data-pipeline): 真 MinIO presigned 单/分片端到端集�
 **Files:**
 - 无新代码;跑仓库全绿门禁 + 补 runbook 段。
 
-- [ ] **Step 1: 按 CLAUDE.md 跑全绿门禁**
+- [x] **Step 1: 按 CLAUDE.md 跑全绿门禁**
 
 Run: `make gen && make lint && uv run pytest -q`(以仓库 `Makefile`/`CLAUDE.md` 定义的"全绿"为准)
 Expected: 全绿;契约无 drift(`tests/test_codegen.py`)、既有 data_pipeline 测试不破。
 
-- [ ] **Step 2: 把下方"手动验收 runbook"段确认已在本 plan(见文末),执行一次留痕**
+- [x] **Step 2: 把下方"手动验收 runbook"段确认已在本 plan(见文末),执行一次留痕**
 
 (runbook 见文末 ## 手动验收 runbook;owner/执行者按步骤过一遍,勾选实时状态 ADR-017。)
 
-- [ ] **Step 3: 最终 Commit(若 lint 有自动修正)**
+- [x] **Step 3: 最终 Commit(若 lint 有自动修正)**
 
 ```bash
 git add -A
@@ -969,22 +969,150 @@ git commit -m "chore(data-pipeline): 全绿门禁 + 上传后端验收留痕"
 
 ---
 
-## 手动验收 runbook(ADR-015;dev 真服务,人工过一遍)
+## 手动验收 runbook(ADR-015;真阿里云 OSS,人工逐条 curl)
 
-> 前置:`make dev-up`(起 MinIO/Keycloak)。服务可用 `uvicorn services.data_pipeline_service.main:app --port 8003` 起(需 env:`OSS_ENDPOINT/OSS_ACCESS_KEY/OSS_SECRET_KEY/DATA_BUCKET/AUDIT_BUCKET`)。鉴权可用集成测试的 `x-test-claims`(设 `LITEAI_ALLOW_TEST_CLAIMS=1`)或真 Keycloak token。
+> 需 `jq`(`brew install jq`)。鉴权用 `x-test-claims`(服务端须带 `LITEAI_ALLOW_TEST_CLAIMS=1`)。
+> 数据面字节用 curl 直 PUT 到真 OSS(virtual-hosted presigned;curl 不触发 CORS)。
 
-- [ ] **R1 请求上传(本组)**:`POST /v1/data/raw` body `{"dataset":"cc3m","group_id":"g-0001","filename":"a.bin"}` → 200,返回 `oss_key=e-0001/g-0001/raw/cc3m/a.bin` + `url`。
-- [ ] **R2 直传 OSS**:对 R1 的 `url` 做 `curl -X PUT --data-binary @a.bin "<url>"` → 200/201;MinIO 控制台(:9001)能看到对象落在 `raw/cc3m/`。
-- [ ] **R3 完成**:`POST /v1/data/raw/{raw_id}/complete` body `{}` → 200 `status=ready`、`size` 与文件一致。
-- [ ] **R4 列原始数据**:`GET /v1/data/raw` → 见该 ready 记录;换**别组**身份(`g-0002`)`GET` → 不出现(can() 过滤)。
-- [ ] **R5 隔离命门 C-1**:`POST /v1/data/raw` 用 `g-0002` 身份传 `group_id=g-0001` → **403** + 审计 deny + 无记录。
-- [ ] **R6 隔离命门 C-2**:别组身份对 R1 的 `raw_id` 调 complete → **403**(拿到 id 也越不了权)。
-- [ ] **R7 文件名穿越**:`filename="../escape"` → **400**,无记录。
-- [ ] **R8 对象缺失**:请求上传后**不**直传,直接 complete → **409**,记录 `failed`。
-- [ ] **R9 大文件分片**:`multipart:true,parts:2` 请求 → 逐片 PUT(各 ≥5MiB)→ complete 带 ETags → `ready`。
-- [ ] **R10 GC**:造一条 pending(请求上传不 complete),`RAW_PENDING_TTL=0 uv run python scripts/raw_gc.py` → 记录被清;multipart 的孤儿分片被 abort。
+**先读这个心智模型(人话)**:系统是多租户的——企业下分**用户组**,数据**按组隔离**,你只能动自己组的。
+上传分三步:① 跟系统**申请上传**(系统查权限后发一张限时"上传通行证")→ ② 拿通行证把文件**直接传到云存储**→ ③ 告诉系统**传完了**(系统核对云上确有文件才算数)。
+R1~R3 = 走通这三步;R4 = 看隔离;R5~R8 = 各种**坏情况必须被拦**;R9 = 大文件;R10 = 半截上传的垃圾清理。
+下面每条先一句"**谁在干嘛 / 该发生什么**",再给命令。
 
-> **prod 上线 DoD 硬门(非本地可测,显式登记;ADR-020 §5/§6)**:① 阿里云 OSS bucket 配 **CORS**(允许前端域名 Origin、`PUT`、暴露 `ETag`);② **virtual-hosted addressing + multipart ETag 行为 staging 复验**;③ prod OSS 域名进前端 **CSP `connect-src`**。漏了 prod 上传必跨域失败。
+### 前置:映射密钥 + 起服务(同一终端,服务后台跑以保留 RAW_DIR 给 R10)
+
+```bash
+cd /Users/yanwen/Documents/github/lite-ai-infra
+# 密钥从 ALICLOUD_* 映射(若已 export OSS_ACCESS_KEY/OSS_SECRET_KEY 则跳过):
+export OSS_ACCESS_KEY="${OSS_ACCESS_KEY:-$ALICLOUD_ACCESS_KEY}"
+export OSS_SECRET_KEY="${OSS_SECRET_KEY:-$ALICLOUD_SECRET_KEY}"
+export OSS_REGION="${OSS_REGION:?先 export OSS_REGION,如 cn-hangzhou}"
+export DATA_BUCKET="${DATA_BUCKET:?先 export DATA_BUCKET 为你的真实 OSS bucket}"
+export OSS_ENDPOINT="${OSS_ENDPOINT:-https://oss-$OSS_REGION.aliyuncs.com}"
+export AUDIT_BUCKET="${AUDIT_BUCKET:-$DATA_BUCKET}"
+export RAW_DIR=./.raw-rbk LITEAI_ALLOW_TEST_CLAIMS=1
+# 防呆:先杀掉占着 :8003 的残留旧服务(否则新服务 "address already in use" 退出,curl 打到旧代码→/v1/data/raw 404)
+lsof -ti :8003 | xargs kill -9 2>/dev/null; sleep 1
+# 起服务(后台,日志到 /tmp/svc.log)。R10 的 gc 要在同一 shell 跑(共享 RAW_DIR)。
+uv run uvicorn services.data_pipeline_service.main:app --port 8003 > /tmp/svc.log 2>&1 &
+sleep 3 && curl -s -o /dev/null -w "svc up: %{http_code}\n" http://localhost:8003/docs
+# 确认新服务带上传路由(应含 /v1/data/raw);没有就是没起成功,看 /tmp/svc.log
+curl -s localhost:8003/openapi.json | jq '.paths|keys'
+
+B=http://localhost:8003
+H1='x-test-claims: {"sub":"u-a","groups":["/e-0001/g-0001/members"]}'   # 本组 g-0001
+H2='x-test-claims: {"sub":"u-b","groups":["/e-0001/g-0002/members"]}'   # 别组 g-0002
+J='content-type: application/json'
+
+# 样例文件:无需外部素材,当场生成(内容都是字符 'x')
+head -c 18000  /dev/zero | tr '\0' x > /tmp/probe.bin   # R2 用,18KB
+head -c 5242880 /dev/zero | tr '\0' x > /tmp/part.bin   # R9 用,单片 5MiB
+ls -l /tmp/probe.bin /tmp/part.bin
+```
+
+- [ ] **R1 正常上传第①步:你(g-0001 组成员)给自己组申请传一个文件 → 系统发"上传通行证"(200)**
+
+```bash
+curl -s $B/v1/data/raw -H "$H1" -H "$J" \
+  -d '{"dataset":"rbk","group_id":"g-0001","filename":"probe.bin"}' | tee /tmp/r1.json | jq .
+RAW_ID=$(jq -r .raw_id /tmp/r1.json); URL=$(jq -r .url /tmp/r1.json)
+```
+期望:`oss_key=e-0001/g-0001/raw/rbk/probe.bin`、`url` 非空。
+
+- [ ] **R2 正常上传第②步:拿通行证把文件真正传到云存储(OSS)→ 200**
+
+```bash
+head -c 18000 /dev/zero | tr '\0' x > /tmp/probe.bin
+curl -s -o /dev/null -w "PUT=%{http_code}\n" -X PUT --data-binary @/tmp/probe.bin "$URL"
+```
+期望:`PUT=200`(virtual-hosted presigned 在真 OSS 通)。
+
+- [ ] **R3 正常上传第③步:告诉系统"传完了" → 系统核对云上确有文件,标记为可用(ready)**
+
+```bash
+curl -s -X POST "$B/v1/data/raw/$RAW_ID/complete" -H "$H1" -H "$J" -d '{}' | jq '{status,size}'
+```
+期望:`status=ready`、`size=18000`。
+
+- [ ] **R4 数据隔离:你能看到自己组刚传的文件;别组的人查同一接口看不到它**
+
+```bash
+echo "本组:"; curl -s "$B/v1/data/raw" -H "$H1" | jq '{total, ids:[.raw[].id]}'
+echo "别组:"; curl -s "$B/v1/data/raw" -H "$H2" | jq '{total}'
+```
+期望:本组 `total≥1` 含该记录;别组 `total=0`(can() 过滤)。
+
+- [ ] **R5 越权拦截:别组的人企图往你的组(g-0001)塞文件 → 被拒(403),且系统里什么都没留下**
+
+```bash
+echo "前 total:"; curl -s "$B/v1/data/raw" -H "$H1" | jq .total
+curl -s -o /dev/null -w "code=%{http_code}\n" $B/v1/data/raw -H "$H2" -H "$J" \
+  -d '{"dataset":"rbk","group_id":"g-0001","filename":"evil.bin"}'
+echo "后 total:"; curl -s "$B/v1/data/raw" -H "$H1" | jq .total
+```
+期望:`code=403`,前后 total 不变(零副作用)。deny 审计写到真 OSS `AUDIT_BUCKET` 的 `audit/` 前缀(可选在控制台核)。
+
+- [ ] **R6 越权拦截:别组的人偷到你的上传单号、想冒认"完成" → 被拒(403)**
+
+```bash
+curl -s -o /dev/null -w "code=%{http_code}\n" -X POST "$B/v1/data/raw/$RAW_ID/complete" -H "$H2" -H "$J" -d '{}'
+```
+期望:`code=403`(拿到 id 也越不了权)。
+
+- [ ] **R7 恶意文件名拦截:有人用想"逃出自己目录"的文件名(如 `../escape`)→ 被拒(400)**
+
+```bash
+curl -s -o /dev/null -w "code=%{http_code}\n" $B/v1/data/raw -H "$H1" -H "$J" \
+  -d '{"dataset":"rbk","group_id":"g-0001","filename":"../escape"}'
+```
+期望:`code=400`。
+
+- [ ] **R8 谎报完成拦截:申请了上传却没真传文件,就说"完成了" → 系统发现云上没东西,报错(409)、记录标 failed**
+
+```bash
+M=$(curl -s $B/v1/data/raw -H "$H1" -H "$J" \
+  -d '{"dataset":"rbk","group_id":"g-0001","filename":"missing.bin"}' | jq -r .raw_id)
+curl -s -o /dev/null -w "code=%{http_code}\n" -X POST "$B/v1/data/raw/$M/complete" -H "$H1" -H "$J" -d '{}'
+curl -s "$B/v1/data/raw" -H "$H1" | jq --arg m "$M" '.raw[]|select(.id==$m)|{status}'
+```
+期望:`code=409`、该记录 `status=failed`。
+
+- [ ] **R9 大文件:分成多块上传 → 系统把各块拼好、标记可用(ready)**
+
+```bash
+curl -s $B/v1/data/raw -H "$H1" -H "$J" \
+  -d '{"dataset":"rbk","group_id":"g-0001","filename":"big.bin","multipart":true,"parts":2}' \
+  | tee /tmp/r9.json | jq '{raw_id,upload_id,nparts:(.part_urls|length)}'
+MRAW=$(jq -r .raw_id /tmp/r9.json)
+U1=$(jq -r '.part_urls[0]' /tmp/r9.json); U2=$(jq -r '.part_urls[1]' /tmp/r9.json)
+head -c 5242880 /dev/zero | tr '\0' x > /tmp/part.bin
+E1=$(curl -s -D - -o /dev/null -X PUT --data-binary @/tmp/part.bin "$U1" | awk 'tolower($1)=="etag:"{print $2}' | tr -d '\r')
+E2=$(curl -s -D - -o /dev/null -X PUT --data-binary @/tmp/part.bin "$U2" | awk 'tolower($1)=="etag:"{print $2}' | tr -d '\r')
+curl -s -X POST "$B/v1/data/raw/$MRAW/complete" -H "$H1" -H "$J" \
+  -d "{\"parts\":[{\"part_number\":1,\"etag\":$E1},{\"part_number\":2,\"etag\":$E2}]}" | jq '{status,size}'
+```
+期望:`status=ready`、`size=10485760`(2×5MiB)。(`$E1/$E2` 自带引号,拼进 JSON 即合法字符串。)
+
+- [ ] **R10 垃圾清理:有人申请上传却半途放着不管(半截)→ 系统的清理任务把这些"半截垃圾"清掉(含云上未完成的分块)**
+
+```bash
+ORPH=$(curl -s $B/v1/data/raw -H "$H1" -H "$J" \
+  -d '{"dataset":"rbk","group_id":"g-0001","filename":"orphan.bin","multipart":true,"parts":1}' | jq -r .raw_id)
+RAW_PENDING_TTL=0 uv run python scripts/raw_gc.py        # 与服务同一 RAW_DIR=./.raw-rbk
+curl -s "$B/v1/data/raw" -H "$H1" | jq --arg o "$ORPH" 'any(.raw[]; .id==$o)'
+```
+期望:`raw_gc` 输出 `reaped` 含该 id;最后 `jq` 打印 `false`(记录已清);孤儿 multipart 已 abort。
+
+### 收尾:清理真 OSS 测试对象 + 停服务
+
+```bash
+aliyun oss rm "oss://$DATA_BUCKET/e-0001/g-0001/raw/rbk/" --recursive    # 删本次测试对象
+kill %1 2>/dev/null; rm -rf ./.raw-rbk                                   # 停后台服务 + 清本地记录
+```
+
+> **prod 上线 DoD(ADR-020 §5/§6)**:② **virtual-hosted addressing + multipart ETag** —— 本 runbook R2/R9 对真阿里云 OSS 跑过即 ✅ 复验闭环;① 阿里云 OSS bucket 配 **CORS**(允许前端域名 Origin、`PUT`、暴露 `ETag`)+ ③ prod OSS 域名进前端 **CSP `connect-src`** —— 这两条**只有浏览器跨域才触发,curl 测不出**,留 Plan 8 前端在浏览器里验。漏了 prod 浏览器上传必跨域失败。
+>
+> **显式登记·本轮未实现(deferred,ADR-020 §4 M-2 标"可签/可选")**:presign **content-length-range** 对象大小上限未签 —— 现 `RawUploadRequest` 无 `size` 入参,且单传 presigned PUT(`generate_presigned_url`)无法施加 length-range(需改 presigned POST,变更契约+客户端流程,超本 plan 范围)。风险:presigned URL 泄露窗口(≤15min)内可向该写死 key 写超额对象(配额/计费滥用面)。缓解现状:短 TTL + key 写死 + 单租户隔离。vN+ 若启用:`RawUploadRequest` 加 `size` → 单传走 `generate_presigned_post` 带 `content-length-range`,multipart 各片大小由 part 数+总 size 推。
 
 ---
 
