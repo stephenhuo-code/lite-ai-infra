@@ -182,7 +182,7 @@
 | 实验追踪 | MLflow experiment 按 enterprise_id/group_id tag 分组 |
 | Embedding 服务 + 向量 | TEI/vLLM + Lance + IVF_PQ，ANN 查询可用 |
 | Dev Workspace | code-server + Remote-SSH（按 enterprise/group 分配）；数据探索/处理用 |
-| **前端（数据域，完整 UI）** | 数据集管理（上传/浏览/血缘）+ 数据管线提交/监控 + 元数据浏览 + 实验对比，Next.js 完整页面 |
+| **前端（数据域，完整 UI）** | 数据集管理（上传/浏览/血缘）+ 数据管线提交/监控 + 元数据浏览 + 实验对比，**React + Vite**（ADR-019） |
 
 **v2：Agent 开发平台 + 统一 LLM 接入 + 统一对话交互**
 
@@ -226,7 +226,7 @@
 - ❌ 数据脱敏 / 隐私合规
 
 > 注：v1 **必做**审计（Audit Layer，子系统 ⑭）—— 所有 mutation API、`/admin/*`、`--force` 和 admin override 强制写 `audit_log`；v1 不做的是"跨企业审计聚合视图 / tamper-proof 归档 / SIEM 集成"，留 vN+。
-- ❌ Web UI 提交作业（CLI/SDK 即可）
+- ~~❌ Web UI 提交作业（CLI/SDK 即可）~~ → **已反转(ADR-019)**:owner 终态是 GUI,出口⑤ 改真 GUI(React/Vite 数据域控制台 + BFF),CLI 反而推迟为 ops 工具;数据域 Web UI 进 S1(Plan 8)
 - ❌ Megatron / NeMo（v1 用 DDP/DeepSpeed）
 - ❌ Ray Train（v1 训练不用 Ray，仅数据管线用 Ray Data）
 - ❌ LanceDB（用开源 Lance + 自封装 VectorTable）
@@ -293,7 +293,7 @@
 | 控制面 + 数据/训练/推理服务 | **Python 3.12**（FastAPI；**uv 管理**，`.python-version` + `uv.lock`） | 团队主语言；ML 生态原生；OpenAPI 友好 |
 | K8s controller（provisioner / workspace） | **Go**（controller-runtime / kubebuilder） | K8s 生态标准 |
 | 授权 PDP | **Cerbos**（Go，不自写） | ADR-011 |
-| **前端** | **TypeScript + Next.js 14+** | 完整页面；OIDC 接 Keycloak |
+| **前端** | **TypeScript + React + Vite**（ADR-019;原拟 Next.js,改 Vite SPA 由 gateway serve dist 求同源） | 数据域控制台;OIDC 经 BFF（前端不持 token） |
 | SDK / CLI | **Python**（由 OpenAPI 生成 + 薄封装） | v1 用户全 Python |
 | 训练/推理/数据管线镜像 | Python + bash | PyTorch / Ray / Data-Juicer / vLLM / TEI 原生 |
 
@@ -323,8 +323,8 @@ lite-ai-infra/
 │   └── data_prep/                  # ✅ tar→DJ/Ray→Lance（data_pipeline_service 的内部实现）
 ├── libs/                           # ✅ 共享层：identity / authz / audit / contracts_gen
 ├── authz/                          # ⏳ v2：Cerbos 策略（YAML, in git；现暂存 spikes/cerbos_seam/）
-├── frontend/                       # ⏳ S1(ADR-019 提前)：React + Vite 数据域控制台（gateway serve dist）
-├── sdk/  cli/                      # ⏳ Plan 7：由 contracts 生成 + 薄封装（laictl）
+├── frontend/                       # ⏳ S1 Plan 8(ADR-019 提前)：React + Vite 数据域控制台（gateway serve dist;含上传页消费 Plan 7 契约）
+├── sdk/  cli/                      # ⏸ 推迟为 ops 工具（ADR-019;原 Plan 6 laictl 文档已删,日后重写）。上传后端=data_pipeline_service(Plan 7 ✅ presigned 直传,ADR-020)
 ├── deploy/                         # ✅ dev compose + test IaC（Helm/ArgoCD → S2a）
 │   ├── dev/                        # ✅ docker-compose（Keycloak + MinIO）
 │   └── test/                       # ✅ 阿里云测试环境 IaC（ECS compose + terraform）
@@ -377,7 +377,7 @@ lite-ai-infra/
 | **平台自身** | Platform API | 自研 | FastAPI（Python 3.12，uv 管理，Keycloak token 校验中间件） |
 | | SDK | 自研 | Python pkg（自动注入 token + enterprise_id 解析） |
 | | CLI（laictl） | 自研 | Python click（首次用 `laictl login` 走 OIDC device flow） |
-| | Portal | 自研 | Next.js（OIDC 接 Keycloak） |
+| | Portal | 自研 | **React + Vite**（ADR-019;OIDC 经 BFF,前端不持 token） |
 | | Workspace Operator | 自研 | controller-runtime |
 | **Workspace** | code-server | 4.92+ | dev 镜像内 |
 | | OpenSSH | — | dev 镜像内 |

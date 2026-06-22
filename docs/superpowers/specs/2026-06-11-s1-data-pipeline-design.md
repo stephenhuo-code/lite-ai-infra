@@ -26,11 +26,12 @@
 | ① | 100GB 一行命令清洗(多模态)→ Lance | 完整:DJ+Ray on ECS → Lance on OSS 隔离路径 | 一行命令跑完 100GB,Lance 可读 |
 | ② | Gravitino schema 可查 | 完整:docker 单容器,schema `e_0001_g_0001` | API 查到 schema/表 + owner/scope 属性 |
 | ③ | 薄 can() 企业隔离 | S0 已交付;S1 接入管线入口与两个新服务 | 隔离用例过(单测+集成) |
-| ⑤ | 契约 SDK/CLI 可调 | 完整:OpenAPI → 生成 client + `laictl`(prepare/list/describe) | CLI 三命令打真服务成功 |
+| ⑤ | **真 GUI 经 API 端到端调通**(重定义,ADR-019;原"SDK/CLI 可调") | React/Vite 数据域控制台 → BFF(OIDC 会话)→ 经 gateway 调服务 | 浏览器登录→列数据集→上传→建作业→跟踪终态(GUI 全链路);CLI 推迟为 ops 工具 |
 | 新 | **服务化**(spec S1 P1 项) | data-pipeline-service + metadata-service,契约先行 | 契约↔实现一致,经 gateway can()+audit |
 | ④ | Dev Workspace | **唯一降级**:docker code-server 半天版(stretch,W3 D4);K8s Pod 版推 S2 | 可起即过(stretch,不阻塞 DoD) |
 
-明确不做(S2/vN+):Argo DAG、ACK/K8s、Gravitino HA、MLflow 接入、Embedding/ANN、前端、Enterprise Provisioner。
+明确不做(S2/vN+):Argo DAG、ACK/K8s、Gravitino HA、MLflow 接入、Embedding/ANN、Enterprise Provisioner。
+> **范围变更(2026-06-18,ADR-019)**:**前端已并入 S1**(出口⑤ 改真 GUI),S1 工期顺延、S2a/S2b 后移。详见 §9.3 与 ADR-019。
 
 ## 2. 架构
 
@@ -75,6 +76,8 @@ SDK(生成) ──┘        │
 
 ## 5. 时间线(14 个工作日,从 2026-06-12 起)
 
+> **已被 ADR-019/020 延长重排(历史排期,保留存档)**:出口⑤ 改 GUI + #11 上传纳入 → S1 工期顺延,**当前权威计划序见 §9.3**(下表的 W3"laictl 三命令"已废,CLI 推迟为 ops 工具)。
+
 | 时段 | 内容 | 里程碑 |
 |---|---|---|
 | W1 D1–3 | **ADR-014 门禁**:云最小环境(runbook §1–3)+ 数据集云端下载 + 数据 Spike 1/2 真跑 + Spike A 复验/Spike C → 结论回写 ADR-010/spike 文档 | **06-17 硬时限;不过不开工** |
@@ -93,7 +96,7 @@ SDK(生成) ──┘        │
    > **落地(2026-06-16)**:已产出数据域中保真原型 `docs/superpowers/prototypes/2026-06-16-data-domain-midfi.html`(身份域/数据域分离:登录 → 我的账户/组织;数据集上传 → 创建作业 → 数据管线 → 数据目录)。作为契约第一个消费者,反推出 **S2 契约修订 backlog**(详见原型 Design notes):
    > - **data-pipeline**:① `GET /v1/data/jobs` 列作业(+分页/状态过滤,可早)· ⑥ "算子目录" 端点驱动 process 表单 · ⑦ 作业日志端点 / 取消(随 Argo)
    > - **metadata**:② list 分页/搜索/过滤 · ③ Dataset 统计(行数/大小/列schema/样本)· ④ 血缘 `source_job_id` · ⑧ PATCH/DELETE(改属性/删)
-   > - **新端点**:⑪ **上传原始数据到 OSS**(分片 multipart + 列 raw,落本组 raw/ 隔离路径,经 can()+审计)· ⑤ 创建作业源数据改"选已上传原始集"(取代 tar_dir 宿主机路径,依赖⑪)
+   > - **新端点**:⑪ **上传原始数据到 OSS**(分片 multipart + 列 raw,落本组 raw/ 隔离路径,经 can()+审计)→ ✅ **已实现 Plan 7**(2026-06-21,presigned 直传,ADR-020;提前到 S1)· ⑤ 创建作业源数据改"选已上传原始集"(取代 tar_dir 宿主机路径,依赖⑪)→ 待 Plan 8 前端接
    > - **identity / BFF**:⑩ `/me/orgs` 加 profile(email/姓名)· ⑨ BFF 加 OIDC 登录回调+会话,**品牌化托管登录页(不暴露 Keycloak)**;登录方式=realm 配置(邮箱 v1 现成、手机短信需 Keycloak 扩展、企业 SSO 走联邦)
    > 均为 0.x 加法,不破坏既有契约。其中 ①/② 若前端提前,可在 Plan 6 或小补丁先加。
 2. **S2 必须分阶段**:S2a(10TB 放大 + Gravitino HA)→ S2b(Embedding/ANN + V8 斜率)→ S2c(前端 + Provisioner),每段独立验收;S2 时长按一人现实重排,与 v1 交付日后移一起走 ADR(宪法 §7)。
@@ -154,10 +157,13 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 | **Plan 3:服务脚手架 + identity-org-service + gateway 反代壳** | 统一 FastAPI 模板(/docs)+ `make api-docs` + 漂移守卫 CI;identity-org 从 gateway 迁出独立;gateway 改纯反代壳 | swagger 能力 + 服务化① | ✅ 已合并 |
 | **Plan 4:metadata-service** | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **出口②** | ✅ 已合并 |
 | **Plan 5:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id + 查状态)+ 集成 | 服务化 | ✅ 已合并(异步作业薄壳,ADR-018;真 DJ 端到端 + dev/prod parity) |
-| **Plan 6:BFF 后端** | gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1) | **出口⑤**(GUI 前置) | ✅ **已合并**(140u+11i 全绿 + 真 KC code+PKCE 全链路 + 一键验收 7/7 + 隔离评审 0 Crit;C-1 命门坐实);BFF 后端就绪,待 Plan 7 前端关出口⑤ |
-| **Plan 7:React/Vite 前端** | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户),调 BFF | **出口⑤** | ⏳ |
-| **Plan 8:Dev Workspace docker** | code-server 半天版 | ④降级 | ⏳ |
+| **Plan 6:BFF 后端** | gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1) | **出口⑤**(GUI 前置) | ✅ **已合并**(140u+11i 全绿 + 真 KC code+PKCE 全链路 + 一键验收 7/7 + 隔离评审 0 Crit;C-1 命门坐实) |
+| **Plan 7:数据上传后端**(presigned 直传 OSS) | 请求上传/complete/列原始数据三端点 + RawDataset 状态机 + can()+审计 + GC;契约冻结供前端消费(原型 #11) | **出口⑤** 前置 | ✅ **已合并**(2026-06-21;ADR-020;171u+2i 全绿 + lint KEPT + 隔离复审 0 Crit + 手动 runbook **真阿里云 OSS R1–R10 10/10**;含 prod parity virtual-hosted/ETag 复验) |
+| **Plan 8:React/Vite 前端**(原 Plan 7) | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户 + **数据集上传页**,消费 Plan 7 契约),调 BFF | **出口⑤**(关闭) | ⏳ spec/design 就绪、DoR 待 Plan 7 契约冻结(已满足);浏览器验 CORS(ADR-020 唯一剩项) |
+| **Plan 9:Dev Workspace docker**(原 Plan 8) | code-server 半天版 | ④降级 | ⏳ |
 | ~~Plan 6(原):SDK/CLI `laictl`~~ | ⏸ 推迟,**文档已删**(后续 ops 工具,日后重写;commit 9a70c18 留底) | — | ADR-019 |
 
-> **出口⑤ 重定义(2026-06-18,ADR-019;product-architect 复审采纳)**:由"SDK/CLI 可调"改为**真 GUI 经 API 调通**——owner 终态是 GUI,GUI/CLI 同为 API 客户端,跳过 CLI 直接做 GUI(BFF + React/Vite)。CLI 推迟为 ops 工具。**owner 决:直接延长 S1**(GUI 并入 S1、工期顺延、S1 范围显式扩张),S2a/S2b 顺延到 GUI 之后。§9.1 BFF 定义随之修订(加 OIDC 会话终结)。会话=无状态加密 cookie(access TTL≤5min,吊销窗口登记风险)。详见 ADR-019。
+> **出口⑤ 重定义(2026-06-18,ADR-019)**:由"SDK/CLI 可调"改为**真 GUI 经 API 调通**——owner 终态是 GUI,GUI/CLI 同为 API 客户端,跳过 CLI 直接做 GUI(BFF + React/Vite)。CLI 推迟为 ops 工具。**owner 决:直接延长 S1**(GUI 并入 S1、工期顺延),S2a/S2b 顺延到 GUI 之后。§9.1 BFF 定义随之修订(加 OIDC 会话终结)。会话=无状态加密 cookie(access TTL≤5min,吊销窗口登记风险)。
+> **计划重排(2026-06-21,ADR-020)**:owner 决"#11 数据集上传纳入本轮",上传后端拆为**独立 Plan 7(先行,已合并)**,原 Plan 7 前端顺延 **Plan 8**、原 Plan 8 Dev Workspace 顺延 **Plan 9**。上传机制=presigned 直传 OSS(详见 ADR-020)。
+> **当前进度(2026-06-21)**:Plan 3/4/5/6/7 ✅ 已合并;**出口①②③⑤前置 + 服务化均达成**;出口⑤ 待 Plan 8 前端关闭;出口④ 待 Plan 9(降级形态)。
 > 手写 `python -m pipelines.data_prep` 仍为 ops 后门(标注非产品入口)。
