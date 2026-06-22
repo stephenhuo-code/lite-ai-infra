@@ -30,7 +30,7 @@
 - Modify(生成): `libs/contracts_gen/metadata_models.py`
 - Test: `tests/test_codegen.py`(既有 drift 守卫)
 
-- [ ] **Step 1: 在 `metadata.yaml` 的 `Dataset.properties` 末尾加 3 字段**
+- [x] **Step 1: 在 `metadata.yaml` 的 `Dataset.properties` 末尾加 3 字段**
 
 `Dataset` 现有 `properties` 末尾(`created_by` 之后)加:
 
@@ -40,7 +40,7 @@
         size_bytes: {type: [integer, 'null']}     # 占用字节
 ```
 
-- [ ] **Step 2: 在 `RegisterDataset.properties` 末尾加同样 3 字段(可选入参)**
+- [x] **Step 2: 在 `RegisterDataset.properties` 末尾加同样 3 字段(可选入参)**
 
 `RegisterDataset`(现 required `[name, group_id, location]`)的 `properties` 末尾(`comment` 之后)加:
 
@@ -50,22 +50,22 @@
         size_bytes: {type: [integer, 'null'], minimum: 0}
 ```
 
-- [ ] **Step 3: 重生成模型**
+- [x] **Step 3: 重生成模型**
 
 Run: `make gen`
 Expected: 无报错;`libs/contracts_gen/metadata_models.py` 的 `Dataset` 与 `RegisterDataset` 新增 `format: str | None`、`num_samples: int | None`、`size_bytes: int | None`(`conint(ge=0)` for RegisterDataset)。
 
-- [ ] **Step 4: 验证模型可导入且含新字段**
+- [x] **Step 4: 验证模型可导入且含新字段**
 
 Run: `uv run python -c "from libs.contracts_gen.metadata_models import Dataset, RegisterDataset; assert 'format' in Dataset.model_fields and 'num_samples' in RegisterDataset.model_fields; print('ok')"`
 Expected: 打印 `ok`。
 
-- [ ] **Step 5: 跑 codegen drift 守卫**
+- [x] **Step 5: 跑 codegen drift 守卫**
 
 Run: `uv run pytest tests/test_codegen.py -q`
 Expected: PASS(生成产物与契约一致)。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add contracts/openapi/metadata.yaml libs/contracts_gen/metadata_models.py
@@ -80,7 +80,7 @@ git commit -m "feat(metadata): 契约加 format/num_samples/size_bytes 字段 + 
 - Modify: `services/metadata_service/app.py`(`_dataset` 投影 + `register` 存储)
 - Test: `tests/services/metadata/test_app.py`
 
-- [ ] **Step 1: 写失败测试(追加到 `tests/services/metadata/test_app.py` 末尾)**
+- [x] **Step 1: 写失败测试(追加到 `tests/services/metadata/test_app.py` 末尾)**
 
 ```python
 def test_register_persists_and_returns_three_fields():
@@ -117,12 +117,12 @@ def test_existing_dataset_projection_has_null_three_fields():
     assert g["format"] is None and g["num_samples"] is None and g["size_bytes"] is None
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/services/metadata/test_app.py -q -k "three_fields or null_three"`
 Expected: FAIL（响应无 `format`/`num_samples` 键,KeyError 或断言失败）。
 
-- [ ] **Step 3: 改 `_dataset` 投影(读取返回 3 字段,整数解析)**
+- [x] **Step 3: 改 `_dataset` 投影(读取返回 3 字段,整数解析)**
 
 `services/metadata_service/app.py` 的 `_dataset` 函数,在返回 dict 里追加 3 字段(整数 property 以字符串存,读时解析回 int):
 
@@ -140,7 +140,7 @@ def _dataset(ent: str, fs: dict) -> dict:
             "size_bytes": _int(p.get("size_bytes"))}
 ```
 
-- [ ] **Step 4: 改 `register` 存储(把 3 字段写进 fileset properties,整数转字符串)**
+- [x] **Step 4: 改 `register` 存储(把 3 字段写进 fileset properties,整数转字符串)**
 
 `register` handler 里构造 `properties` 处(现传 `{"owner_group", "owner_user", "scope"}`)改为:
 
@@ -157,12 +157,12 @@ def _dataset(ent: str, fs: dict) -> dict:
                                           comment=body.comment or "", properties=props)
 ```
 
-- [ ] **Step 5: 跑测试确认通过 + 既有 metadata 测试未破**
+- [x] **Step 5: 跑测试确认通过 + 既有 metadata 测试未破**
 
 Run: `uv run pytest tests/services/metadata/test_app.py -q`
 Expected: PASS（新 3 项 + 既有用例全绿;隔离/can() 用例不受影响)。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add services/metadata_service/app.py tests/services/metadata/test_app.py
@@ -176,7 +176,7 @@ git commit -m "feat(metadata): 注册存储 + 读取返回 format/num_samples/si
 **Files:**
 - Modify: `tests/integration/test_metadata_gravitino.py`
 
-- [ ] **Step 1: 在 `test_real_gravitino_crud` 之后追加集成测试**
+- [x] **Step 1: 在 `test_real_gravitino_crud` 之后追加集成测试**
 
 ```python
 def test_real_gravitino_three_fields_roundtrip(gravitino_url, minio_s3):
@@ -193,12 +193,12 @@ def test_real_gravitino_three_fields_roundtrip(gravitino_url, minio_s3):
     assert d["format"] == "Lance" and d["num_samples"] == 300 and d["size_bytes"] == 67891
 ```
 
-- [ ] **Step 2: 起 dev 服务后跑集成测试**
+- [x] **Step 2: 起 dev 服务后跑集成测试**
 
 Run: `make dev-up && uv run pytest tests/integration/test_metadata_gravitino.py -q -m integration`
 Expected: PASS（真 Gravitino 存 properties 字符串、`_dataset` 解析回 int;Gravitino 未起则 fixture 自动 skip 而非 fail）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/integration/test_metadata_gravitino.py
@@ -211,7 +211,7 @@ git commit -m "test(metadata): 真 Gravitino 三字段存取往返集成 (Plan 8
 
 **Files:** 无新代码;跑全绿门禁 + 执行 runbook 留痕。
 
-- [ ] **Step 1: 按 CLAUDE.md 跑全绿门禁**
+- [x] **Step 1: 按 CLAUDE.md 跑全绿门禁**
 
 Run: `make gen && make lint && uv run pytest -q`
 Expected: 全绿;契约无 drift(`tests/test_codegen.py`)、分层 KEPT、既有 metadata 测试不破。
