@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lite-AI 数据域控制台 · 高保真原型</title>
+<!--
+  高保真点击原型 v2(ui-ux-pro-max:Micro SaaS 靛蓝 + Minimalism/Swiss 现代浅色)
+  组织模型对齐 spec:平台 → 企业 → 用户组 → 用户(g-0001 = 用户组,无"数据组"概念)。
+  字段/状态/流程对齐已冻结契约(Plan 6 BFF + Plan 7 上传后端)。纯静态,JS 仅视图切换 + 动效模拟。
+-->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  colors: {
+    brand: { DEFAULT:'#6366F1', 600:'#4F46E5', 700:'#4338CA', 50:'#EEF0FF', 100:'#E0E4FF' },
+    ink:'#1E1B4B', surface:'#FAFAFC',
+  },
+  fontFamily: { sans:['Fira Sans','ui-sans-serif','system-ui','sans-serif'], mono:['Fira Code','ui-monospace','monospace'] },
+  boxShadow: { card:'0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06)' },
+}}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Fira Sans',sans-serif;background:#FAFAFC;color:#1E1B4B}
+  .mono{font-family:'Fira Code',monospace}
+  ::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#E2E5EC;border-radius:6px}
+  .nav-item[aria-current="page"]{background:#EEF0FF;color:#4F46E5;font-weight:600}
+  @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}.pulse-dot{animation:pulse 1.4s ease-in-out infinite}
+  @media (prefers-reduced-motion: reduce){.spin,.pulse-dot{animation:none}}
+  [data-view]{display:none}[data-view].active{display:block}
+  .row:hover{background:#FAFAFC}
+  button,a,[role=button],select{cursor:pointer}
+  :focus-visible{outline:2px solid #6366F1;outline-offset:2px;border-radius:6px}
+  /* 侧栏折叠 */
+  #sidebar{transition:width .18s ease}
+  #sidebar.collapsed{width:4.5rem}
+  #sidebar.collapsed .lbl{display:none}
+  #sidebar.collapsed .nav-item{justify-content:center;padding-left:.5rem;padding-right:.5rem}
+  #sidebar.collapsed .navhdr{height:0;padding:0;margin:0;overflow:hidden}
+  #sidebar.collapsed .logo{margin-left:auto;margin-right:auto}
+</style>
+</head>
+<body>
+
+<!-- ============ 登录页 ============ -->
+<div id="login" class="min-h-screen grid place-items-center px-4">
+  <div class="w-full max-w-sm">
+    <div class="flex items-center gap-3 justify-center mb-8">
+      <div class="h-11 w-11 rounded-2xl bg-gradient-to-br from-brand to-fuchsia-500 grid place-items-center text-white shadow-md">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 3l1.9 4.8L18.8 9.7l-4.9 1.5L12 16l-1.9-4.8L5.2 9.7l4.9-1.9z"/><path d="M18.5 14.5l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z"/></svg>
+      </div>
+      <div class="text-xl font-semibold tracking-tight">Lite-AI <span class="text-slate-400 font-normal">数据平台</span></div>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-card p-7">
+      <h1 class="text-lg font-semibold mb-1">登录到工作区</h1>
+      <p class="text-sm text-slate-500 mb-6">使用企业分配的账号登录</p>
+      <div class="flex gap-1 p-1 bg-slate-100 rounded-xl mb-5 text-sm" role="tablist">
+        <button onclick="loginTab('email')" id="tab-email" role="tab" aria-selected="true" class="flex-1 py-2 rounded-lg bg-white shadow-sm font-medium">邮箱</button>
+        <button onclick="loginTab('phone')" id="tab-phone" role="tab" aria-selected="false" class="flex-1 py-2 rounded-lg text-slate-500">手机</button>
+      </div>
+      <label class="block text-xs font-medium text-slate-600 mb-1.5" for="lg-id" id="lg-label">邮箱地址</label>
+      <input id="lg-id" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm mb-4 focus:border-brand" placeholder="you@company.com" />
+      <label class="block text-xs font-medium text-slate-600 mb-1.5" for="lg-pw">密码</label>
+      <input id="lg-pw" type="password" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm mb-5 focus:border-brand" placeholder="••••••••" value="demo" />
+      <button onclick="enterApp()" class="w-full bg-brand hover:bg-brand-600 text-white text-sm font-medium py-3 rounded-xl transition-colors">登录</button>
+      <div class="flex items-center justify-between mt-5 text-xs">
+        <a class="text-brand hover:underline">忘记密码？</a>
+        <a class="text-slate-500 hover:text-brand">企业 SSO 登录 →</a>
+      </div>
+    </div>
+    <p class="text-center text-xs text-slate-400 mt-6">© 2026 Lite-AI · 多企业租户 LLM 基础设施</p>
+  </div>
+</div>
+
+<!-- ============ 应用外壳 ============ -->
+<div id="app" class="hidden min-h-screen">
+  <div class="flex">
+    <!-- 侧栏 -->
+    <aside id="sidebar" class="w-64 shrink-0 h-screen sticky top-0 bg-white border-r border-slate-200/70 flex flex-col">
+      <div class="h-16 flex items-center gap-2.5 px-4 border-b border-slate-100">
+        <div class="logo h-9 w-9 rounded-xl bg-gradient-to-br from-brand to-fuchsia-500 grid place-items-center text-white shrink-0 shadow-sm">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 3l1.9 4.8L18.8 9.7l-4.9 1.5L12 16l-1.9-4.8L5.2 9.7l4.9-1.9z"/><path d="M18.5 14.5l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9z"/></svg>
+        </div>
+        <span class="lbl font-semibold tracking-tight text-base">Lite-AI</span>
+        <span class="lbl ml-auto text-[10px] font-medium text-slate-400 border border-slate-200 rounded-md px-1.5 py-0.5">数据域</span>
+      </div>
+      <nav class="p-3.5 space-y-1 text-[15px] flex-1">
+        <p class="navhdr px-3 pt-2 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">数据</p>
+        <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50" data-nav="datasets" onclick="go('datasets')" aria-current="page">
+          <svg class="w-[22px] h-[22px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span class="lbl">数据集</span></a>
+        <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50" data-nav="catalog" onclick="go('catalog')">
+          <svg class="w-[22px] h-[22px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg><span class="lbl">数据目录</span></a>
+        <p class="navhdr px-3 pt-4 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">作业</p>
+        <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50" data-nav="pipelines" onclick="go('pipelines')">
+          <svg class="w-[22px] h-[22px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a2 2 0 012 2v1.5M8.5 18H14a2 2 0 002-2v-1.5"/></svg><span class="lbl">数据管线</span></a>
+        <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50" data-nav="create" onclick="go('create')">
+          <svg class="w-[22px] h-[22px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span class="lbl">创建作业</span></a>
+        <p class="navhdr px-3 pt-4 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">账户</p>
+        <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 hover:bg-slate-50" data-nav="account" onclick="go('account')">
+          <svg class="w-[22px] h-[22px]" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg><span class="lbl">我的账户</span></a>
+      </nav>
+      <div class="p-3 border-t border-slate-100 flex items-center gap-2">
+        <button onclick="toggleSidebar()" aria-label="折叠/展开侧栏" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 shrink-0">
+          <svg id="collapseIcon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M14 9l-2 3 2 3"/></svg>
+        </button>
+        <span class="lbl text-[11px] text-slate-400">v0.1 · S1 出口⑤ 原型</span>
+      </div>
+    </aside>
+
+    <!-- 主区 -->
+    <main class="flex-1 min-w-0">
+      <header class="h-16 sticky top-0 z-20 bg-white/85 backdrop-blur border-b border-slate-200/70 flex items-center gap-3 px-7">
+        <h1 id="pageTitle" class="font-semibold text-base">数据集</h1>
+        <div class="ml-auto flex items-center gap-3">
+          <span class="text-sm text-slate-500">华研科技</span>
+          <span class="h-4 w-px bg-slate-200"></span>
+          <div class="relative">
+            <button onclick="document.getElementById('umenu').classList.toggle('hidden')" class="flex items-center gap-2 text-sm hover:bg-slate-50 rounded-xl pl-1 pr-2.5 py-1.5">
+              <span class="h-8 w-8 rounded-full bg-brand-100 text-brand grid place-items-center text-sm font-semibold">韩</span>
+              <span class="text-slate-700">韩工</span>
+              <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div id="umenu" class="hidden absolute right-0 mt-1.5 w-48 bg-white border border-slate-200 rounded-xl shadow-lg py-1 text-sm z-30">
+              <div class="px-3.5 py-2.5 border-b border-slate-100"><div class="font-medium">韩工</div><div class="text-xs text-slate-400">huo.yanwen@…</div></div>
+              <button onclick="go('account')" class="w-full text-left px-3.5 py-2.5 hover:bg-slate-50">我的账户</button>
+              <button onclick="logout()" class="w-full text-left px-3.5 py-2.5 hover:bg-slate-50 text-red-600">登出</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div class="p-7" id="content">
+
+        <!-- ===== 数据集(列表为主 + 上传弹窗) ===== -->
+        <section data-view="datasets" class="active">
+          <div class="flex items-center gap-3 mb-4">
+            <button onclick="openUpload()" class="bg-brand hover:bg-brand-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl flex items-center gap-2 transition-colors">
+              <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>上传数据集</button>
+            <div class="ml-auto flex items-center gap-2">
+              <div class="relative">
+                <svg class="w-[18px] h-[18px] text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+                <input class="w-64 rounded-xl border border-slate-300 pl-10 pr-3 py-2 text-sm focus:border-brand" placeholder="搜索数据集名称" />
+              </div>
+              <button aria-label="筛选" class="border border-slate-300 rounded-xl p-2.5 text-slate-500 hover:bg-slate-50"><svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg></button>
+            </div>
+          </div>
+          <div class="bg-white border border-slate-200/70 rounded-2xl overflow-hidden shadow-card">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50/70 text-slate-500 text-xs"><tr class="text-left">
+                <th class="font-medium px-5 py-3">数据集名称</th>
+                <th class="font-medium px-5 py-3">模态</th>
+                <th class="font-medium px-5 py-3">标签</th>
+                <th class="font-medium px-5 py-3">格式</th>
+                <th class="font-medium px-5 py-3">样本数</th>
+                <th class="font-medium px-5 py-3">大小</th>
+                <th class="font-medium px-5 py-3">创建人</th>
+                <th class="font-medium px-5 py-3">操作</th>
+              </tr></thead>
+              <tbody id="dsRows" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ===== 数据目录(Gravitino Catalog Explorer · 三栏) ===== -->
+        <section data-view="catalog" class="-m-7">
+          <div class="flex h-[calc(100vh-4rem)]">
+
+            <!-- 左:目录树 -->
+            <div class="w-72 shrink-0 border-r border-slate-200/70 bg-white flex flex-col">
+              <div class="px-4 py-3 flex items-center gap-2 border-b border-slate-100">
+                <span class="font-semibold text-sm">Catalog</span>
+                <div class="ml-auto flex items-center gap-1 text-slate-400">
+                  <button aria-label="刷新" class="p-1 hover:text-slate-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-2.6-6.4M21 3v6h-6"/></svg></button>
+                  <button aria-label="新建" class="p-1 hover:text-slate-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+                </div>
+              </div>
+              <div class="px-3 py-2.5 border-b border-slate-100">
+                <div class="relative"><svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+                  <input class="w-full rounded-lg border border-slate-300 pl-8 pr-2 py-2 text-sm focus:border-brand" placeholder="搜索…" /></div>
+              </div>
+              <div class="flex-1 overflow-auto p-2 text-sm">
+                <!-- metalake -->
+                <button onclick="treeToggle(this)" data-open="1" class="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-slate-700">
+                  <svg class="chev w-3.5 h-3.5 text-slate-400 transition-transform" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+                  <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+                  企业 e-0001 <span class="text-[10px] text-slate-400 ml-1">metalake</span>
+                </button>
+                <div class="ml-3 pl-2 border-l border-slate-100">
+                  <!-- catalog: data -->
+                  <button onclick="treeToggle(this)" data-open="1" class="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-slate-700">
+                    <svg class="chev w-3.5 h-3.5 text-slate-400 transition-transform" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+                    <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+                    data <span class="text-[10px] text-slate-400 ml-1">FILESET·OSS</span>
+                  </button>
+                  <div class="ml-3 pl-2 border-l border-slate-100">
+                    <!-- schema: datasets (selected) -->
+                    <button onclick="treeToggle(this)" data-open="1" class="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-brand-50 text-brand font-medium">
+                      <svg class="chev w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>
+                      datasets <span class="text-[10px] text-brand/70 ml-1">schema</span>
+                    </button>
+                    <div class="ml-6 space-y-0.5 py-0.5">
+                      <button class="w-full flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-slate-50 text-slate-600 text-[13px]"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>cc3m</button>
+                      <button class="w-full flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-slate-50 text-slate-600 text-[13px]"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>laion-clean</button>
+                      <button class="w-full flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-slate-50 text-slate-600 text-[13px]"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>qa-zh</button>
+                    </div>
+                  </div>
+                  <button class="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-slate-400">
+                    <span class="w-3.5"></span><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg>models <span class="text-[10px] ml-1">vN+</span></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 中:详情 -->
+            <div class="flex-1 min-w-0 overflow-auto bg-surface">
+              <div class="px-6 pt-5">
+                <div class="flex items-center gap-1.5 text-xs text-slate-400 mb-3">
+                  <span>Catalog Explorer</span><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+                  <span>data</span><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+                  <span class="text-slate-600">datasets</span>
+                </div>
+                <div class="flex items-center gap-3 mb-4">
+                  <svg class="w-6 h-6 text-brand" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>
+                  <h2 class="text-xl font-semibold">datasets</h2>
+                  <span class="text-xs text-slate-400 border border-slate-200 rounded px-1.5 py-0.5">schema</span>
+                  <div class="ml-auto flex items-center gap-2">
+                    <button class="text-sm border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50 flex items-center gap-1.5">用于创建作业<svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+                    <button class="text-sm border border-slate-300 rounded-lg px-3 py-1.5 hover:bg-slate-50">共享</button>
+                    <button class="text-sm bg-brand hover:bg-brand-600 text-white rounded-lg px-3 py-1.5 flex items-center gap-1.5">注册<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+                  </div>
+                </div>
+                <div class="flex items-center gap-5 text-sm border-b border-slate-200 mb-4">
+                  <button class="pb-2.5 border-b-2 border-brand text-brand font-medium">概览</button>
+                  <button class="pb-2.5 text-slate-500 hover:text-slate-700">详情</button>
+                </div>
+              </div>
+              <div class="px-6 pb-6">
+                <div class="bg-white border border-slate-200/70 rounded-2xl p-4 shadow-card mb-5">
+                  <div class="relative mb-3"><svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+                    <input class="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm focus:border-brand" placeholder="筛选数据集…" /></div>
+                  <div class="flex items-center gap-2 text-xs mb-1">
+                    <button class="px-2.5 py-1 rounded-md bg-brand-50 text-brand font-medium border border-brand-100">数据集 3</button>
+                    <button class="px-2.5 py-1 rounded-md text-slate-500 hover:bg-slate-100">Volumes 0</button>
+                    <button class="px-2.5 py-1 rounded-md text-slate-500 hover:bg-slate-100">Models 0</button>
+                    <button class="px-2.5 py-1 rounded-md text-slate-500 hover:bg-slate-100">Functions 0</button>
+                    <button class="ml-auto px-2.5 py-1 rounded-md border border-slate-200 text-slate-500 flex items-center gap-1">排序<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+                  </div>
+                  <table class="w-full text-sm mt-2">
+                    <thead class="text-slate-500 text-xs border-b border-slate-100"><tr class="text-left"><th class="font-medium py-2">名称</th><th class="font-medium py-2">owner</th><th class="font-medium py-2">格式</th><th class="font-medium py-2">注册时间</th><th class="font-medium py-2">共享</th></tr></thead>
+                    <tbody id="catRows" class="divide-y divide-slate-100"></tbody>
+                  </table>
+                </div>
+                <h3 class="text-sm font-semibold mb-3">关于此 Schema</h3>
+                <dl class="grid grid-cols-[120px_1fr] gap-y-2.5 text-sm max-w-md">
+                  <dt class="text-slate-500">状态</dt><dd class="flex items-center gap-1.5 text-emerald-600"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/></svg>Active</dd>
+                  <dt class="text-slate-500">Owner</dt><dd class="text-slate-700">韩工</dd>
+                  <dt class="text-slate-500">Catalog</dt><dd class="mono text-xs text-slate-600">data (FILESET·OSS)</dd>
+                  <dt class="text-slate-500">标签</dt><dd><button class="text-xs border border-dashed border-slate-300 rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-50">+ 添加标签</button></dd>
+                </dl>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ===== 数据管线 ===== -->
+        <section data-view="pipelines">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="flex gap-1 text-xs">
+              <button class="px-3 py-1.5 rounded-lg bg-brand-50 text-brand font-medium">全部</button>
+              <button class="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100">运行中</button>
+              <button class="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100">已完成</button>
+              <button class="px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100">失败</button>
+            </div>
+            <button onclick="go('create')" class="ml-auto bg-brand hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-xl flex items-center gap-2">
+              <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>创建作业</button>
+          </div>
+          <div class="bg-white border border-slate-200/70 rounded-2xl overflow-hidden shadow-card">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50/70 text-slate-500 text-xs"><tr class="text-left"><th class="font-medium px-5 py-3">作业 ID</th><th class="font-medium px-5 py-3">数据集</th><th class="font-medium px-5 py-3">状态</th><th class="font-medium px-5 py-3">行数(出/入)</th><th class="font-medium px-5 py-3">创建</th><th></th></tr></thead>
+              <tbody id="jobRows" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+          <p class="text-xs text-slate-400 mt-3" id="pollNote"></p>
+        </section>
+
+        <!-- ===== 创建作业 ===== -->
+        <section data-view="create">
+          <div class="bg-white border border-slate-200/70 rounded-2xl p-7 max-w-2xl shadow-card">
+            <h2 class="font-semibold text-lg mb-1">创建数据准备作业</h2>
+            <p class="text-sm text-slate-500 mb-6">从已上传的原始数据集出发,经清洗算子产出 Lance 数据集。</p>
+            <div class="space-y-5">
+              <div><label class="block text-xs font-medium text-slate-600 mb-1.5" for="cr-src">源(已上传原始数据集)</label>
+                <select id="cr-src" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm bg-white focus:border-brand">
+                  <option>cc3m · ready · 1.2GB</option><option>laion-sample · ready · 320MB</option></select>
+                <p class="text-[11px] text-slate-400 mt-1.5">仅 <b>ready</b> 的原始数据可选 · 需先在「数据集」上传</p></div>
+              <div class="grid sm:grid-cols-2 gap-4">
+                <div><label class="block text-xs font-medium text-slate-600 mb-1.5" for="cr-name">产出数据集名</label>
+                  <input id="cr-name" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-brand" value="cc3m-clean" /></div>
+                <div><label class="block text-xs font-medium text-slate-600 mb-1.5" for="cr-np">并行度</label>
+                  <input id="cr-np" type="number" value="3" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-brand" /></div>
+              </div>
+              <div><label class="block text-xs font-medium text-slate-600 mb-2.5">清洗算子</label>
+                <div class="flex flex-wrap gap-2 text-sm">
+                  <label class="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2"><input type="checkbox" checked class="accent-brand w-4 h-4">图文去重</label>
+                  <label class="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2"><input type="checkbox" checked class="accent-brand w-4 h-4">CLIP 相似度过滤</label>
+                  <label class="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2"><input type="checkbox" class="accent-brand w-4 h-4">文本长度过滤</label>
+                  <label class="flex items-center gap-2 border border-slate-200 rounded-xl px-3 py-2"><input type="checkbox" class="accent-brand w-4 h-4">图像尺寸/比例</label>
+                </div></div>
+              <div class="pt-1 flex items-center gap-3">
+                <button onclick="submitJob()" class="bg-brand hover:bg-brand-600 text-white text-sm font-medium px-6 py-2.5 rounded-xl">提交作业</button>
+                <span class="text-xs text-slate-400">提交后返回 202,进入「数据管线」自动轮询到终态</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== 我的账户 ===== -->
+        <section data-view="account">
+          <div class="grid lg:grid-cols-3 gap-5">
+            <div class="bg-white border border-slate-200/70 rounded-2xl p-7 lg:col-span-2 shadow-card">
+              <div class="flex items-center gap-4 mb-6">
+                <span class="h-16 w-16 rounded-full bg-brand-100 text-brand grid place-items-center text-2xl font-semibold">韩</span>
+                <div><div class="font-semibold text-xl">韩工</div><div class="text-sm text-slate-500">huo.yanwen@company.com</div></div>
+              </div>
+              <dl class="grid sm:grid-cols-2 gap-y-5 gap-x-6 text-sm">
+                <div><dt class="text-xs text-slate-500 mb-1">企业</dt><dd class="font-medium">华研科技 <span class="text-slate-400 text-xs">(标识隐藏)</span></dd></div>
+                <div><dt class="text-xs text-slate-500 mb-1">所属用户组</dt><dd class="font-medium">研发一组 <span class="mono text-xs text-slate-400">g-0001</span></dd></div>
+                <div><dt class="text-xs text-slate-500 mb-1">角色</dt><dd><span class="inline-flex items-center rounded-lg bg-brand-50 text-brand text-xs font-medium px-2.5 py-1">group-admin</span></dd></div>
+                <div><dt class="text-xs text-slate-500 mb-1">会话</dt><dd class="text-slate-600">经 BFF · 前端不持 token</dd></div>
+              </dl>
+            </div>
+            <aside class="bg-white border border-slate-200/70 rounded-2xl p-6 text-sm shadow-card">
+              <h3 class="font-semibold mb-2">用户组 = 权限维度</h3>
+              <p class="text-slate-600 text-[13px] leading-relaxed">企业、用户组是<b>身份与组织</b>概念(平台→企业→用户组→用户)。数据集<b>归属上传者</b>,不"属于"某个组;用户组是给数据集<b>授予访问权限</b>的维度。你看到的,是你有权访问的数据。</p>
+            </aside>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ============ 上传弹窗(在数据集页面内) ============ -->
+<div id="upModal" class="hidden fixed inset-0 z-40 grid place-items-center px-4">
+  <div class="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" onclick="closeUpload()"></div>
+  <div class="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 p-6">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="font-semibold text-lg">上传数据集</h2>
+      <button onclick="closeUpload()" aria-label="关闭" class="text-slate-400 hover:text-slate-700"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="mb-4">
+      <label class="block text-xs font-medium text-slate-600 mb-1.5" for="up-name">数据集名</label>
+      <input id="up-name" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-brand" placeholder="如 cc3m" value="cc3m" />
+      <p class="text-[11px] text-slate-400 mt-1.5">归属你 · 上传后出现在数据集列表,可用于创建作业</p>
+    </div>
+    <div id="dropzone" onclick="pickFile()" class="border-2 border-dashed border-slate-300 rounded-2xl py-10 grid place-items-center text-center hover:border-brand hover:bg-brand-50/50 transition-colors">
+      <svg class="w-12 h-12 text-slate-300 mb-2.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 16V6m0 0L8 10m4-4l4 4"/><path d="M20 16.5A4.5 4.5 0 0016 8a6 6 0 00-11.6 1.5A4 4 0 005 17"/></svg>
+      <p class="text-sm font-medium text-slate-700">拖拽文件到此 · 或 <span class="text-brand">点击选择</span></p>
+      <p class="text-xs text-slate-400 mt-1.5">支持单文件 / 大文件分片直传对象存储</p>
+    </div>
+
+    <div id="upProgress" class="hidden mt-4">
+      <div class="flex items-center justify-between text-sm mb-2">
+        <span class="font-medium mono text-slate-700">cc3m-shard-000.tar</span>
+        <span id="upPct" class="text-slate-500">0%</span>
+      </div>
+      <div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div id="upBar" class="h-full bg-brand transition-all duration-200" style="width:0%"></div></div>
+      <ol class="grid grid-cols-3 gap-2 mt-3.5 text-xs">
+        <li id="st1" class="flex items-center gap-1.5 text-slate-400"><span class="step h-4 w-4 rounded-full border grid place-items-center text-[9px]">1</span> 申请通行证</li>
+        <li id="st2" class="flex items-center gap-1.5 text-slate-400"><span class="step h-4 w-4 rounded-full border grid place-items-center text-[9px]">2</span> 分片直传 OSS</li>
+        <li id="st3" class="flex items-center gap-1.5 text-slate-400"><span class="step h-4 w-4 rounded-full border grid place-items-center text-[9px]">3</span> 完成校验</li>
+      </ol>
+      <div id="upDone" class="hidden mt-3.5 flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
+        <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        上传完成(状态 <b class="mx-0.5">ready</b>),可在「创建作业」选为源。
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-6">
+      <button onclick="closeUpload()" class="text-sm text-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-100">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg z-50"></div>
+
+<script>
+const datasets = [
+  {name:'cc3m', desc:'CC3M 图文对', modality:'图文', tags:2, fmt:'Lance', samples:'2.41M', size:'1.2 GB', by:'韩工'},
+  {name:'laion-clean', desc:'LAION 清洗子集', modality:'图文', tags:0, fmt:'Lance', samples:'280K', size:'2.79 MB', by:'李工'},
+  {name:'qa-zh', desc:'中文问答', modality:'文本', tags:1, fmt:'Lance', samples:'52K', size:'66 KB', by:'韩工'},
+  {name:'docs-pdf', desc:'PDF 原始包(待清洗)', modality:'-', tags:0, fmt:'原始', samples:'-', size:'320 MB', by:'韩工'},
+];
+// Gravitino catalog 注册项(元数据视图,区别于"数据集"管理列表)
+const catalog = [
+  {name:'cc3m', type:'fileset', owner:'韩工', scope:'private', fmt:'Lance', loc:'oss://…/processed/cc3m.lance', src:'job-9f2a1c', at:'06-20'},
+  {name:'laion-clean', type:'fileset', owner:'李工', scope:'shared', fmt:'Lance', loc:'oss://…/processed/laion-clean.lance', src:'job-7b08de', at:'06-19'},
+  {name:'qa-zh', type:'fileset', owner:'韩工', scope:'private', fmt:'Lance', loc:'oss://…/processed/qa-zh.lance', src:'job-51c0', at:'06-17'},
+];
+const jobs = [
+  {id:'job-9f2a1c', ds:'cc3m', status:'running',   rio:'— / 2.41M', at:'14:22'},
+  {id:'job-7b08de', ds:'laion-sample', status:'succeeded', rio:'280K / 312K', at:'昨 18:40'},
+  {id:'job-3c55a0', ds:'docs-pdf', status:'failed', rio:'— / —', at:'昨 09:30'},
+  {id:'job-1ad902', ds:'qa-zh', status:'queued', rio:'— / —', at:'14:25'},
+];
+const badge = {
+  ready:'bg-emerald-50 text-emerald-700 border-emerald-200', succeeded:'bg-emerald-50 text-emerald-700 border-emerald-200',
+  pending:'bg-amber-50 text-amber-700 border-amber-200', queued:'bg-slate-100 text-slate-600 border-slate-200',
+  running:'bg-brand-50 text-brand border-brand-100', failed:'bg-red-50 text-red-700 border-red-200',
+};
+function badgeHtml(s){ const sp = s==='running'?'<span class="w-1.5 h-1.5 rounded-full bg-brand pulse-dot"></span>':'';
+  return `<span class="inline-flex items-center gap-1.5 rounded-lg border text-xs font-medium px-2.5 py-1 ${badge[s]}">${sp}${s}</span>`; }
+function fmtBadge(f){ const lance=f==='Lance';
+  return `<span class="inline-flex items-center rounded-md border text-xs px-2 py-0.5 ${lance?'bg-brand-50 text-brand border-brand-100':'bg-slate-50 text-slate-500 border-slate-200'}">${f}</span>`; }
+function renderDs(){ document.getElementById('dsRows').innerHTML = datasets.map(d=>`
+  <tr class="row">
+    <td class="px-5 py-3"><div class="font-medium text-brand cursor-pointer">${d.name}</div><div class="text-xs text-slate-400">${d.desc}</div></td>
+    <td class="px-5 py-3 text-slate-500">${d.modality}</td>
+    <td class="px-5 py-3"><span class="inline-flex items-center gap-1 text-slate-500"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0l-7.2-7.2a2 2 0 01-.6-1.4V4a1 1 0 011-1h7.99a2 2 0 011.4.6l7.2 7.2a2 2 0 010 2.6z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>${d.tags}</span></td>
+    <td class="px-5 py-3">${fmtBadge(d.fmt)}</td>
+    <td class="px-5 py-3 mono text-xs">${d.samples}</td>
+    <td class="px-5 py-3 text-slate-500">${d.size}</td>
+    <td class="px-5 py-3 text-slate-600">${d.by}</td>
+    <td class="px-5 py-3"><div class="flex items-center gap-3 text-xs text-brand"><button class="hover:underline">详情</button></div></td>
+  </tr>`).join(''); }
+function renderCat(){ document.getElementById('catRows').innerHTML = catalog.map(c=>`
+  <tr class="row">
+    <td class="py-2.5 pr-4"><span class="font-medium text-brand cursor-pointer inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>${c.name}</span></td>
+    <td class="py-2.5 pr-4 text-slate-600">${c.owner}</td>
+    <td class="py-2.5 pr-4">${fmtBadge(c.fmt)}</td>
+    <td class="py-2.5 pr-4 text-slate-500">${c.at}</td>
+    <td class="py-2.5 pr-4"><span class="text-xs ${c.scope==='shared'?'text-brand':'text-slate-400'}">${c.scope==='shared'?'已共享':'—'}</span></td>
+  </tr>`).join(''); }
+function treeToggle(btn){ const open = btn.dataset.open==='1'; btn.dataset.open = open?'0':'1';
+  const chev = btn.querySelector('.chev'); if(chev) chev.style.transform = open?'rotate(0deg)':'rotate(90deg)';
+  const next = btn.nextElementSibling; if(next && next.tagName==='DIV') next.style.display = open?'none':''; }
+function renderJobs(){ document.getElementById('jobRows').innerHTML = jobs.map(j=>`
+  <tr class="row"><td class="px-5 py-3 mono text-xs">${j.id}</td><td class="px-5 py-3 font-medium">${j.ds}</td>
+  <td class="px-5 py-3">${badgeHtml(j.status)}</td><td class="px-5 py-3 mono text-xs text-slate-500">${j.rio}</td>
+  <td class="px-5 py-3 text-slate-500">${j.at}</td><td class="px-5 py-3 text-right"><span class="text-xs text-brand">详情 →</span></td></tr>`).join('');
+  const running = jobs.some(j=>j.status==='running');
+  document.getElementById('pollNote').innerHTML = running ? '<span class="inline-flex items-center gap-1.5"><svg class="w-3.5 h-3.5 spin text-brand" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-6.2-8.5"/></svg> 正在按终态轮询运行中作业…</span>' : '所有作业已到终态。';
+}
+
+const titles = {datasets:'数据集',catalog:'数据目录',pipelines:'数据管线',create:'创建作业',account:'我的账户'};
+function go(v){
+  document.querySelectorAll('[data-view]').forEach(s=>s.classList.toggle('active', s.dataset.view===v));
+  document.querySelectorAll('[data-nav]').forEach(a=>a.setAttribute('aria-current', a.dataset.nav===v?'page':'false'));
+  document.getElementById('pageTitle').textContent = titles[v];
+  document.getElementById('umenu').classList.add('hidden'); window.scrollTo(0,0);
+}
+function enterApp(){ document.getElementById('login').style.display='none'; document.getElementById('app').classList.remove('hidden'); renderDs();renderCat();renderJobs();
+  document.querySelectorAll('[data-open="1"] .chev').forEach(c=>c.style.transform='rotate(90deg)'); go('datasets'); }
+function logout(){ document.getElementById('app').classList.add('hidden'); document.getElementById('login').style.display='grid'; document.getElementById('umenu').classList.add('hidden'); }
+function loginTab(t){ const e=t==='email'; document.getElementById('tab-email').setAttribute('aria-selected',e); document.getElementById('tab-phone').setAttribute('aria-selected',!e);
+  document.getElementById('tab-email').className='flex-1 py-2 rounded-lg '+(e?'bg-white shadow-sm font-medium':'text-slate-500');
+  document.getElementById('tab-phone').className='flex-1 py-2 rounded-lg '+(!e?'bg-white shadow-sm font-medium':'text-slate-500');
+  document.getElementById('lg-label').textContent=e?'邮箱地址':'手机号'; document.getElementById('lg-id').placeholder=e?'you@company.com':'138 0000 0000'; }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),2600); }
+
+function toggleSidebar(){ const sb=document.getElementById('sidebar'); const c=sb.classList.toggle('collapsed');
+  document.getElementById('collapseIcon').innerHTML = c
+    ? '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="M10 9l2 3-2 3"/>'
+    : '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M14 9l-2 3 2 3"/>'; }
+
+// 上传弹窗
+function openUpload(){ document.getElementById('upModal').classList.remove('hidden'); document.getElementById('upProgress').classList.add('hidden'); }
+function closeUpload(){ document.getElementById('upModal').classList.add('hidden'); }
+function pickFile(){
+  const box=document.getElementById('upProgress'); box.classList.remove('hidden'); document.getElementById('upDone').classList.add('hidden');
+  const bar=document.getElementById('upBar'), pct=document.getElementById('upPct');
+  const stepOn=(id,done)=>{const el=document.getElementById(id); el.className='flex items-center gap-1.5 '+(done?'text-emerald-600':'text-brand font-medium'); el.querySelector('.step').className='step h-4 w-4 rounded-full grid place-items-center text-[9px] '+(done?'bg-emerald-500 text-white border border-emerald-500':'border border-brand text-brand');};
+  bar.style.width='0%'; pct.textContent='0%'; ['st1','st2','st3'].forEach(i=>{document.getElementById(i).className='flex items-center gap-1.5 text-slate-400';document.getElementById(i).querySelector('.step').className='step h-4 w-4 rounded-full border grid place-items-center text-[9px]';});
+  stepOn('st1',false);
+  setTimeout(()=>{ stepOn('st1',true); stepOn('st2',false);
+    let p=0; const iv=setInterval(()=>{ p+=Math.random()*16+6; if(p>=100){p=100;clearInterval(iv);
+      bar.style.width='100%';pct.textContent='100%'; stepOn('st2',true); stepOn('st3',false);
+      setTimeout(()=>{ stepOn('st3',true); document.getElementById('upDone').classList.remove('hidden');
+        const nm=document.getElementById('up-name').value||'cc3m';
+        if(!datasets.find(d=>d.name===nm)) datasets.unshift({name:nm,desc:'原始上传',modality:'-',tags:0,fmt:'原始',samples:'-',size:'1.2 GB',by:'韩工'});
+        renderDs();
+      },700);
+    } else { bar.style.width=p+'%'; pct.textContent=Math.floor(p)+'% · 分片 '+Math.min(8,Math.ceil(p/13))+'/8'; } },280);
+  },650);
+}
+
+function submitJob(){
+  jobs.unshift({id:'job-'+Math.random().toString(16).slice(2,8), ds:document.getElementById('cr-src').value.split(' ')[0], status:'queued', rio:'— / —', at:'刚刚'});
+  toast('作业已提交 · 202 Accepted'); go('pipelines'); renderJobs();
+  setTimeout(()=>{ jobs[0].status='running'; renderJobs(); },1200);
+  setTimeout(()=>{ jobs[0].status='succeeded'; jobs[0].rio='2.41M / 2.74M'; renderJobs(); toast('作业 '+jobs[0].id+' 完成'); },4200);
+}
+document.addEventListener('click',e=>{ if(!e.target.closest('#umenu')&&!e.target.closest('[onclick*="umenu"]')) document.getElementById('umenu').classList.add('hidden'); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeUpload(); });
+</script>
+</body>
+</html>
