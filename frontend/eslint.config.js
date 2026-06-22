@@ -26,4 +26,11 @@ export default defineConfig([
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
+  {
+    // e2e + playwright 配置:跑在 node 下(execSync / process.env / import.meta),用 node 全局
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ])

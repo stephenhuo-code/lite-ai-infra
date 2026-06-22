@@ -477,7 +477,7 @@ export async function pollJob(id: string, opts: { intervalMs?: number } = {}) {
 
 **Files:** Create `frontend/e2e/{playwright.config.ts,session.ts,core-flow.spec.ts}`、`frontend/scripts/mint-session.py`;Modify Makefile(`fe-e2e` 已加)。
 
-- [ ] **Step 1: 会话注入脚本 `frontend/scripts/mint-session.py`(复用 Plan 6 SessionCodec,browserless 造 cookie)**
+- [x] **Step 1: 会话注入脚本 `frontend/scripts/mint-session.py`(复用 Plan 6 SessionCodec,browserless 造 cookie)**
 
 ```python
 """browserless 造 BFF 会话 cookie,供 Playwright 注入(复用 Plan 6 SessionCodec,免在浏览器走 OIDC)。
@@ -495,7 +495,7 @@ key = os.environ["BFF_SESSION_KEY"].encode()
 print(json.dumps({"cookie": SESSION_COOKIE, "session": SessionCodec(key).encode(sd), "csrf": "csrf-e2e"}))
 ```
 
-- [ ] **Step 2: Playwright 配置 + 会话注入 `frontend/e2e/session.ts`**
+- [x] **Step 2: Playwright 配置 + 会话注入 `frontend/e2e/session.ts`**(注:config 落在 `frontend/playwright.config.ts`,testDir `e2e`)
 
 ```ts
 import { execSync } from 'node:child_process'
@@ -506,7 +506,7 @@ export function mintSession() {
 ```
 `frontend/e2e/playwright.config.ts`:baseURL `http://localhost:8090`(gateway serve dist,同源真拓扑),webServer 可选。
 
-- [ ] **Step 3: 核心流 e2e `frontend/e2e/core-flow.spec.ts`**
+- [x] **Step 3: 核心流 e2e `frontend/e2e/core-flow.spec.ts`**(断言改用 role/唯一文案避 strict-mode 多匹配)
 
 ```ts
 import { test, expect } from '@playwright/test'
@@ -528,45 +528,71 @@ test('数据域核心流:注入会话→看数据集→数据目录→数据管�
 })
 ```
 
-- [ ] **Step 4: 跑 e2e(真 BFF + serve dist)**
+- [x] **Step 4: 跑 e2e(真 BFF + serve dist)** —— 活体跑通:真 Chromium + 真 KC token 注入 → `1 passed`
 
 Run:`make dev-up` → `make fe-build`(出 dist)→ 起 gateway `make run-gateway`(serve dist,:8090)→ `cd frontend && npx playwright install --with-deps chromium && make fe-e2e`(从仓库根 `make fe-e2e`)。
 Expected: 核心流 spec PASS(真浏览器、真 BFF 会话、经 gateway 同源调真服务)。
 
-- [ ] **Step 5: 全绿门禁 + 手动验收 runbook(owner 可读,step-by-step;宪法 §3.4/ADR-015)**
+- [x] **Step 5: 全绿门禁 + 手动验收 runbook(owner 可读,step-by-step;宪法 §3.4/ADR-015)**
 
 Run: `make fe-types && make fe-build && make fe-lint && make fe-test && uv run pytest -q`(前端构建/lint/单元 + 后端 static 测试全绿)。
 
 #### 手动验收 runbook(照着一步步跑;这是**有界面**的 plan,你能亲自点)
 
 > 验的是:登录后能在浏览器里点着用数据域(看数据集/目录、上传、建作业跟踪、看账户)。
+> 每步一条命令 + “该看到什么”大白话。前置:Docker 已起。
 
-**第 1 步 · 起后端 + 前端(真拓扑)**
+**第 1 步 · 起依赖(MinIO/Keycloak/Gravitino)**
 ```bash
-make dev-up                  # 起 MinIO/Keycloak/Gravitino
-make fe-build                # 前端构建出 dist
-make run-gateway             # 起 BFF(:8090,serve dist + 反代)
+make dev-up
 ```
-**该看到**:三条都无报错;浏览器开 `http://localhost:8090` 能出页面。
+**该看到**:`docker compose ... Started`,无报错。`docker ps` 能看到 keycloak / minio / gravitino 容器在跑。
 
-**第 2 步 · 登录(US1)**:浏览器开 `http://localhost:8090/datasets`。
-**该看到**:未登录被带到登录页;用 dev 账号(alice/alice)登录后回到控制台,右上显示企业名。
+**第 2 步 · 起后端三服务(identity / metadata / data-pipeline)**
+```bash
+make up        # 一键起依赖容器 + 全部服务进程(含 :8001/:8002/:8003);已起过可跳
+```
+**该看到**:`scripts/dev_services.sh up` 把三服务拉起;`make ps` 三个都 RUNNING。
 
-**第 3 步 · 看数据集 + 上传(US1/US2)**:左栏点「数据集」→ 看列表;点「上传数据集」→ 选个小文件 → 看进度 → 完成。
-**该看到**:列表只含你有权的数据(名称/格式/样本数/大小/创建人,缺的显"—");上传完出现在列表。
+**第 3 步 · 前端构建出 dist**
+```bash
+make fe-build
+```
+**该看到**:末尾 `✓ built in ...`,生成 `frontend/dist/index.html`、`frontend/dist/assets/*`。
 
-**第 4 步 · 数据目录(US3)**:左栏点「数据目录」→ 展开左侧树 → 点一个 schema。
-**该看到**:树能展开/折叠(企业→catalog→schema→数据集);右侧出该 schema 下的数据资产 + 概览。
+**第 4 步 · 起 gateway / BFF(serve dist,:8090)**
+```bash
+make run-gateway      # 从仓库根跑;默认 FRONTEND_DIST=frontend/dist,同源 serve 前端 + 反代下游
+```
+**该看到**:uvicorn `Application startup complete`,监听 `:8090`。浏览器开 `http://localhost:8090/datasets` 不是 404(出页面或被带去登录)。
 
-**第 5 步 · 建作业 + 跟踪 / 排障(US4/US5)**:点「创建作业」填表提交 → 跳「数据管线」看它跑;再按「失败」筛选看失败作业详情。
+**第 5 步 · 登录(US1)**:浏览器开 `http://localhost:8090/datasets`。
+**该看到**:未登录被带到 Keycloak 登录页;用 dev 账号 **alice / alice** 登录后回到控制台,左侧出现侧栏(数据集 / 数据目录 / 数据管线 / 创建作业 / 我的账户),右上角有「登出」按钮。
+> 注:顶栏**不显示企业名**(后端无 enterprise_name 字段,前端诚实不假装——见 Shell.tsx 注释)。
+
+**第 6 步 · 看数据集 + 上传(US1/US2)**:左栏点「数据集」→ 看列表;点「上传数据集」按钮 → 选个小文件 → 看进度 → 完成。
+**该看到**:列表只含你有权的数据(名称 / 格式 / 样本数 / 大小 / 创建人,缺的显 “—”);上传完该数据集出现在列表。
+
+**第 7 步 · 数据目录(US3)**:左栏点「数据目录」→ 展开左侧树 → 点一个 schema。
+**该看到**:树能展开 / 折叠(企业 → catalog → schema → 数据集);右侧出该 schema 下的数据资产 + 概览。
+
+**第 8 步 · 建作业 + 跟踪 / 排障(US4/US5)**:点「创建作业」填表提交 → 自动跳「数据管线」看它跑;再按「失败」筛选看失败作业详情。
 **该看到**:提交后作业出现在列表,状态自动变到终态(不用手刷);失败的能筛出来、详情有失败原因。
 
-**第 6 步 · 账户 + 登出(US6/US1)**:点「我的账户」看身份;点「登出」。
-**该看到**:显示用户/企业/用户组/角色(无 e-/g- 内部 ID);登出后回登录态。
+**第 9 步 · 账户 + 登出(US6/US1)**:点「我的账户」看身份;点右上「登出」。
+**该看到**:显示用户 / 角色 / 用户组(企业·组显示名诚实占位 “待后端补充”,**无 e-/g- 内部 ID**);点登出后回到未登录态(再开 /datasets 又被带去登录页)。
 
-**一句话验收**:浏览器里能登录、点着走完 数据集/上传/目录/作业/账户 → **出口⑤ 通过**。
+**第 10 步(可选)· 自动化 e2e 复跑(真浏览器 + 真 BFF,免手点)**
+```bash
+# 上面第 1~4 步的栈还活着即可。装浏览器(只需一次)后跑:
+cd frontend && npx playwright install chromium && make -C .. fe-e2e
+```
+**该看到**:`1 passed` —— Playwright 真 Chromium 注入 browserless 会话(`scripts/mint-session.py` 用真 KC token + Plan6 `SessionCodec` 造 cookie),走 数据集 → 数据目录 → 数据管线 → 我的账户 全绿。
+> gateway 没设 `FRONTEND_DIST` 时(只跑 BFF 不 serve dist)e2e 会因 /datasets 404 失败;`make run-gateway` 默认已带 dist。也可 `E2E_BASE_URL=http://localhost:<port>` 指向另一端口的 dist-serving gateway。
 
-- [ ] **Step 6: Commit** → `git add -A && git commit -m "test(frontend): Playwright 真浏览器 e2e + 全绿门禁 + owner runbook (出口⑤) (Plan 8b)"`
+**一句话验收**:浏览器里能登录、点着走完 数据集 / 上传 / 目录 / 作业 / 账户(或 `make fe-e2e` 一把过)→ **出口⑤ 通过**。
+
+- [x] **Step 6: Commit** → `git add -A && git commit -m "test(frontend): Playwright 真浏览器 e2e + 全绿门禁 + owner runbook + 清死文件 (出口⑤) (Plan 8b Task7)"`
 
 ---
 

@@ -14,5 +14,6 @@ export default defineConfig({
       '/v1': { target: 'http://localhost:8090', changeOrigin: false },
     },
   },
-  test: { environment: 'jsdom', globals: true },
+  // e2e/ 是 Playwright(真浏览器),不归 vitest;vitest 默认会抓 *.spec.ts,故显式排除
+  test: { environment: 'jsdom', globals: true, exclude: ['node_modules', 'dist', 'e2e'] },
 })
