@@ -191,3 +191,27 @@ def test_existing_dataset_projection_has_null_three_fields():
     g = c.get("/v1/catalogs/data/schemas/datasets/datasets/cc3m",
               headers=_h("u-alice", ["/e-0001/g-0001/members"])).json()
     assert g["format"] is None and g["num_samples"] is None and g["size_bytes"] is None
+
+
+def test_register_zero_counts_roundtrip_as_zero_not_null():
+    # num_samples/size_bytes = 0 是合法值(minimum:0),必须按 0 存取回,不能被当 falsy 折成 null
+    c = _client()
+    r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
+               headers=_h("u-alice", ["/e-0001/g-0001/members"]),
+               json={"name": "empty_ds", "group_id": "g-0001",
+                     "location": "s3a://b/e-0001/g-0001/processed/empty_ds.lance",
+                     "num_samples": 0, "size_bytes": 0})
+    assert r.status_code == 201
+    g = c.get("/v1/catalogs/data/schemas/datasets/datasets/empty_ds",
+              headers=_h("u-alice", ["/e-0001/g-0001/members"])).json()
+    assert g["num_samples"] == 0 and g["size_bytes"] == 0
+
+
+def test_projection_tolerates_non_numeric_stored_property_no_500():
+    # 带外/手改进 Gravitino 的坏值(非数字)→ 读投影降级为 None,绝不崩 500(FR-008 读路径 null-safe)
+    from services.metadata_service.app import _dataset
+    fs = {"name": "weird", "storageLocation": "s3a://b/x.lance",
+          "properties": {"owner_group": "g-0001", "owner_user": "u-alice", "scope": "private",
+                         "num_samples": "abc", "size_bytes": "12.5"}, "audit": {}}
+    d = _dataset("e-0001", fs)
+    assert d["num_samples"] is None and d["size_bytes"] is None

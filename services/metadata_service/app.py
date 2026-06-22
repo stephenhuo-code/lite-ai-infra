@@ -38,7 +38,14 @@ def _dataset(ent: str, fs: dict) -> dict:
     p, a = fs.get("properties", {}), fs.get("audit", {})
 
     def _int(v):
-        return int(v) if v not in (None, "") else None
+        # 整数 property 以字符串存。缺失/空 → None;非数字(带外手改/未来写入方)→ None,
+        # 不让一条坏 property 把读投影崩成 500(FR-008 读路径 null-safe)。
+        if v in (None, ""):
+            return None
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
 
     return {"name": fs["name"], "enterprise_id": ent, "group_id": p.get("owner_group"),
             "owner": p.get("owner_user"), "scope": p.get("scope", "private"),
