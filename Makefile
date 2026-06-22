@@ -1,4 +1,4 @@
-.PHONY: test test-integration lint contract-check dev-up dev-down sync gen up down ps api-docs api-docs-down dj-setup
+.PHONY: test test-integration lint contract-check dev-up dev-down sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e
 sync:             ; uv sync --extra dev
 # dev/prod parity:建独立 .dj-venv(同云上 Data-Juicer+Ray);本地真跑数据管线前先 `make dj-setup` 一次
 dj-setup:         ; bash scripts/dj_setup.sh
@@ -23,3 +23,10 @@ run-identity:     ; LITEAI_JWKS_URL=$(JWKS) uv run uvicorn services.identity_org
 run-metadata:     ; LITEAI_JWKS_URL=$(JWKS) GRAVITINO_URL=http://localhost:8091 uv run uvicorn services.metadata_service.main:app --port 8002 --reload
 run-gateway:      ; IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 DATA_PIPELINE_URL=http://localhost:8003 LITEAI_JWKS_URL=$(JWKS) BFF_SESSION_KEY=5SetoEInIYji6K_tuQEB8pJ8NCaoC5yi2vNAxtPi7gg= OIDC_CLIENT_ID=lite-ai-web OIDC_CLIENT_SECRET=dev-web-secret OIDC_ISSUER=http://localhost:8080/realms/lite-ai BFF_REDIRECT_URI=http://localhost:8090/auth/callback uv run uvicorn services.gateway.main:app --port 8090 --reload
 run-data-pipeline: ; LITEAI_JWKS_URL=$(JWKS) JOBS_DIR=./.dev/jobs OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 OSS_REGION=us-east-1 DATA_BUCKET=lite-ai AUDIT_BUCKET=lite-ai DJ_BIN=$(PWD)/.dj-venv/bin/dj-process uv run uvicorn services.data_pipeline_service.main:app --port 8003 --reload
+# 数据域控制台前端(Plan 8b):node 工具链隔离在 frontend/
+fe-install: ; cd frontend && npm install
+fe-types:   ; cd frontend && npx openapi-typescript ../contracts/openapi/metadata.yaml -o src/api/types-metadata.ts && npx openapi-typescript ../contracts/openapi/data-pipeline.yaml -o src/api/types-datapipeline.ts && npx openapi-typescript ../contracts/openapi/identity-org.yaml -o src/api/types-identity.ts
+fe-build:   ; cd frontend && npm run build
+fe-lint:    ; cd frontend && npm run lint
+fe-test:    ; cd frontend && npx vitest run
+fe-e2e:     ; cd frontend && npx playwright test
