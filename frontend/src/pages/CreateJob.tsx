@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { createJob } from '../api/jobs'
 import type { PrepareJobRequest } from '../api/jobs'
+import { listDatasets } from '../api/datasets'
+import type { Dataset } from '../api/datasets'
 
 // 创建作业页(US4 提交)。
-// 源 = 数据位置(tar_dir,运维预置;S1 过渡形态,不从已上传数据集挑——那是 S2a,见 spec)。
-// 表单:源(tar_dir 文本) + 产出数据集名 + group_id + 并行度(np) + 算子(可选 chips)。
+// 源 = 已注册的 raw 数据集(catalog-driven · ADR-023):挂载拉 listDatasets()→
+// 过滤 kind==='raw'→ 下拉选 source_dataset;提交 source_dataset(不再传 tar_dir)。
+// 表单:源数据集(下拉) + 产出数据集名 + group_id + 并行度(np) + 算子(可选 chips)。
 // → createJob → 202 提示 → 跳 /pipelines。
 // 视觉照高保真原型 2026-06-22-data-domain-hifi.html 创建作业段(靛蓝 #6366F1)。
 
@@ -17,7 +20,8 @@ const OPERATORS = ['去重', '语言过滤', '低质过滤', 'PII 脱敏', '分�
 
 export function CreateJob() {
   const navigate = useNavigate()
-  const [tarDir, setTarDir] = useState('')
+  const [source, setSource] = useState('')
+  const [sources, setSources] = useState<Dataset[]>([])
   const [dataset, setDataset] = useState('')
   const [groupId, setGroupId] = useState('')
   const [np, setNp] = useState('')
@@ -26,10 +30,18 @@ export function CreateJob() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  // 挂载拉数据集列表,过滤 kind==='raw' 作为可选源(catalog-driven · ADR-023)。
+  // 用 .then(setState) 回调形态(非 effect 内同步 setState),对齐 Datasets/Pipelines 写法。
+  useEffect(() => {
+    listDatasets()
+      .then(res => setSources((res.datasets ?? []).filter(d => d.kind === 'raw')))
+      .catch(() => setSources([]))
+  }, [])
+
   const toggleOp = (op: string) =>
     setOps(prev => (prev.includes(op) ? prev.filter(o => o !== op) : [...prev, op]))
 
-  const canSubmit = tarDir.trim() && dataset.trim() && groupId.trim() && !submitting
+  const canSubmit = source.trim() && dataset.trim() && groupId.trim() && !submitting
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,7 +56,7 @@ export function CreateJob() {
     createJob({
       dataset: dataset.trim(),
       group_id: groupId.trim(),
-      tar_dir: tarDir.trim(),
+      source_dataset: source,
       np: np.trim() ? Number(np) : undefined,
       process,
     })
@@ -64,19 +76,23 @@ export function CreateJob() {
   return (
     <div className="max-w-2xl">
       <form onSubmit={submit} className="bg-white border border-slate-200/70 rounded-2xl p-6 shadow-sm space-y-5">
-        {/* 源 = 数据位置(tar_dir,运维预置)——S1 不从数据集下拉选源 */}
+        {/* 源 = 已注册的 raw 数据集(catalog-driven · ADR-023)——只列 kind=raw */}
         <div>
-          <label htmlFor="tar_dir" className="block text-sm font-medium text-slate-700 mb-1.5">
-            源数据位置(tar_dir)
+          <label htmlFor="source_dataset" className="block text-sm font-medium text-slate-700 mb-1.5">
+            源数据集
           </label>
-          <input
-            id="tar_dir"
-            value={tarDir}
-            onChange={e => setTarDir(e.target.value)}
-            placeholder="oss://bucket/path/to/tars 或运维预置路径"
+          <select
+            id="source_dataset"
+            value={source}
+            onChange={e => setSource(e.target.value)}
             className={inputCls}
-          />
-          <p className="text-xs text-slate-400 mt-1">运维预置的原始数据位置;S1 暂以路径填写。</p>
+          >
+            <option value="">请选择源数据集…</option>
+            {sources.map(d => (
+              <option key={d.name} value={d.name}>{d.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-400 mt-1">仅列出已注册到目录的原始(raw)数据集。</p>
         </div>
 
         <div>

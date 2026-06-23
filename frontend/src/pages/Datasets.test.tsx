@@ -2,6 +2,9 @@ import { it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { Datasets } from './Datasets'
 
+// 记录最后一次 catalog POST(注册)的请求体,供断言。
+let lastRegisterBody: any = null
+
 // 数据集页:列表 = metadata 已处理数据集 + Plan7 原始数据合并。
 // 列 = 名称/描述/格式/样本数/大小/创建人/操作。缺值显「—」不报错(FR-008)。
 // 禁出现 模态/标签/用户组 表头(FR-012 + 组织模型)。搜索按名称过滤。
@@ -9,22 +12,32 @@ beforeEach(() => { vi.restoreAllMocks() })
 afterEach(() => { vi.restoreAllMocks() })
 
 function mockApis() {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any) => {
+  lastRegisterBody = null
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init?: any) => {
     const u = String(url)
+    if (u === '/v1/catalogs/data/schemas/datasets/datasets' && init?.method === 'POST') {
+      lastRegisterBody = JSON.parse(init.body)
+      return new Response(JSON.stringify({
+        name: lastRegisterBody.name, enterprise_id: 'e-1', group_id: lastRegisterBody.group_id,
+        scope: 'private', location: 'oss://e/g/raw', kind: 'raw',
+      }), { status: 201 })
+    }
     if (u === '/v1/catalogs/data/schemas/datasets/datasets') {
       return new Response(JSON.stringify({
         datasets: [
-          // 一条含 format/num_samples/size_bytes/created_by
+          // 已处理:含 kind=processed + derived_from(血缘)
           {
             name: 'cc3m-clean', enterprise_id: 'e-1', group_id: 'g-1', scope: 'private',
             location: 'lance://x', comment: '清洗后', created_by: '韩工',
             format: 'lance', num_samples: 3300000, size_bytes: 1288490188,
+            kind: 'processed', derived_from: 'cc3m-raw',
           },
-          // 一条 num_samples=null(缺值显 —)
+          // 已处理 + num_samples=null(缺值显 —)
           {
             name: 'docs-partial', enterprise_id: 'e-1', group_id: 'g-1', scope: 'private',
             location: 'lance://y', comment: null, created_by: null,
             format: 'parquet', num_samples: null, size_bytes: null,
+            kind: 'processed', derived_from: null,
           },
         ],
       }), { status: 200 })
@@ -105,6 +118,51 @@ it('原始数据详情抽屉显状态字段', async () => {
   const panel = drawer.closest('div.relative')! as HTMLElement
   expect(within(panel).getByText('状态')).toBeTruthy()
   expect(within(panel).getByText('就绪')).toBeTruthy() // status=ready
+})
+
+it('列表渲染 kind 中文(已处理);已处理详情显血缘来源 derived_from', async () => {
+  mockApis()
+  render(<Datasets />)
+  await waitFor(() => expect(screen.getByText('cc3m-clean')).toBeTruthy())
+
+  // 列表「类型」列:已处理项显「已处理」、原始上传项显「原始」
+  const procRow = screen.getByText('cc3m-clean').closest('tr')!
+  expect(within(procRow).getByText('已处理')).toBeTruthy()
+  const rawRow = screen.getByText('docs-pdf').closest('tr')!
+  expect(within(rawRow).getAllByText('原始').length).toBeGreaterThan(0)
+
+  // 详情抽屉:已处理项显「来源」+ derived_from 值
+  fireEvent.click(within(procRow).getByText('详情'))
+  const drawer = await screen.findByText('数据集详情')
+  const panel = drawer.closest('div.relative')! as HTMLElement
+  expect(within(panel).getByText('来源')).toBeTruthy()
+  expect(within(panel).getByText('cc3m-raw')).toBeTruthy()
+  expect(within(panel).getByText('已处理')).toBeTruthy() // 类型字段
+})
+
+it('原始上传项(ready,未在 catalog)点「注册到目录」→ POST body kind=raw 且无 location', async () => {
+  mockApis()
+  render(<Datasets />)
+  await waitFor(() => expect(screen.getByText('docs-pdf')).toBeTruthy())
+
+  const rawRow = screen.getByText('docs-pdf').closest('tr')!
+  fireEvent.click(within(rawRow).getByText('注册到目录'))
+
+  await waitFor(() => expect(lastRegisterBody).not.toBeNull())
+  expect(lastRegisterBody.name).toBe('docs-pdf')
+  expect(lastRegisterBody.kind).toBe('raw')
+  expect(lastRegisterBody.group_id).toBe('g-1')
+  // raw 注册不带 location(服务端钉死)
+  expect(lastRegisterBody.location ?? null).toBeNull()
+})
+
+it('已处理数据集不显「注册到目录」(只有原始上传 ready 项可注册)', async () => {
+  mockApis()
+  render(<Datasets />)
+  await waitFor(() => expect(screen.getByText('cc3m-clean')).toBeTruthy())
+
+  const procRow = screen.getByText('cc3m-clean').closest('tr')!
+  expect(within(procRow).queryByText('注册到目录')).toBeNull()
 })
 
 it('搜索框按名称过滤', async () => {

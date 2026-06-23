@@ -241,6 +241,8 @@ export interface components {
             format?: string | null;
             num_samples?: number | null;
             size_bytes?: number | null;
+            kind?: string | null;
+            derived_from?: string | null;
         };
         DatasetList: {
             datasets?: components["schemas"]["Dataset"][];
@@ -248,7 +250,10 @@ export interface components {
         RegisterDataset: {
             name: string;
             group_id: string;
-            location: string;
+            /** @enum {string} */
+            kind: "raw" | "processed";
+            location?: string | null;
+            derived_from?: string | null;
             /**
              * @default private
              * @enum {string}

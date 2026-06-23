@@ -3,7 +3,8 @@ import type { components } from './types-datapipeline'
 
 // 数据准备作业 API（契约 contracts/openapi/data-pipeline.yaml）。
 // Job: id/status/terminal/dataset/group_id/rows_in/rows_written/lance_uri/error。
-// JobList: {jobs,total}。PrepareJobRequest: {dataset,group_id,tar_dir,np?,process?}。
+// JobList: {jobs,total}。PrepareJobRequest: {dataset,group_id,source_dataset,np?,process?}
+// (catalog-driven:源=已注册的 raw 数据集名 source_dataset,tar_dir 已删 · ADR-023)。
 export type Job = components['schemas']['Job']
 export type JobList = components['schemas']['JobList']
 export type PrepareJobRequest = components['schemas']['PrepareJobRequest']
@@ -15,7 +16,7 @@ export const listJobs = (status?: string): Promise<JobList> =>
 // 作业详情。
 export const getJob = (id: string): Promise<Job> => api.get(`/v1/data/jobs/${id}`)
 
-// 提交准备作业（源=tar_dir，运维预置）→ 202 返回 job。
+// 提交准备作业（源=已注册 raw 数据集 source_dataset）→ 202 返回 job。
 export const createJob = (b: PrepareJobRequest): Promise<Job> => api.post('/v1/data/prepare', b)
 
 // 轮询至终态：按 `terminal` 字段判停（FR-007），不做状态串匹配。

@@ -77,6 +77,49 @@ it('succeeded 详情展示产物 lance_uri', async () => {
   await waitFor(() => expect(screen.getByText('lance://out/cc3m-ok')).toBeTruthy())
 })
 
+it('succeeded 详情「注册产物」→ POST body kind=processed/format=lance/location=lance_uri/num_samples=rows_written;样本数只读', async () => {
+  mockList()
+  vi.spyOn(jobsApi, 'getJob').mockResolvedValue(SUCCEEDED)
+  // registerDataset 走真实 api client(fetch);拦截 catalog POST 记录 body。
+  let registerBody: any = null
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init?: any) => {
+    const u = String(url)
+    if (u === '/v1/catalogs/data/schemas/datasets/datasets' && init?.method === 'POST') {
+      registerBody = JSON.parse(init.body)
+      return new Response(JSON.stringify({ name: registerBody.name, enterprise_id: 'e-1', group_id: registerBody.group_id, scope: 'private', location: registerBody.location, kind: 'processed' }), { status: 201 })
+    }
+    return new Response('', { status: 404 })
+  })
+
+  render(<Pipelines />)
+  await waitFor(() => expect(screen.getByText('cc3m-ok')).toBeTruthy())
+  fireEvent.click(screen.getByText('cc3m-ok').closest('tr')!)
+
+  // 样本数取自 job.rows_written(200)只读展示(非输入框)
+  await waitFor(() => expect(screen.getByText('样本数(取自作业,不可编辑)')).toBeTruthy())
+  const drawer = screen.getByText('作业详情').closest('div')!.parentElement!
+  expect(within(drawer).queryByRole('spinbutton')).toBeNull() // 无 number 输入框
+  expect(within(drawer).queryByRole('textbox')).toBeNull()    // 无文本输入框
+
+  fireEvent.click(screen.getByRole('button', { name: '注册产物' }))
+  await waitFor(() => expect(registerBody).not.toBeNull())
+  expect(registerBody.kind).toBe('processed')
+  expect(registerBody.format).toBe('lance')
+  expect(registerBody.location).toBe('lance://out/cc3m-ok') // = job.lance_uri
+  expect(registerBody.num_samples).toBe(200)                // = job.rows_written
+})
+
+it('succeeded 详情含二次处理占位(禁用,不给会失败入口 · US3-AC3)', async () => {
+  mockList()
+  vi.spyOn(jobsApi, 'getJob').mockResolvedValue(SUCCEEDED)
+  render(<Pipelines />)
+  await waitFor(() => expect(screen.getByText('cc3m-ok')).toBeTruthy())
+  fireEvent.click(screen.getByText('cc3m-ok').closest('tr')!)
+
+  const btn = await screen.findByText(/再处理/)
+  expect((btn as HTMLButtonElement).disabled).toBe(true)
+})
+
 it('运行中作业进详情走 pollJob 轮询至终态', async () => {
   mockList()
   // 首次 getJob 返回运行中(非终态)→ 触发 pollJob;pollJob 解析为终态(产物)。

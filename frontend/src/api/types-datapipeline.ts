@@ -318,7 +318,7 @@ export interface components {
         PrepareJobRequest: {
             dataset: string;
             group_id: string;
-            tar_dir: string;
+            source_dataset: string;
             np?: number | null;
             process?: Record<string, never>[] | null;
         };

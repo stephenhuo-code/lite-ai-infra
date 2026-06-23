@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listJobs, getJob, pollJob } from '../api/jobs'
 import type { Job } from '../api/jobs'
+import { registerDataset } from '../api/datasets'
 
 // 数据管线页(US4 跟踪 / US5 排障)。
 // 作业表:ID / 数据集 / 状态徽章 / 行数(出/入) / 创建。
@@ -53,6 +54,31 @@ function StatusBadge({ status }: { status: Job['status'] }) {
 function JobDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState('')
+  const [registering, setRegistering] = useState(false)
+  const [registerErr, setRegisterErr] = useState('')
+  const [registered, setRegistered] = useState(false)
+
+  // 注册产物到目录(succeeded 作业):kind=processed、format=lance、location=lance_uri、
+  // num_samples 取自 job.rows_written(只读自 job,UI 不可编辑,FR-010)。
+  // 血缘 derived_from:Job 契约暂无源数据集字段(无 source_dataset),
+  // vN+ 待 Job 补 source 字段后取真实来源;此处用产出名 job.dataset 占位。
+  const registerProduct = (j: Job) => {
+    setRegistering(true)
+    setRegisterErr('')
+    registerDataset({
+      name: j.dataset,
+      group_id: j.group_id,
+      kind: 'processed',
+      scope: 'private',
+      format: 'lance',
+      location: j.lance_uri ?? undefined,
+      derived_from: j.dataset, // vN+:Job 补 source 字段后改取真实来源
+      num_samples: j.rows_written ?? undefined, // 只读自 job(FR-010)
+    })
+      .then(() => setRegistered(true))
+      .catch((e: unknown) => setRegisterErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setRegistering(false))
+  }
 
   useEffect(() => {
     let alive = true
@@ -112,13 +138,43 @@ function JobDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 <dd className="text-slate-700">{fmtDate(job.created_at)}</dd>
               </dl>
 
-              {/* 终态成功:展示产物 lance_uri */}
+              {/* 终态成功:展示产物 lance_uri + 注册产物到目录 */}
               {job.terminal && job.status === 'succeeded' && (
                 <div>
                   <p className="text-slate-500 mb-1.5">产物(Lance URI)</p>
                   <code className="block bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 break-all">
                     {dash(job.lance_uri)}
                   </code>
+
+                  {/* 注册产物:kind=processed、location=lance_uri、num_samples 只读自 job(FR-010) */}
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-slate-500">样本数(取自作业,不可编辑)</span>
+                      <span className="text-slate-700 font-medium">{fmtNum(job.rows_written)}</span>
+                    </div>
+                    {registered ? (
+                      <p className="text-emerald-600 text-xs mt-2">已注册到目录。</p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => registerProduct(job)}
+                        disabled={registering || !job.lance_uri}
+                        className="mt-2 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
+                        style={{ background: BRAND }}
+                      >{registering ? '注册中…' : '注册产物'}</button>
+                    )}
+                    {registerErr && <p className="text-red-500 text-xs mt-2">注册失败:{registerErr}</p>}
+                  </div>
+
+                  {/* 二次处理:US3-AC3 v1 不提供 → 诚实占位(禁用态),不给会失败的按钮 */}
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      disabled
+                      title="二次处理暂未提供(v-next)"
+                      className="text-sm font-medium px-4 py-2 rounded-xl border border-slate-200 text-slate-400 cursor-not-allowed"
+                    >再处理(暂未提供 · v-next)</button>
+                  </div>
                 </div>
               )}
 
