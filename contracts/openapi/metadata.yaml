@@ -58,16 +58,20 @@ components:
         format: {type: [string, 'null']}          # Lance / 原始 / parquet…
         num_samples: {type: [integer, 'null']}    # 样本数(行数)
         size_bytes: {type: [integer, 'null']}     # 占用字节
+        kind: {type: [string, 'null']}            # raw | processed(缺失=未知,前端显未知)
+        derived_from: {type: [string, 'null']}    # 来源数据集名(processed 的单跳血缘)
     DatasetList:
       type: object
       properties: {datasets: {type: array, items: {$ref: '#/components/schemas/Dataset'}}}
     RegisterDataset:
       type: object
-      required: [name, group_id, location]
+      required: [name, group_id, kind]
       properties:
         name: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
         group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
-        location: {type: string}
+        kind: {type: string, enum: [raw, processed]}   # raw: 服务端钉死 location;processed: 校验 caller 前缀
+        location: {type: [string, 'null']}             # raw 省略(服务端钉死);processed 须落 caller 前缀
+        derived_from: {type: [string, 'null']}         # processed 的来源数据集名(单跳血缘)
         scope: {type: string, enum: [private, shared], default: private}
         comment: {type: [string, 'null']}
         format: {type: [string, 'null']}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -53,7 +55,9 @@ def _dataset(ent: str, fs: dict) -> dict:
             "created_at": a.get("createTime"), "created_by": a.get("creator"),
             "format": p.get("format") or None,
             "num_samples": _int(p.get("num_samples")),
-            "size_bytes": _int(p.get("size_bytes"))}
+            "size_bytes": _int(p.get("size_bytes")),
+            "kind": p.get("kind"),               # raw|processed;缺失=None(前端显未知)
+            "derived_from": p.get("derived_from")}
 
 
 def build_app(gravitino):
@@ -112,15 +116,30 @@ def build_app(gravitino):
         d = can(ctx, "dataset.register", res)
         if not d.allow:
             return JSONResponse(status_code=403, content={"reason": d.reason})
-        props = {"owner_group": body.group_id, "owner_user": ctx.user, "scope": scope}
-        if body.format is not None:
-            props["format"] = body.format
+        from pipelines.data_prep.paths import DatasetPaths
+        bucket = os.environ["DATA_BUCKET"]
+        kind = getattr(body.kind, "value", body.kind)
+        paths = DatasetPaths(bucket=bucket, enterprise_id=EnterpriseId(ent),
+                             group_id=GroupId(body.group_id), dataset=body.name)
+        if kind == "raw":
+            location = f"s3://{bucket}/{paths.raw_prefix}"          # 服务端钉死(eid/gid from ctx)
+            fmt = "webdataset"
+        else:  # processed:校验给定 location 必须落在 caller(eid/gid from ctx)的 processed/ 前缀内
+            location = body.location or ""
+            allowed = f"s3://{bucket}/{paths._base}/processed/"
+            if not location.startswith(allowed):
+                return JSONResponse(status_code=403, content={"reason": "location outside caller prefix"})
+            fmt = body.format or "lance"
+        props = {"owner_group": body.group_id, "owner_user": ctx.user, "scope": scope,
+                 "kind": kind, "format": fmt}
+        if body.derived_from:
+            props["derived_from"] = body.derived_from
         if body.num_samples is not None:
             props["num_samples"] = str(body.num_samples)
         if body.size_bytes is not None:
             props["size_bytes"] = str(body.size_bytes)
         try:
-            fs = gravitino.create_fileset(ml, catalog, schema, body.name, body.location,
+            fs = gravitino.create_fileset(ml, catalog, schema, body.name, location,
                                           comment=body.comment or "", properties=props)
         except GravitinoError as e:
             if _is_conflict(e):            # 已存在 → 409 Conflict(不逃逸成 500)
