@@ -424,24 +424,27 @@ git commit -m "feat(frontend): 注册按钮(raw/processed)+ CreateJob 源下拉 
   - 跑:`make up`(等 ~40 秒)
   - 跑:`make bootstrap-catalog`
   - 应看到:`bootstrapped e_0001/data/datasets`。
-- [ ] **2. 造数据并上传到对象存储**
+- [ ] **2. 造夹具 tar(本地)**
   - 跑:`uv run --with datasets --with pillow python scripts/make_coco_smoke_tar.py`(产出 `./.smoke/coco-smoke.tar`;`datasets`/`pillow` 是夹具专用依赖,`--with` 临时带,不进项目 deps)
   - **国内网络连不上 HuggingFace** 时,前面加镜像:`HF_ENDPOINT=https://hf-mirror.com uv run --with datasets --with pillow python scripts/make_coco_smoke_tar.py`
-  - 跑:`docker run --rm --network dev_default -v "$PWD/.smoke:/d" --entrypoint sh minio/mc -c "mc alias set x http://minio:9000 minio minio123 && mc cp /d/coco-smoke.tar x/lite-ai/e-0001/g-0001/raw/coco/coco-smoke.tar"`
-  - 应看到:拷贝成功。
-- [ ] **3. 浏览器:注册原始数据集**
-  - `http://localhost:8090` 登录(alice/alice)→ 数据集页 → 对 `coco` 点「注册到目录」。
-  - 应看到:`coco` 作为**原始**数据集出现在数据目录,带来源/格式。
-- [ ] **4. 创建作业(从目录选源,不填路径)**
-  - 「创建作业」→ 源下拉选 **coco** → 产出名填 `coco-clean` → 组 `g-0001` → 提交。
+  - 应看到:`./.smoke/coco-smoke.tar` 生成。
+  - 注:**不再手工 `mc cp` 到固定路径**——owner 模型下数据落点 `e-0001/{你的用户}/raw/...` 由服务端按你的身份钉死,手工拷到 `g-0001` 路径反而对不上。改走下一步**网页上传**(这也是本轮修 422 的验证点)。
+- [ ] **3. 浏览器:上传原始数据集(验 422 已修)**
+  - `http://localhost:8090` 登录(alice/alice)→ 数据集页 →「上传数据集」→ 数据集名 `coco`、选 `./.smoke/coco-smoke.tar` → 上传。
+  - 应看到:**上传成功(不再 422)**,进度走完;数据落到 `e-0001/{你的用户 sub}/raw/coco/`(服务端钉死,你无需也无法指定路径)。
+- [ ] **4. 浏览器:注册原始数据集**
+  - 对刚上传的 `coco` 点「注册到目录」(不需要填组)。
+  - 应看到:`coco` 作为**原始**数据集出现在数据目录,**归属显示 owner=你(创建人)**、带格式;重复注册被拒。
+- [ ] **5. 创建作业(从目录选源,不填路径/不选组)**
+  - 「创建作业」→ 源下拉选 **coco** → 产出名填 `coco-clean` → 提交(**已无「组」字段**)。
   - 应看到:作业提交,跳数据管线页。
-- [ ] **5. 等作业成功**
+- [ ] **6. 等作业成功**
   - 数据管线页那条作业 处理中 → **成功**(几十秒)= **管线真的从目录解析到 coco 的 OSS 位置、读取并清洗、写回了 Lance**。
-- [ ] **6. 注册产物**
+- [ ] **7. 注册产物**
   - 作业详情点「注册产物」(样本数已自动填好,不用改)。
-  - 应看到:`coco-clean` 作为**已处理**数据集出现,**显示派生自 coco**。
-- [ ] **7. 看血缘 + 位置(可选)**
-  - 数据目录里 `coco`(原始)与 `coco-clean`(已处理,来源=coco)两条都在。
+  - 应看到:`coco-clean` 作为**已处理**数据集出现,**显示派生自 coco**、归属 owner=你。
+- [ ] **8. 看血缘 + 位置(可选)**
+  - 数据目录里 `coco`(原始)与 `coco-clean`(已处理,来源=coco)两条都在,两条归属都显示 owner=你。
 
 > 任何一步对不上贴输出给我。全过 = catalog-driven 全链路通(下载→上传→注册→管线从目录读→处理→注册派生)。
 
