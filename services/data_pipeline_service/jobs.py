@@ -10,10 +10,9 @@ _PUBLIC = ("rows_in", "rows_written", "lance_uri", "error")
 class JobSpec:
     job_id: str
     dataset: str
-    group_id: str
     enterprise_id: str
-    role: str            # 提交时调用者在该组的角色快照(worker 复检 can() 用)
-    sub: str
+    role: str            # 提交时调用者在企业的角色快照(worker 复检 can() 用;owner 模型按企业角色,非组角色)
+    sub: str             # owner(ADR-024):提交作业的用户(=owner);worker 重建 Context 用它
     source_location: str  # S2a catalog-driven:源 raw 数据集 OSS 前缀(submit 时带 bearer 经 metadata 解析;worker detached 无 bearer 故 submit 时定)
     np: int
     source_dataset: str | None = None   # 血缘:用户选的源 raw 数据集名(US3-AC1/SC-003);Job 投影暴露,前端注册产物 derived_from 取它(≠产出名 dataset)。旧 job 无则 None
@@ -69,7 +68,7 @@ class JobStore:
         sp = d / "spec.json"
         spec = json.loads(sp.read_text()) if sp.exists() else {}   # 损坏 job:spec 缺失仍可投影终态而非 500
         st = json.loads((d / "status.json").read_text())
-        return {"id": job_id, "dataset": spec.get("dataset"), "group_id": spec.get("group_id"),
+        return {"id": job_id, "dataset": spec.get("dataset"), "owner_user": spec.get("sub"),
                 "enterprise_id": spec.get("enterprise_id"),
                 "source_dataset": spec.get("source_dataset"),   # 血缘:旧 job/损坏 spec 无则 None(null-safe)
                 "status": st["status"],
@@ -78,9 +77,9 @@ class JobStore:
                 **{k: st.get(k) for k in _PUBLIC}}
 
     def list_jobs(self) -> list[dict]:
-        """**纯取数,不做授权**:遍历目录 → 对每个 job `read()` 投影(含 enterprise_id/group_id ——
+        """**纯取数,不做授权**:遍历目录 → 对每个 job `read()` 投影(含 enterprise_id/owner_user ——
         这两字段在 spec.json,`_all_status()` 只读 status.json 拿不到,故**必须用 read()**,否则
-        handler 无法 can() 按企业/组过滤 → 隔离失效)。按 created_at 倒序。授权/过滤在 handler。
+        handler 无法 can() 按企业/owner 过滤 → 隔离失效)。按 created_at 倒序。授权/过滤在 handler。
         I-2:spec.json 缺失的损坏 job,read() 投影出 enterprise_id=None,handler fail-closed 排除。
         登记:扫目录 O(n);作业量上千需索引(vN+;S2a 真 store 落地时换 DB 查询)。"""
         out: list[dict] = []

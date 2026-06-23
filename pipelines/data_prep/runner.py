@@ -24,7 +24,6 @@ class PrepareRequest:
     work_dir: str
     bucket: str
     enterprise_id: str
-    group_id: str
     dataset: str
     np: int
     oss_endpoint: str
@@ -33,7 +32,8 @@ class PrepareRequest:
     session_token: str | None = None
     region: str = "cn-hangzhou"
     process: list[dict] | None = None   # Layer 1 DJ 算子自定义;None → build_recipe 用默认集
-    source_location: str | None = None  # catalog-driven:OSS 前缀 s3://{bucket}/{eid}/{gid}/raw/{ds}/;给定则从 OSS 取(优先于 tar_dir),否则用本地 tar_dir(旧行为)
+    source_location: str | None = None  # catalog-driven:OSS 前缀 s3://{bucket}/{eid}/{user}/raw/{ds}/;给定则从 OSS 取(优先于 tar_dir),否则用本地 tar_dir(旧行为)
+    group_id: str | None = None   # owner 模型(ADR-024):授权不按组(can() 忽略),仅留作审计 label(可缺)
 
 def _run_dj(recipe_path: str, log_path: str) -> int:
     """DJ 经外部 venv 子进程(spike 教训:Ray 禁瞬态 uv 环境)。DJ_BIN 指 dj-process。
@@ -63,10 +63,11 @@ def _run_dj(recipe_path: str, log_path: str) -> int:
 
 def _audit(audit: AuditWriter, ctx: Context, req: PrepareRequest, action: str,
            decision: str, reason: str = "") -> None:
+    gid = GroupId(req.group_id) if req.group_id else None
     audit.write(AuditEvent(
         ts=datetime.now(timezone.utc).isoformat(), enterprise_id=req.enterprise_id,
         group_id=req.group_id, actor_user=ctx.user,
-        actor_role=ctx.role_in(EnterpriseId(req.enterprise_id), GroupId(req.group_id)) or "none",
+        actor_role=ctx.role_in(EnterpriseId(req.enterprise_id), gid) or "none",
         action=action, resource_uri=f"dataset/{req.dataset}", decision=decision,
         override=False, reason=reason, metadata={}))
 
@@ -74,15 +75,16 @@ def run_prepare(ctx: Context, req: PrepareRequest, audit: AuditWriter, *,
                 convert_fn=wds_to_jsonl, dj_fn=_run_dj, lance_fn=write_cleaned_to_lance,
                 fetch_fn=fetch_oss_tars, build_s3_fn=build_s3) -> dict:
     """一次数据准备:can() 唯一出入口 → 转换 → DJ(Ray)→ Lance on OSS → 审计。"""
+    # owner 模型(ADR-024):owner=提交用户;can() 按企业隔离 + owner 判,不按组
     resource = Resource(kind="dataset", enterprise_id=EnterpriseId(req.enterprise_id),
-                        group_id=GroupId(req.group_id))
+                        group_id=None, owner=ctx.user)
     d = can(ctx, "data.prepare", resource)
     _audit(audit, ctx, req, "data.prepare", "allow" if d.allow else "deny", d.reason)
     if not d.allow:
         raise PermissionError(d.reason)
 
     paths = DatasetPaths(bucket=req.bucket, enterprise_id=EnterpriseId(req.enterprise_id),
-                         group_id=GroupId(req.group_id), dataset=req.dataset)
+                         user_id=ctx.user, dataset=req.dataset)   # owner 模型(ADR-024):processed 路径按提交用户
     work = Path(req.work_dir); work.mkdir(parents=True, exist_ok=True)
     jsonl_dir, cleaned_dir = work / "in", work / "out"
 

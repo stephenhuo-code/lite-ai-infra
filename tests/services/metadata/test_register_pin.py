@@ -22,10 +22,11 @@ def test_raw_register_pins_location(monkeypatch):
     g = _G()
     c = TestClient(build_app(g))
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
-               json={"name": "coco", "group_id": "g-0001", "kind": "raw"}, headers=_hdr())
+               json={"name": "coco", "kind": "raw"}, headers=_hdr())
     assert r.status_code == 201, r.text
-    assert g.last["location"] == "s3://lite-ai/e-0001/g-0001/raw/coco/"     # 服务端钉死
+    assert g.last["location"] == "s3://lite-ai/e-0001/u-alice/raw/coco/"     # 服务端钉死(owner 路径段=user,ADR-024)
     assert g.last["props"]["kind"] == "raw" and g.last["props"]["format"] == "webdataset"
+    assert g.last["props"]["owner_user"] == "u-alice" and "owner_group" not in g.last["props"]
 
 
 def test_processed_register_rejects_foreign_location(monkeypatch):
@@ -34,11 +35,11 @@ def test_processed_register_rejects_foreign_location(monkeypatch):
     g = _G()
     c = TestClient(build_app(g))
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
-               json={"name": "x", "group_id": "g-0001", "kind": "processed", "format": "lance",
+               json={"name": "x", "kind": "processed", "format": "lance",
                      "derived_from": "coco",
-                     "location": "s3://lite-ai/e-0001/g-0002/processed/x.lance"},  # 别组!越权
+                     "location": "s3://lite-ai/e-0001/u-bob/processed/x.lance"},  # 别人的 owner 前缀!越权
                headers=_hdr())
-    assert r.status_code == 403   # 越权位置被拒
+    assert r.status_code == 403   # 越权位置被拒(owner 前缀外,ADR-024)
 
 
 def test_processed_register_accepts_own_location(monkeypatch):
@@ -47,9 +48,9 @@ def test_processed_register_accepts_own_location(monkeypatch):
     g = _G()
     c = TestClient(build_app(g))
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
-               json={"name": "coco-clean", "group_id": "g-0001", "kind": "processed", "format": "lance",
+               json={"name": "coco-clean", "kind": "processed", "format": "lance",
                      "derived_from": "coco",
-                     "location": "s3://lite-ai/e-0001/g-0001/processed/coco-clean.lance"},
+                     "location": "s3://lite-ai/e-0001/u-alice/processed/coco-clean.lance"},
                headers=_hdr())
     assert r.status_code == 201, r.text
     assert g.last["props"]["kind"] == "processed" and g.last["props"]["derived_from"] == "coco"

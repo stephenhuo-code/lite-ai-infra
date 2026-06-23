@@ -20,8 +20,7 @@ class Scope(Enum):
 class Dataset(BaseModel):
     name: str
     enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
-    group_id: constr(pattern=r'^g-[0-9a-z]+$')
-    owner: str | None = None
+    owner: str | None
     scope: Scope
     location: str
     comment: str | None = None
@@ -45,7 +44,6 @@ class Kind(Enum):
 
 class RegisterDataset(BaseModel):
     name: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
-    group_id: constr(pattern=r'^g-[0-9a-z]+$')
     kind: Kind
     location: str | None = None
     derived_from: str | None = None

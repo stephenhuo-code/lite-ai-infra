@@ -59,7 +59,7 @@ def test_raw_source_resolves_location_into_spec(tmp_path):
                       "location": "s3://b/e-0001/g-0001/raw/cc3m-raw/"})
     c, runner = _client(meta)
     r = c.post("/v1/data/prepare", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
-               json={"dataset": "cc3m", "group_id": "g-0001", "source_dataset": "cc3m-raw"})
+               json={"dataset": "cc3m", "source_dataset": "cc3m-raw"})
     assert r.status_code == 202
     assert runner.spec.source_location == "s3://b/e-0001/g-0001/raw/cc3m-raw/"
     assert runner.spec.dataset == "cc3m"               # 产出名保留
@@ -71,7 +71,7 @@ def test_processed_source_rejected_400(tmp_path):
                       "location": "s3://b/e-0001/g-0001/processed/cc3m/"})
     c, runner = _client(meta)
     r = c.post("/v1/data/prepare", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
-               json={"dataset": "out", "group_id": "g-0001", "source_dataset": "cc3m"})
+               json={"dataset": "out", "source_dataset": "cc3m"})
     assert r.status_code == 400
     assert runner.spec is None                          # 零副作用:未提交
 
@@ -80,7 +80,7 @@ def test_missing_source_400(tmp_path):
     meta = _FakeMeta(None)                               # get_dataset 抛 404
     c, runner = _client(meta)
     r = c.post("/v1/data/prepare", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
-               json={"dataset": "out", "group_id": "g-0001", "source_dataset": "nope"})
+               json={"dataset": "out", "source_dataset": "nope"})
     assert r.status_code == 400
     assert runner.spec is None
 
@@ -91,7 +91,7 @@ def test_unreadable_source_403_maps_to_400(tmp_path):
     meta = _FakeMeta403()                                # get_dataset 抛 403
     c, runner = _client(meta)
     r = c.post("/v1/data/prepare", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
-               json={"dataset": "out", "group_id": "g-0001", "source_dataset": "other-group-ds"})
+               json={"dataset": "out", "source_dataset": "other-group-ds"})
     assert r.status_code == 400
     assert r.json()["reason"] == "源数据集不存在或不可读"
     assert runner.spec is None                           # 零副作用:未提交

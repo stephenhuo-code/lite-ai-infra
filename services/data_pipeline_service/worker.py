@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse, os, sys
 import boto3
 from libs.identity.context import Context, Membership
-from libs.identity.ids import EnterpriseId, GroupId
+from libs.identity.ids import EnterpriseId
 from libs.audit.oss_audit import OssAuditSink, AuditWriter, oss_boto3_config
 from pipelines.data_prep.runner import PrepareRequest, run_prepare
 from services.data_pipeline_service.jobs import JobStore
@@ -26,13 +26,15 @@ def run_job(job_dir: str) -> None:
     if spec is None:        # spec.json 缺失/损坏:写终态而非崩成无终态的孤儿 running
         store.update(job_id, "failed", error="spec.json missing or unreadable")
         return
+    # owner 模型(ADR-024):重建 Context 用 sub(=owner)+ 企业级 membership(无组);
+    # can() 复检按企业隔离 + owner==user(runner 把 resource.owner 钉成 ctx.user)。
     ctx = Context(user=spec.sub, memberships=[
-        Membership(EnterpriseId(spec.enterprise_id), GroupId(spec.group_id), spec.role)])
+        Membership(EnterpriseId(spec.enterprise_id), None, spec.role)])
     req = PrepareRequest(
         tar_dir="", source_location=spec.source_location,    # catalog-driven:从 OSS location 取 tar(tar_dir 旧本地路径已废)
         work_dir=str(store.job_dir(job_id) / "work"),
         bucket=os.environ["DATA_BUCKET"], enterprise_id=spec.enterprise_id,
-        group_id=spec.group_id, dataset=spec.dataset, np=spec.np,
+        dataset=spec.dataset, np=spec.np,
         oss_endpoint=os.environ["OSS_ENDPOINT"], access_key=os.environ["OSS_ACCESS_KEY"],
         secret_key=os.environ["OSS_SECRET_KEY"], session_token=os.getenv("OSS_SESSION_TOKEN"),
         region=os.getenv("OSS_REGION", "cn-hangzhou"), process=spec.process)

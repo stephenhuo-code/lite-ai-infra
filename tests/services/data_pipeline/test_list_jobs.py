@@ -40,20 +40,21 @@ def _hdr(sub, gid):
 
 def _submit(c, sub, gid):
     return c.post("/v1/data/prepare", headers=_hdr(sub, gid),
-                  json={"dataset": "cc3m", "group_id": gid, "source_dataset": "cc3m-raw"}).json()["id"]
+                  json={"dataset": "cc3m", "source_dataset": "cc3m-raw"}).json()["id"]
 
 
-def test_lists_only_callers_group(tmp_path):
+def test_lists_only_callers_own_jobs(tmp_path):
+    # owner 模型(ADR-024):列表只见自己 owner 的作业;同企业他人的(不同 owner)经 can() 过滤掉。
     c, store = _client(tmp_path)
     j1 = _submit(c, "u-alice", "g-0001")
     j2 = _submit(c, "u-alice", "g-0001")
-    j3 = _submit(c, "u-bob", "g-0002")        # 跨组(同企业)— alice 不可见
+    j3 = _submit(c, "u-bob", "g-0002")        # 他人(同企业)— alice 非 owner,不可见
     r = c.get("/v1/data/jobs", headers=_hdr("u-alice", "g-0001"))
     assert r.status_code == 200
     body = r.json()
     ids = {j["id"] for j in body["jobs"]}
-    assert ids == {j1, j2} and body["total"] == 2          # can() 过滤掉 g-0002
-    assert all(j["group_id"] == "g-0001" for j in body["jobs"])
+    assert ids == {j1, j2} and body["total"] == 2          # can() 按 owner 过滤掉 u-bob 的
+    assert all(j["owner_user"] == "u-alice" for j in body["jobs"])
     assert j3 not in ids
 
 

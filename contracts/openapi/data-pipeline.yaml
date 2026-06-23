@@ -59,23 +59,22 @@ components:
   schemas:
     PrepareJobRequest:
       type: object
-      required: [dataset, group_id, source_dataset]
+      required: [dataset, source_dataset]                                          # owner 模型(ADR-024):去 group_id
       properties:
         dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}            # 产出(processed)数据集名
-        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
         source_dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}     # S2a catalog-driven:源 raw 数据集名;服务端 submit 时(带 bearer)查 metadata 解析 location(kind 须 raw)
         np: {type: [integer, 'null'], minimum: 1}
         process: {type: [array, 'null'], items: {type: object}}   # Layer 1 DJ 算子(spec §8;build_recipe(process=…))
     Job:
       type: object
-      required: [id, status, terminal, dataset, group_id, enterprise_id]
+      required: [id, status, terminal, dataset, enterprise_id]                     # owner 模型(ADR-024):去 group_id required,加 owner_user
       properties:
         id: {type: string}
         status: {type: string, enum: [queued, running, succeeded, failed]}
         terminal: {type: boolean}     # 派生:status∈{succeeded,failed}。客户端按此判终态(ADR-018 不变量 4;S2a 加新终态如 cancelled 不破坏轮询)
         dataset: {type: string}
-        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
         enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        owner_user: {type: [string, 'null']}   # owner(ADR-024):提交作业的用户(sub,§1.4 不透明)
         source_dataset: {type: [string, 'null']}   # 血缘:真实来源 raw 数据集名(US3-AC1/SC-003);前端注册产物 derived_from 取它。非 required(旧 job 无则 null)
         rows_in: {type: [integer, 'null']}
         rows_written: {type: [integer, 'null']}
@@ -91,10 +90,9 @@ components:
         total: {type: integer}     # 过滤后(can() + status)总数,非全量
     RawUploadRequest:
       type: object
-      required: [dataset, group_id, filename]
+      required: [dataset, filename]                                          # owner 模型(ADR-024):去 group_id
       properties:
         dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}        # 数据集名(=raw 前缀段)
-        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
         filename: {type: string}   # 单段文件名;服务端 raw_object_key 为 C-1 权威校验(无 '/' 防穿越,首字符非 '.'),非法→400(ADR-020 C-1)
         multipart: {type: boolean, default: false}
         parts: {type: [integer, 'null'], minimum: 1, maximum: 10000}           # multipart 时分片数
@@ -120,12 +118,12 @@ components:
         parts: {type: [array, 'null'], items: {$ref: '#/components/schemas/CompletePart'}}   # 单传留空;multipart 带各片 ETag
     RawDataset:
       type: object
-      required: [id, name, group_id, enterprise_id, oss_key, status]
+      required: [id, name, enterprise_id, oss_key, status]                  # owner 模型(ADR-024):去 group_id required,加 owner_user
       properties:
         id: {type: string}
         name: {type: string}
-        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
         enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        owner_user: {type: [string, 'null']}   # owner(ADR-024):上传用户(sub,§1.4 不透明)
         oss_key: {type: string}
         status: {type: string, enum: [pending, ready, failed]}
         size: {type: [integer, 'null']}

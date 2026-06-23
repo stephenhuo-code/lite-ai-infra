@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError
 
-from libs.identity.ids import EnterpriseId, GroupId
+from libs.identity.ids import EnterpriseId
 from pipelines.data_prep.paths import DatasetPaths
 from services.data_pipeline_service.raw_store import RawSpec, RawDatasetStore
 
@@ -28,11 +28,11 @@ class Uploader:
         self.url_ttl = url_ttl
 
     # ---- 请求上传:建记录 + presign ----
-    def create_grant(self, *, name: str, enterprise_id: str, group_id: str, sub: str,
+    def create_grant(self, *, name: str, enterprise_id: str, user_id: str, sub: str,
                      filename: str, multipart: bool, parts: int | None) -> dict:
-        # key 三段服务端构造(C-1):eid/gid 来自调用者(handler 取自 ctx),dataset/filename 经校验。
+        # owner 模型(ADR-024):key 三段服务端构造(C-1):eid/user 来自调用者(handler 取自 ctx),dataset/filename 经校验。
         paths = DatasetPaths(bucket=self.bucket, enterprise_id=EnterpriseId(enterprise_id),
-                             group_id=GroupId(group_id), dataset=name)   # DatasetPaths 校验 dataset
+                             user_id=user_id, dataset=name)   # DatasetPaths 校验 dataset
         oss_key = paths.raw_object_key(filename)                         # 校验 filename(失败抛 ValueError,零副作用)
         raw_id = "raw-" + uuid.uuid4().hex[:16]
         if multipart:
@@ -48,7 +48,7 @@ class Uploader:
             upload_id = None; part_urls = None
             url = self.s3.generate_presigned_url(
                 "put_object", Params={"Bucket": self.bucket, "Key": oss_key}, ExpiresIn=self.url_ttl)
-        self.raw_store.create(RawSpec(raw_id=raw_id, name=name, group_id=group_id,
+        self.raw_store.create(RawSpec(raw_id=raw_id, name=name, owner_user=sub,
                                       enterprise_id=enterprise_id, sub=sub, oss_key=oss_key, upload_id=upload_id))
         return {"raw_id": raw_id, "oss_key": oss_key, "url": url,
                 "upload_id": upload_id, "part_urls": part_urls, "expires_in": self.url_ttl}

@@ -9,7 +9,7 @@ from libs.authz.engine import can
 from libs.authz.types import Resource
 from libs.contracts_gen.metadata_models import RegisterDataset
 from libs.identity.context import Context
-from libs.identity.ids import EnterpriseId, GroupId
+from libs.identity.ids import EnterpriseId
 from services._scaffold.app import make_service_app
 from services._scaffold.auth import context_from_request, enterprise_of
 from services.metadata_service.gravitino import GravitinoError, _is_conflict
@@ -24,15 +24,15 @@ def _scope_value(scope) -> str:
     return getattr(scope, "value", scope) or "private"
 
 
-def _owner_group(fs: dict) -> str | None:
-    """fileset 的归属组。缺失 = 不可归属(带外/未治理 fileset)→ 调用方按 fail-closed 处理。"""
-    return fs.get("properties", {}).get("owner_group")
+def _owner_user(fs: dict) -> str | None:
+    """fileset 的归属用户(owner,ADR-024)。缺失 = 不可归属(带外/未治理 fileset)→ 调用方按 fail-closed 处理。"""
+    return fs.get("properties", {}).get("owner_user")
 
 
 def _resource(ent: str, fs: dict) -> Resource:
     p = fs.get("properties", {})
     return Resource(kind="dataset", enterprise_id=EnterpriseId(ent),
-                    group_id=GroupId(p.get("owner_group", "")), scope=p.get("scope", "private"),
+                    group_id=None, scope=p.get("scope", "private"),
                     owner=p.get("owner_user"))
 
 
@@ -49,7 +49,7 @@ def _dataset(ent: str, fs: dict) -> dict:
         except (TypeError, ValueError):
             return None
 
-    return {"name": fs["name"], "enterprise_id": ent, "group_id": p.get("owner_group"),
+    return {"name": fs["name"], "enterprise_id": ent,
             "owner": p.get("owner_user"), "scope": p.get("scope", "private"),
             "location": fs.get("storageLocation", ""), "comment": fs.get("comment") or None,
             "created_at": a.get("createTime"), "created_by": a.get("creator"),
@@ -84,7 +84,7 @@ def build_app(gravitino):
         out = []
         for name in names:  # N+1:list 仅返回名,逐个 get(ADR-016 规模可忽略)
             fs = gravitino.get_fileset(ml, catalog, schema, name)
-            if not _owner_group(fs):       # 不可归属 → fail-closed,不列出
+            if not _owner_user(fs):        # 不可归属 → fail-closed,不列出
                 continue
             if can(ctx, "dataset.read", _resource(ent, fs)).allow:
                 out.append(_dataset(ent, fs))
@@ -98,7 +98,7 @@ def build_app(gravitino):
             fs = gravitino.get_fileset(ml, catalog, schema, name)
         except Exception:
             raise HTTPException(status_code=404, detail="not found")
-        if not _owner_group(fs):           # 不可归属 → fail-closed deny(不崩成 500)
+        if not _owner_user(fs):            # 不可归属 → fail-closed deny(不崩成 500)
             return JSONResponse(status_code=403, content={"reason": "unattributed resource"})
         d = can(ctx, "dataset.read", _resource(ent, fs))
         if not d.allow:
@@ -112,25 +112,26 @@ def build_app(gravitino):
         ml = _metalake(ent)
         scope = _scope_value(body.scope)
         res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent),
-                       group_id=GroupId(body.group_id), scope=scope, owner=ctx.user)
+                       group_id=None, scope=scope, owner=ctx.user)
         d = can(ctx, "dataset.register", res)
         if not d.allow:
             return JSONResponse(status_code=403, content={"reason": d.reason})
         from pipelines.data_prep.paths import DatasetPaths
         bucket = os.environ["DATA_BUCKET"]
         kind = getattr(body.kind, "value", body.kind)
+        # owner 模型(ADR-024):路径按上传用户钉死(eid/user from ctx),不再按 group
         paths = DatasetPaths(bucket=bucket, enterprise_id=EnterpriseId(ent),
-                             group_id=GroupId(body.group_id), dataset=body.name)
+                             user_id=ctx.user, dataset=body.name)
         if kind == "raw":
-            location = f"s3://{bucket}/{paths.raw_prefix}"          # 服务端钉死(eid/gid from ctx)
+            location = f"s3://{bucket}/{paths.raw_prefix}"          # 服务端钉死(eid/user from ctx)
             fmt = "webdataset"
-        else:  # processed:校验给定 location 必须落在 caller(eid/gid from ctx)的 processed/ 前缀内
+        else:  # processed:校验给定 location 必须落在 caller(eid/user from ctx)的 processed/ 前缀内
             location = body.location or ""
             allowed = f"s3://{bucket}/{paths._base}/processed/"
             if not location.startswith(allowed):
                 return JSONResponse(status_code=403, content={"reason": "location outside caller prefix"})
             fmt = body.format or "lance"
-        props = {"owner_group": body.group_id, "owner_user": ctx.user, "scope": scope,
+        props = {"owner_user": ctx.user, "scope": scope,
                  "kind": kind, "format": fmt}
         if body.derived_from:
             props["derived_from"] = body.derived_from

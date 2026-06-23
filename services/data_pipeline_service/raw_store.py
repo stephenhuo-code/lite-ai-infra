@@ -10,7 +10,7 @@ _PUBLIC = ("size", "error")   # status.json 上的可投影字段(spec 之外的
 class RawSpec:
     raw_id: str
     name: str
-    group_id: str
+    owner_user: str            # owner 模型(ADR-024):上传用户(=sub,§1.4 不透明);取代 group_id
     enterprise_id: str
     sub: str
     oss_key: str               # 服务端构造、校验过的完整 OSS key(隔离写死)
@@ -59,13 +59,13 @@ class RawDatasetStore:
         sp = d / "spec.json"
         spec = json.loads(sp.read_text()) if sp.exists() else {}
         st = json.loads((d / "status.json").read_text())
-        return {"id": raw_id, "name": spec.get("name"), "group_id": spec.get("group_id"),
+        return {"id": raw_id, "name": spec.get("name"), "owner_user": spec.get("owner_user"),
                 "enterprise_id": spec.get("enterprise_id"), "oss_key": spec.get("oss_key"),
                 "status": st["status"], "created_at": st["created_at"], "updated_at": st["updated_at"],
                 **{k: st.get(k) for k in _PUBLIC}}
 
     def list_raw(self) -> list[dict]:
-        """纯取数,不授权(授权/过滤在 handler):投影含 enterprise_id/group_id 供 can() 过滤。
+        """纯取数,不授权(授权/过滤在 handler):投影含 enterprise_id/owner_user 供 can() 过滤。
         按 created_at 倒序。登记:扫目录 O(n),量大需索引(vN+,S2a 真 store)。"""
         out: list[dict] = []
         for d in self.root.iterdir():
