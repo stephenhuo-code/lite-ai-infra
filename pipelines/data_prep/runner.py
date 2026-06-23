@@ -16,6 +16,7 @@ from pipelines.data_prep.paths import DatasetPaths
 from pipelines.data_prep.recipe import build_recipe
 from pipelines.data_prep.ingest import wds_to_jsonl
 from pipelines.data_prep.lance_writer import lance_storage_options, write_cleaned_to_lance
+from pipelines.data_prep.oss_fetch import fetch_oss_tars, build_s3
 
 @dataclass(frozen=True)
 class PrepareRequest:
@@ -32,6 +33,7 @@ class PrepareRequest:
     session_token: str | None = None
     region: str = "cn-hangzhou"
     process: list[dict] | None = None   # Layer 1 DJ 算子自定义;None → build_recipe 用默认集
+    source_location: str | None = None  # catalog-driven:OSS 前缀 s3://{bucket}/{eid}/{gid}/raw/{ds}/;给定则从 OSS 取(优先于 tar_dir),否则用本地 tar_dir(旧行为)
 
 def _run_dj(recipe_path: str, log_path: str) -> int:
     """DJ 经外部 venv 子进程(spike 教训:Ray 禁瞬态 uv 环境)。DJ_BIN 指 dj-process。
@@ -69,7 +71,8 @@ def _audit(audit: AuditWriter, ctx: Context, req: PrepareRequest, action: str,
         override=False, reason=reason, metadata={}))
 
 def run_prepare(ctx: Context, req: PrepareRequest, audit: AuditWriter, *,
-                convert_fn=wds_to_jsonl, dj_fn=_run_dj, lance_fn=write_cleaned_to_lance) -> dict:
+                convert_fn=wds_to_jsonl, dj_fn=_run_dj, lance_fn=write_cleaned_to_lance,
+                fetch_fn=fetch_oss_tars, build_s3_fn=build_s3) -> dict:
     """一次数据准备:can() 唯一出入口 → 转换 → DJ(Ray)→ Lance on OSS → 审计。"""
     resource = Resource(kind="dataset", enterprise_id=EnterpriseId(req.enterprise_id),
                         group_id=GroupId(req.group_id))
@@ -83,7 +86,17 @@ def run_prepare(ctx: Context, req: PrepareRequest, audit: AuditWriter, *,
     work = Path(req.work_dir); work.mkdir(parents=True, exist_ok=True)
     jsonl_dir, cleaned_dir = work / "in", work / "out"
 
-    n_in = convert_fn(req.tar_dir, str(jsonl_dir))
+    src_dir = req.tar_dir
+    if req.source_location:                        # catalog-driven:从 OSS 前缀取 tar 到本地
+        src_dir = str(Path(req.work_dir) / "tars")
+        # source_location 形如 s3://bucket/eid/gid/raw/ds/ → 拆出 bucket 与 key 前缀
+        rest = req.source_location.removeprefix("s3://")
+        b, _, key_prefix = rest.partition("/")
+        s3 = build_s3_fn(req.oss_endpoint, req.access_key, req.secret_key, req.session_token, req.region)
+        n_tar = fetch_fn(s3, bucket=b, prefix=key_prefix, dest_dir=src_dir)
+        if n_tar == 0:
+            raise RuntimeError(f"no .tar under {req.source_location}")
+    n_in = convert_fn(src_dir, str(jsonl_dir))
     recipe_path = work / "recipe.yaml"
     recipe_path.write_text(build_recipe(str(jsonl_dir / "data.jsonl"), str(cleaned_dir), req.np,
                                         process=req.process))
