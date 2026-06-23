@@ -13,7 +13,7 @@ def _oss_env(monkeypatch):
 def _seed(tmp_path, **kw):
     store = JobStore(str(tmp_path))
     sp = JobSpec("job-1", "cc3m", "g-0001", "e-0001", "member", "u-a",
-                 "s3://b/e-0001/g-0001/raw/cc3m/", 3, kw.get("process"))
+                 "s3://b/e-0001/g-0001/raw/cc3m/", 3, process=kw.get("process"))
     store.create(sp); store.update("job-1", "running")
     return store
 

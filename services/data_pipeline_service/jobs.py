@@ -16,6 +16,7 @@ class JobSpec:
     sub: str
     source_location: str  # S2a catalog-driven:源 raw 数据集 OSS 前缀(submit 时带 bearer 经 metadata 解析;worker detached 无 bearer 故 submit 时定)
     np: int
+    source_dataset: str | None = None   # 血缘:用户选的源 raw 数据集名(US3-AC1/SC-003);Job 投影暴露,前端注册产物 derived_from 取它(≠产出名 dataset)。旧 job 无则 None
     process: list[dict] | None = None
 
 def _now() -> str:
@@ -69,7 +70,9 @@ class JobStore:
         spec = json.loads(sp.read_text()) if sp.exists() else {}   # 损坏 job:spec 缺失仍可投影终态而非 500
         st = json.loads((d / "status.json").read_text())
         return {"id": job_id, "dataset": spec.get("dataset"), "group_id": spec.get("group_id"),
-                "enterprise_id": spec.get("enterprise_id"), "status": st["status"],
+                "enterprise_id": spec.get("enterprise_id"),
+                "source_dataset": spec.get("source_dataset"),   # 血缘:旧 job/损坏 spec 无则 None(null-safe)
+                "status": st["status"],
                 "terminal": st["status"] in ("succeeded", "failed"),   # 派生:客户端按此判终态(ADR-018 不变量 4)
                 "created_at": st["created_at"], "updated_at": st["updated_at"],
                 **{k: st.get(k) for k in _PUBLIC}}

@@ -76,6 +76,7 @@ components:
         dataset: {type: string}
         group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
         enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        source_dataset: {type: [string, 'null']}   # 血缘:真实来源 raw 数据集名(US3-AC1/SC-003);前端注册产物 derived_from 取它。非 required(旧 job 无则 null)
         rows_in: {type: [integer, 'null']}
         rows_written: {type: [integer, 'null']}
         lance_uri: {type: [string, 'null']}

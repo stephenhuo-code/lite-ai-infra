@@ -49,7 +49,8 @@ def build_app(runner, audit: AuditWriter, uploader=None, metadata=None):
         job_id = "job-" + uuid.uuid4().hex[:16]      # 服务端不透明 id(不变量 3)
         spec = JobSpec(job_id=job_id, dataset=body.dataset, group_id=body.group_id, enterprise_id=ent,
                        role=ctx.role_in(EnterpriseId(ent), GroupId(body.group_id)) or "member",
-                       sub=ctx.user, source_location=source_location, np=body.np or 3, process=body.process)
+                       sub=ctx.user, source_location=source_location, source_dataset=body.source_dataset,
+                       np=body.np or 3, process=body.process)
         runner.submit(spec)
         return runner.get(job_id)
 

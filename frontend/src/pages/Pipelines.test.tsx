@@ -23,7 +23,7 @@ const RUNNING: Job = {
 const SUCCEEDED: Job = {
   id: 'job-ok', status: 'succeeded', terminal: true, dataset: 'cc3m-ok',
   group_id: 'g-1', enterprise_id: 'e-1', rows_in: 200, rows_written: 200,
-  lance_uri: 'lance://out/cc3m-ok', created_at: '2026-06-14T07:00:00Z',
+  lance_uri: 'lance://out/cc3m-ok', source_dataset: 'coco', created_at: '2026-06-14T07:00:00Z',
 }
 
 // listJobs 按 status 返回:无 status = 全部三条;status==='failed' = 仅 failed。
@@ -107,6 +107,7 @@ it('succeeded 详情「注册产物」→ POST body kind=processed/format=lance/
   expect(registerBody.format).toBe('lance')
   expect(registerBody.location).toBe('lance://out/cc3m-ok') // = job.lance_uri
   expect(registerBody.num_samples).toBe(200)                // = job.rows_written
+  expect(registerBody.derived_from).toBe('coco')            // = job.source_dataset(真实来源,非产出名 cc3m-ok)
 })
 
 it('succeeded 详情含二次处理占位(禁用,不给会失败入口 · US3-AC3)', async () => {

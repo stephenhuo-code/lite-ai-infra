@@ -52,6 +52,15 @@ def test_get_same_group_ok_cross_group_403_unknown_404(tmp_path):
     assert c.get(f"/v1/data/jobs/{jid}", headers=_hdr("u-b", ["/e-0001/g-0002/members"])).status_code == 403
     assert c.get("/v1/data/jobs/nope", headers=_hdr("u-a", ["/e-0001/g-0001/members"])).status_code == 404
 
+def test_prepare_stores_source_dataset_and_job_projects_it(tmp_path):
+    # 血缘(US3-AC1/SC-003):prepare 把用户选的源 source_dataset 存进 spec,
+    # Job 读模型暴露它 → 前端注册产物 derived_from 取真实来源(非产出名)。
+    c, store, _ = _client(tmp_path)
+    body = c.post("/v1/data/prepare", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+                  json={"dataset": "coco-clean", "group_id": "g-0001", "source_dataset": "coco"}).json()
+    assert store.load_spec(body["id"]).source_dataset == "coco"   # spec 存源名
+    assert body["source_dataset"] == "coco"                       # Job 投影暴露源名(≠产出名 coco-clean)
+
 def test_process_override_persisted(tmp_path):
     c, store, _ = _client(tmp_path)
     jid = c.post("/v1/data/prepare", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),

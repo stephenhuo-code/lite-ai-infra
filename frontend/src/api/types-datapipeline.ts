@@ -330,6 +330,7 @@ export interface components {
             dataset: string;
             group_id: string;
             enterprise_id: string;
+            source_dataset?: string | null;
             rows_in?: number | null;
             rows_written?: number | null;
             lance_uri?: string | null;

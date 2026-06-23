@@ -31,6 +31,7 @@ class Job(BaseModel):
     dataset: str
     group_id: constr(pattern=r'^g-[0-9a-z]+$')
     enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
+    source_dataset: str | None = None
     rows_in: int | None = None
     rows_written: int | None = None
     lance_uri: str | None = None

@@ -60,8 +60,8 @@ function JobDetail({ id, onClose }: { id: string; onClose: () => void }) {
 
   // 注册产物到目录(succeeded 作业):kind=processed、format=lance、location=lance_uri、
   // num_samples 取自 job.rows_written(只读自 job,UI 不可编辑,FR-010)。
-  // 血缘 derived_from:Job 契约暂无源数据集字段(无 source_dataset),
-  // vN+ 待 Job 补 source 字段后取真实来源;此处用产出名 job.dataset 占位。
+  // 血缘 derived_from 取 job.source_dataset(真实来源 raw 数据集,US3-AC1/SC-003);
+  // 旧 job 无 source_dataset 时兜底用产出名 job.dataset(不阻塞注册)。
   const registerProduct = (j: Job) => {
     setRegistering(true)
     setRegisterErr('')
@@ -72,7 +72,7 @@ function JobDetail({ id, onClose }: { id: string; onClose: () => void }) {
       scope: 'private',
       format: 'lance',
       location: j.lance_uri ?? undefined,
-      derived_from: j.dataset, // vN+:Job 补 source 字段后改取真实来源
+      derived_from: j.source_dataset ?? j.dataset, // 真实来源(旧 job 无则兜底产出名)
       num_samples: j.rows_written ?? undefined, // 只读自 job(FR-010)
     })
       .then(() => setRegistered(true))
