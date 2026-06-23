@@ -58,7 +58,7 @@ def test_callback_happy_sets_session_and_csrf(monkeypatch):
     assert sd.access_token == "at" and sd.refresh_token == "rt"
     assert sd.csrf == csrf_cookie and sd.csrf != ""
     assert sd.expires_at > 0
-    assert sd.id_token == "idtok"          # id_token 入会话(供登出 id_token_hint)
+    assert c.cookies.get("id_token") == "idtok"   # id_token 落独立 cookie(不进会话 blob,避免 >4KB)
 
 
 def test_logout_clears_cookie_and_returns_end_session(monkeypatch):

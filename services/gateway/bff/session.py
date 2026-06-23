@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -14,6 +14,7 @@ from cryptography.fernet import Fernet, InvalidToken
 SESSION_COOKIE = "session"      # HttpOnly 加密会话(access+refresh+exp+csrf)
 CSRF_COOKIE = "csrf_token"      # 非 HttpOnly 明文 csrf 副本(双提交,可被前端 JS 读)
 STATE_COOKIE = "oidc_state"     # HttpOnly 临时 state/verifier(登录中,callback 后即清)
+ID_TOKEN_COOKIE = "id_token"    # HttpOnly id_token,仅供登出 id_token_hint(单独 cookie:不撑大会话 blob,避免 >4KB 被浏览器丢弃)
 
 
 @dataclass
@@ -22,7 +23,6 @@ class SessionData:
     refresh_token: str | None
     expires_at: int                       # epoch 秒(access token 过期点)
     csrf: str = ""                        # 双提交 CSRF token(登录回调一次生成,Task 4/6;与明文 csrf_token cookie 同值)
-    id_token: str = ""                    # OIDC id_token:RP-initiated logout 的 id_token_hint(无缝登出);带默认 → 旧 cookie 向后兼容
 
     def is_expired(self, now: int, skew: int = 30) -> bool:
         # skew:提前 30s 视为过期,留刷新窗口(避免 access 刚好在下游验签时过期)
@@ -41,7 +41,9 @@ class SessionCodec:
 
     def decode(self, token: str) -> SessionData | None:
         try:
-            return SessionData(**json.loads(self._f.decrypt(token.encode())))
+            data = json.loads(self._f.decrypt(token.encode()))
+            names = {f.name for f in fields(SessionData)}
+            return SessionData(**{k: v for k, v in data.items() if k in names})  # 忽略未知键(平滑跨字段增减)
         except (InvalidToken, ValueError, TypeError):
             return None
 
@@ -63,7 +65,15 @@ def set_session_only(response, codec: SessionCodec, sd: SessionData, *, secure: 
                         samesite="lax", secure=secure, path="/")
 
 
+def set_id_token_cookie(response, id_token: str, *, secure: bool) -> None:
+    """单独下发 id_token(HttpOnly):仅供登出 id_token_hint。独立于会话 blob → 会话 cookie 保持 <4KB。"""
+    if id_token:
+        response.set_cookie(ID_TOKEN_COOKIE, id_token, httponly=True,
+                            samesite="lax", secure=secure, path="/")
+
+
 def clear_session_cookies(response, *, secure: bool = False) -> None:
-    """清会话 + csrf cookie(Max-Age=0):logout / 刷新失败降级(I-4)。secure 与 set 路径一致。"""
+    """清会话 + csrf + id_token cookie(Max-Age=0):logout / 刷新失败降级(I-4)。secure 与 set 路径一致。"""
     response.set_cookie(SESSION_COOKIE, "", max_age=0, httponly=True, samesite="lax", secure=secure, path="/")
     response.set_cookie(CSRF_COOKIE, "", max_age=0, httponly=False, samesite="lax", secure=secure, path="/")
+    response.set_cookie(ID_TOKEN_COOKIE, "", max_age=0, httponly=True, samesite="lax", secure=secure, path="/")

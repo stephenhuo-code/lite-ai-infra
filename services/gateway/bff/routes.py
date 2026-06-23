@@ -15,11 +15,12 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from services.gateway.bff import oidc
 from services.gateway.bff.session import (
-    SESSION_COOKIE,
+    ID_TOKEN_COOKIE,
     STATE_COOKIE,
     SessionCodec,
     SessionData,
     clear_session_cookies,
+    set_id_token_cookie,
     set_session_cookies,
 )
 
@@ -68,22 +69,17 @@ def make_auth_router(exchange_code=None) -> APIRouter:
             return JSONResponse(status_code=400, content={"reason": "code exchange failed"})
         csrf = oidc.gen_state()                           # 双提交 CSRF:登录回调一次生成(I-3)
         sd = SessionData(access_token=tok["access_token"], refresh_token=tok.get("refresh_token"),
-                         expires_at=int(time.time()) + int(tok["expires_in"]), csrf=csrf,
-                         id_token=tok.get("id_token", ""))   # 存 id_token 供登出 id_token_hint(无缝)
+                         expires_at=int(time.time()) + int(tok["expires_in"]), csrf=csrf)
         resp = RedirectResponse("/", status_code=302)
         set_session_cookies(resp, codec, sd, secure=_secure())   # 会话 + 明文 csrf 副本(同值)
+        set_id_token_cookie(resp, tok.get("id_token", ""), secure=_secure())  # id_token 单独 cookie(登出 id_token_hint;不撑大会话)
         resp.set_cookie(STATE_COOKIE, "", max_age=0, httponly=True, samesite="lax", path="/")  # 清临时
         return resp
 
     @router.post("/auth/logout")
     def logout(request: Request):
-        # RP-initiated logout:读会话取 id_token(best-effort)→ 拼 KC end_session(结束 SSO)→ 清本地 cookie。
-        id_token = ""
-        raw = request.cookies.get(SESSION_COOKIE)
-        if raw:
-            sd = codec.decode(raw)
-            if sd:
-                id_token = sd.id_token
+        # RP-initiated logout:从独立 id_token cookie 取 hint(best-effort)→ 拼 KC end_session(结束 SSO)→ 清本地 cookie。
+        id_token = request.cookies.get(ID_TOKEN_COOKIE, "")
         origin = cfg.redirect_uri.rsplit("/auth/callback", 1)[0]   # http://localhost:8090
         end_session = oidc.end_session_url(
             cfg, id_token_hint=id_token, post_logout_redirect_uri=f"{origin}/auth/login")

@@ -20,22 +20,17 @@ def test_roundtrip_preserves_csrf():
     assert c.decode(c.encode(s)).csrf == "tok-123"
 
 
-def test_roundtrip_preserves_id_token():
-    c = _codec()
-    s = SessionData(access_token="a", refresh_token="r", expires_at=1900000000, id_token="idtok-xyz")
-    assert c.decode(c.encode(s)).id_token == "idtok-xyz"
-
-
-def test_decode_old_cookie_without_id_token_defaults_empty():
-    # 向后兼容:本字段加入前的旧 cookie(无 id_token 键)仍能解出,id_token 取默认空
+def test_decode_ignores_unknown_keys():
+    # 跨字段增减平滑:含未知键(如曾误塞进会话的 id_token)的 cookie 仍能解出,未知键被忽略
     import json
     from cryptography.fernet import Fernet
     key = Fernet.generate_key()
-    legacy = Fernet(key).encrypt(
-        json.dumps({"access_token": "a", "refresh_token": "r", "expires_at": 1900000000, "csrf": "c"}).encode()
+    blob = Fernet(key).encrypt(
+        json.dumps({"access_token": "a", "refresh_token": "r", "expires_at": 1900000000,
+                    "csrf": "c", "id_token": "stale", "future_field": 1}).encode()
     ).decode()
-    sd = SessionCodec(key).decode(legacy)
-    assert sd is not None and sd.access_token == "a" and sd.id_token == ""
+    sd = SessionCodec(key).decode(blob)
+    assert sd is not None and sd.access_token == "a" and sd.csrf == "c"
 
 
 def test_tampered_cookie_returns_none():
