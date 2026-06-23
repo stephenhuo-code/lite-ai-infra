@@ -10,6 +10,8 @@ from pathlib import Path
 import yaml
 
 _PLACEHOLDER = re.compile(r"^\$\{([A-Z_][A-Z0-9_]*)\}$")
+# I-3 护栏:发射值不得含空白或 glob 元字符(* ? [),否则会被无引号词分割注入破坏。
+_UNSAFE = re.compile(r"[\s*?\[]")
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -140,7 +142,8 @@ def _flat(s: Settings) -> dict[str, str | None]:
 
     不变量:值不得含空格或 glob 元字符(* ? [)。消费方 scripts/dev_services.sh
     与 Makefile run-* 用无引号 `env $(load_env.py svc)` 词分割注入,含空格/glob 的值
-    会被错误切分。今所有值均满足。若未来配置值变复杂(连接串/带空格密码),改用
+    会被错误切分。该不变量现已由 export_env 强制校验(_UNSAFE 正则,违反即 ConfigError),
+    不再只是文档约定。今所有值均满足。若未来配置值变复杂(连接串/带空格密码),改用
     load_env.py 的 `--export` + `eval "$(... --export)"` 模式以规避词分割。
     """
     p = s.pipeline
@@ -189,4 +192,10 @@ def export_env(s: Settings, service: str) -> dict[str, str]:
         if v is None:
             raise ConfigError(f"服务 {service} 所需配置 {k} 为空(env={s.env})")
         out[k] = str(v)
+        if _UNSAFE.search(out[k]):
+            raise ConfigError(
+                f"服务 {service} 配置 {k} 含空白或 glob 元字符(* ? [),"
+                f"会被无引号 `env $(load_env.py {service})` 词分割注入破坏(I-3 护栏);"
+                f"如确需复杂值,请改用 load_env.py --export + eval 模式(env={s.env})"
+            )
     return out

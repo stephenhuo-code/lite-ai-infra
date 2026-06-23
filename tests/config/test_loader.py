@@ -131,6 +131,23 @@ def test_data_pipeline_paths_are_absolute():
     assert env["DJ_BIN"].startswith("/")
 
 
+def test_export_env_rejects_value_with_space(tmp_path):
+    # 一个含空格的值会被无引号词分割破坏 → export_env 必须拒绝(I-3 护栏)
+    root = tmp_path / "configs"; root.mkdir()
+    (root / "local.yaml").write_text("""
+env: local
+services: {identity_url: 'http://i', metadata_url: 'http://m', data_pipeline_url: 'http://d', gateway_url: 'http://g'}
+auth: {jwks_url: 'has space in value'}
+bff: {session_key: k, redirect_uri: 'http://g/cb', oidc_client_id: w, oidc_client_secret: s, oidc_issuer: 'http://x'}
+oss: {endpoint: 'http://localhost:9000', access_key: minio, secret_key: minio123, region: us-east-1, data_bucket: lite-ai, audit_bucket: lite-ai}
+gravitino: {url: 'http://localhost:8091'}
+pipeline: {jobs_dir: ./.dev/jobs, dj_bin: ./x}
+""")
+    s = load_settings("local", root=tmp_path)
+    with pytest.raises(ConfigError):
+        export_env(s, "identity")   # identity needs LITEAI_JWKS_URL which has a space
+
+
 import subprocess, sys
 from pathlib import Path
 
