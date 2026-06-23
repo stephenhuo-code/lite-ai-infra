@@ -14,13 +14,19 @@ def _mk_tar(p):
             b = t.encode(); ti2 = tarfile.TarInfo(f"{k}.txt"); ti2.size = len(b); tf.addfile(ti2, io.BytesIO(b))
 
 def test_prepare_job_to_lance_on_minio(tmp_path, minio_s3, minio_bucket, monkeypatch, dj_passthrough_bin):
-    tar_dir = tmp_path / "tars"; tar_dir.mkdir(); _mk_tar(tar_dir / "s.tar")
+    # catalog-driven:worker 从 OSS 前缀(source_location)取 tar,而非旧本地 tar_dir。
+    # 先把夹具 tar 直传到 raw 前缀 e-0001/g-0001/raw/cc3m-raw/,再以该前缀作 source_location 提交。
+    local_tar = tmp_path / "s.tar"; _mk_tar(local_tar)
+    src_prefix = "e-0001/g-0001/raw/cc3m-raw/"
+    minio_s3.upload_file(str(local_tar), minio_bucket, src_prefix + "s.tar")
+    source_location = f"s3://{minio_bucket}/{src_prefix}"
     monkeypatch.setenv("DATA_BUCKET", minio_bucket); monkeypatch.setenv("AUDIT_BUCKET", minio_bucket)
     monkeypatch.setenv("OSS_ENDPOINT", "http://localhost:9000")
     monkeypatch.setenv("OSS_ACCESS_KEY", "minio"); monkeypatch.setenv("OSS_SECRET_KEY", "minio123")
     monkeypatch.setenv("OSS_REGION", "us-east-1"); monkeypatch.setenv("DJ_BIN", dj_passthrough_bin)
     store = JobStore(str(tmp_path / "jobs"))
-    store.create(JobSpec("job-1", "cc3m", "g-0001", "e-0001", "member", "u-a", str(tar_dir), 2, None))
+    store.create(JobSpec("job-1", "cc3m", "g-0001", "e-0001", "member", "u-a",
+                         source_location, 2, source_dataset="cc3m-raw"))
     store.update("job-1", "running")
     W.run_job(str(store.job_dir("job-1")))
     r = store.read("job-1")

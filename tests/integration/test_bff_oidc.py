@@ -88,7 +88,9 @@ def test_bff_full_chain_with_real_token(monkeypatch, tmp_path):
     assert TestClient(app).get("/v1/data/jobs").status_code == 401
 
     # C) 变更请求缺 CSRF → 403
-    body = {"dataset": "cc3m", "group_id": "g-0001", "tar_dir": "/tmp/tars"}
+    # catalog-driven 契约:prepare 按名引用已注册的源 raw 数据集(source_dataset),非旧 tar_dir 本地路径。
+    # 真跑(D)需下游 metadata 已注册 group g-0001 下名为 "cc3m-raw"、kind=raw 的数据集(见 runbook/bootstrap)。
+    body = {"dataset": "cc3m", "group_id": "g-0001", "source_dataset": "cc3m-raw"}
     assert c.post("/v1/data/prepare", json=body).status_code == 403
 
     # D) 带 CSRF 提交 → 202(下游收到注入 bearer 并**真验签通过** + can() 放行)
