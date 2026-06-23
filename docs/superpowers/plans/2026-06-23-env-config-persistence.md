@@ -961,15 +961,15 @@ git commit -m "docs(plan): env-config 手动验收 runbook(owner-readable)"
 
 ### 验收二:开发数据重启不丢
 - [ ] **5. 起基础依赖并造一份数据**
-  - 跑:`make deps-base`(等约 25 秒)
-  - 跑:`docker run --rm --network dev_default --entrypoint sh minio/mc -c "mc alias set d http://minio:9000 minio minio123 && mc mb -p d/我的测试桶 && mc ls d/"`
-  - 应看到:列出 `我的测试桶`。
+  - 跑:`make deps-base`(等约 40 秒;Keycloak 首次连 Postgres + 导 realm 较慢,若下一步 curl 还连不上就再等 20 秒)
+  - 跑:`docker run --rm --network dev_default --entrypoint sh minio/mc -c "mc alias set d http://minio:9000 minio minio123 && mc mb -p d/keep-test && mc ls d/"`
+  - 应看到:列出 `keep-test`。
 - [ ] **6. 重启(用"保数据"的停法)**
   - 跑:`make dev-down`(这是保数据停,不会删)
-  - 跑:`make deps-base`(等约 25 秒)
+  - 跑:`make deps-base`(等约 40 秒;Keycloak 首次连 Postgres + 导 realm 较慢,若下一步 curl 还连不上就再等 20 秒)
 - [ ] **7. 确认数据还在**
   - 跑:`docker run --rm --network dev_default --entrypoint sh minio/mc -c "mc alias set d http://minio:9000 minio minio123 && mc ls d/"`
-  - 应看到:`我的测试桶` **仍然在**。在 = 持久化成功 ✅。不在 = 没修好,找我。
+  - 应看到:`keep-test` **仍然在**。在 = 持久化成功 ✅。不在 = 没修好,找我。
 - [ ] **8. 确认登录用户也持久(Keycloak)**
   - 跑:`curl -s http://localhost:8080/realms/lite-ai/.well-known/openid-configuration | head -c 60; echo`
   - 应看到:一段以 `{"issuer"` 开头的 JSON(说明重启后 realm 还在)。
@@ -977,9 +977,9 @@ git commit -m "docs(plan): env-config 手动验收 runbook(owner-readable)"
 ### 验收三:确实想清空时能清
 - [ ] **9. 清空停**
   - 跑:`make dev-reset`(这是毁灭性清空)
-  - 跑:`make deps-base`(等约 25 秒)
+  - 跑:`make deps-base`(等约 40 秒;Keycloak 首次连 Postgres + 导 realm 较慢,若下一步 curl 还连不上就再等 20 秒)
   - 跑:`docker run --rm --network dev_default --entrypoint sh minio/mc -c "mc alias set d http://minio:9000 minio minio123 && mc ls d/"`
-  - 应看到:**空的**(我的测试桶没了)= 清空生效 ✅。
+  - 应看到:**空的**(keep-test没了)= 清空生效 ✅。
 
 ### 验收四:dev-only 服务隔离
 - [ ] **10. 基础档不该带 Gravitino**
