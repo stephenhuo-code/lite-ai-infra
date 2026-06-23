@@ -1,5 +1,6 @@
 {
   "realm": "lite-ai", "enabled": true,
+  "internationalizationEnabled": true, "supportedLocales": ["zh-CN", "en"], "defaultLocale": "zh-CN",
   "clients": [{
     "clientId": "gateway", "publicClient": false, "secret": "dev-secret",
     "directAccessGrantsEnabled": true, "standardFlowEnabled": true, "redirectUris": ["*"],
