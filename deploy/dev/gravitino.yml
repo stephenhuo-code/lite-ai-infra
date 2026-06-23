@@ -6,8 +6,12 @@ services:
     ports: ["8091:8090"]
     environment:
       GRAVITINO_MEMORY: "-Xms512m -Xmx1g"
+    volumes:
+      - gravitino-data:/root/gravitino/data   # H2 entity store(fileset catalog 元数据持久化,探针 P-1)
     networks: [dev_default]
 networks:
   dev_default:
     external: true
     name: dev_default
+volumes:
+  gravitino-data:
