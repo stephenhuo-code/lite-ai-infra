@@ -1,3 +1,4 @@
+import os
 import textwrap
 import pytest
 from libs.config import load_settings, ConfigError, export_env, SERVICE_ENV_KEYS
@@ -128,3 +129,15 @@ def test_data_pipeline_paths_are_absolute():
     env = export_env(s, "data-pipeline")
     assert env["JOBS_DIR"].startswith("/")
     assert env["DJ_BIN"].startswith("/")
+
+
+import subprocess, sys
+from pathlib import Path
+
+def test_load_env_cli_emits_gateway_keys():
+    root = Path(__file__).resolve().parents[2]
+    out = subprocess.run([sys.executable, str(root / "scripts/load_env.py"), "gateway"],
+                         capture_output=True, text=True, env={**os.environ, "LITEAI_ENV": "local"})
+    assert out.returncode == 0, out.stderr
+    emitted = dict(tok.split("=", 1) for tok in out.stdout.split())
+    assert "BFF_SESSION_KEY" in emitted and "IDENTITY_ORG_URL" in emitted
