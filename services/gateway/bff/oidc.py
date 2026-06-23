@@ -44,6 +44,22 @@ class OidcConfig:
     def token_endpoint(self) -> str:
         return f"{self.issuer}/protocol/openid-connect/token"
 
+    @property
+    def end_session_endpoint(self) -> str:
+        return f"{self.issuer}/protocol/openid-connect/logout"
+
+
+def end_session_url(cfg: OidcConfig, *, id_token_hint: str = "", post_logout_redirect_uri: str = "") -> str:
+    """RP-initiated logout URL(结束 KC SSO 会话)。
+    id_token_hint:跳过 KC 确认页(无缝登出);缺则省略(降级,KC 可能弹确认页)。
+    post_logout_redirect_uri:登出后跳回应用(须在客户端 post.logout.redirect.uris 注册)。"""
+    params = {"client_id": cfg.client_id}
+    if id_token_hint:
+        params["id_token_hint"] = id_token_hint
+    if post_logout_redirect_uri:
+        params["post_logout_redirect_uri"] = post_logout_redirect_uri
+    return f"{cfg.end_session_endpoint}?{urllib.parse.urlencode(params)}"
+
 
 def authorize_url(cfg: OidcConfig, state: str, code_challenge: str) -> str:
     q = urllib.parse.urlencode({

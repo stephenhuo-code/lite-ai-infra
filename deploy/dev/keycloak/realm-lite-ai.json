@@ -14,6 +14,7 @@
     "standardFlowEnabled": true, "directAccessGrantsEnabled": false,
     "redirectUris": ["http://localhost:8090/auth/callback"],
     "webOrigins": ["http://localhost:8090"],
+    "attributes": {"post.logout.redirect.uris": "http://localhost:8090/*"},
     "protocolMappers": [{
       "name": "groups", "protocol": "openid-connect",
       "protocolMapper": "oidc-group-membership-mapper",

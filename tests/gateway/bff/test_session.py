@@ -20,6 +20,24 @@ def test_roundtrip_preserves_csrf():
     assert c.decode(c.encode(s)).csrf == "tok-123"
 
 
+def test_roundtrip_preserves_id_token():
+    c = _codec()
+    s = SessionData(access_token="a", refresh_token="r", expires_at=1900000000, id_token="idtok-xyz")
+    assert c.decode(c.encode(s)).id_token == "idtok-xyz"
+
+
+def test_decode_old_cookie_without_id_token_defaults_empty():
+    # 向后兼容:本字段加入前的旧 cookie(无 id_token 键)仍能解出,id_token 取默认空
+    import json
+    from cryptography.fernet import Fernet
+    key = Fernet.generate_key()
+    legacy = Fernet(key).encrypt(
+        json.dumps({"access_token": "a", "refresh_token": "r", "expires_at": 1900000000, "csrf": "c"}).encode()
+    ).decode()
+    sd = SessionCodec(key).decode(legacy)
+    assert sd is not None and sd.access_token == "a" and sd.id_token == ""
+
+
 def test_tampered_cookie_returns_none():
     assert _codec().decode("not-a-valid-token") is None
 

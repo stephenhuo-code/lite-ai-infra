@@ -30,7 +30,11 @@ const NAV: NavItem[] = [
 const navItemBase = 'nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] transition-colors'
 
 async function logout() {
-  try { await api.post('/auth/logout') } catch { /* 无论结果都回登录页 */ }
+  // RP-initiated logout:POST 清本地会话(CSRF 保护)→ 整页跳 BFF 返回的 KC end_session(结束 SSO,无缝回登录页)
+  try {
+    const r = await api.post('/auth/logout')
+    if (r?.end_session) { window.location.assign(r.end_session); return }
+  } catch { /* 降级:拿不到 end_session 仍回登录 */ }
   window.location.assign('/auth/login')
 }
 

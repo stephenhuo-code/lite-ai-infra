@@ -22,6 +22,7 @@ class SessionData:
     refresh_token: str | None
     expires_at: int                       # epoch 秒(access token 过期点)
     csrf: str = ""                        # 双提交 CSRF token(登录回调一次生成,Task 4/6;与明文 csrf_token cookie 同值)
+    id_token: str = ""                    # OIDC id_token:RP-initiated logout 的 id_token_hint(无缝登出);带默认 → 旧 cookie 向后兼容
 
     def is_expired(self, now: int, skew: int = 30) -> bool:
         # skew:提前 30s 视为过期,留刷新窗口(避免 access 刚好在下游验签时过期)
