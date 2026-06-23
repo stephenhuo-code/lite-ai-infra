@@ -1,6 +1,6 @@
 import textwrap
 import pytest
-from libs.config import load_settings, ConfigError
+from libs.config import load_settings, ConfigError, export_env, SERVICE_ENV_KEYS
 
 def _write(tmp_path, name, body):
     d = tmp_path / "configs"; d.mkdir(exist_ok=True)
@@ -99,3 +99,32 @@ def test_missing_section_raises_config_error_not_typeerror(tmp_path):
     """)
     with pytest.raises(ConfigError):
         load_settings("local", root=root)
+
+_BASELINE = {
+    "identity": {"LITEAI_JWKS_URL"},
+    "metadata": {"LITEAI_JWKS_URL", "GRAVITINO_URL"},
+    "data-pipeline": {"LITEAI_JWKS_URL", "JOBS_DIR", "OSS_ENDPOINT", "OSS_ACCESS_KEY",
+                      "OSS_SECRET_KEY", "OSS_REGION", "DATA_BUCKET", "AUDIT_BUCKET", "DJ_BIN"},
+    "gateway": {"IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
+                "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
+                "BFF_REDIRECT_URI"},
+}
+
+@pytest.mark.parametrize("svc,keys", _BASELINE.items())
+def test_export_env_matches_baseline(svc, keys):
+    s = load_settings("local")
+    env = export_env(s, svc)
+    assert set(env.keys()) == keys, f"{svc} 键集偏离回归基线"
+    assert all(v for v in env.values()), f"{svc} 有空值"
+
+def test_data_pipeline_subset_covers_worker_oss_set():
+    s = load_settings("local")
+    env = export_env(s, "data-pipeline")
+    for k in ("OSS_ENDPOINT", "OSS_ACCESS_KEY", "OSS_SECRET_KEY", "DATA_BUCKET", "AUDIT_BUCKET"):
+        assert k in env
+
+def test_data_pipeline_paths_are_absolute():
+    s = load_settings("local")
+    env = export_env(s, "data-pipeline")
+    assert env["JOBS_DIR"].startswith("/")
+    assert env["DJ_BIN"].startswith("/")

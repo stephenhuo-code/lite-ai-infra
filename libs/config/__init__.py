@@ -124,3 +124,63 @@ def load_settings(env: str | None = None, root: Path | None = None) -> Settings:
             f"(经环境变量或外部 secret 提供;{env} 档不得静默用空值)"
         )
     return settings
+
+
+# --- 桥接:Settings → 服务现有 env 名(回归基线 1:1) ---
+
+def _abs(path: str | None) -> str | None:
+    if path is None:
+        return None
+    pp = Path(path)
+    return str(pp if pp.is_absolute() else (_REPO_ROOT / pp))
+
+
+def _flat(s: Settings) -> dict[str, str | None]:
+    """扁平 env 名 → 取值(单一映射表;新增 env 在此加一行)。"""
+    p = s.pipeline
+    return {
+        "LITEAI_JWKS_URL": s.auth.jwks_url,
+        "GRAVITINO_URL": s.gravitino.url,
+        "IDENTITY_ORG_URL": s.services.identity_url,
+        "METADATA_URL": s.services.metadata_url,
+        "DATA_PIPELINE_URL": s.services.data_pipeline_url,
+        "BFF_SESSION_KEY": s.bff.session_key,
+        "OIDC_CLIENT_ID": s.bff.oidc_client_id,
+        "OIDC_CLIENT_SECRET": s.bff.oidc_client_secret,
+        "OIDC_ISSUER": s.bff.oidc_issuer,
+        "BFF_REDIRECT_URI": s.bff.redirect_uri,
+        "OSS_ENDPOINT": s.oss.endpoint,
+        "OSS_ACCESS_KEY": s.oss.access_key,
+        "OSS_SECRET_KEY": s.oss.secret_key,
+        "OSS_REGION": s.oss.region,
+        "DATA_BUCKET": s.oss.data_bucket,
+        "AUDIT_BUCKET": s.oss.audit_bucket,
+        "JOBS_DIR": _abs(p.jobs_dir),
+        "DJ_BIN": _abs(p.dj_bin),
+    }
+
+
+# 每服务注入子集 == 现 _env_for 实测基线(顺序无关)
+SERVICE_ENV_KEYS: dict[str, list[str]] = {
+    "identity": ["LITEAI_JWKS_URL"],
+    "metadata": ["LITEAI_JWKS_URL", "GRAVITINO_URL"],
+    "data-pipeline": ["LITEAI_JWKS_URL", "JOBS_DIR", "OSS_ENDPOINT", "OSS_ACCESS_KEY",
+                      "OSS_SECRET_KEY", "OSS_REGION", "DATA_BUCKET", "AUDIT_BUCKET", "DJ_BIN"],
+    "gateway": ["IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
+                "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
+                "BFF_REDIRECT_URI"],
+}
+
+
+def export_env(s: Settings, service: str) -> dict[str, str]:
+    """返回该服务启动所需的扁平 env(== 现 _env_for 注入集)。"""
+    if service not in SERVICE_ENV_KEYS:
+        raise ConfigError(f"未知服务: {service}(可选:{', '.join(SERVICE_ENV_KEYS)})")
+    flat = _flat(s)
+    out = {}
+    for k in SERVICE_ENV_KEYS[service]:
+        v = flat.get(k)
+        if v is None:
+            raise ConfigError(f"服务 {service} 所需配置 {k} 为空(env={s.env})")
+        out[k] = str(v)
+    return out
