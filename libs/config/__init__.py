@@ -136,7 +136,13 @@ def _abs(path: str | None) -> str | None:
 
 
 def _flat(s: Settings) -> dict[str, str | None]:
-    """扁平 env 名 → 取值(单一映射表;新增 env 在此加一行)。"""
+    """扁平 env 名 → 取值(单一映射表;新增 env 在此加一行)。
+
+    不变量:值不得含空格或 glob 元字符(* ? [)。消费方 scripts/dev_services.sh
+    与 Makefile run-* 用无引号 `env $(load_env.py svc)` 词分割注入,含空格/glob 的值
+    会被错误切分。今所有值均满足。若未来配置值变复杂(连接串/带空格密码),改用
+    load_env.py 的 `--export` + `eval "$(... --export)"` 模式以规避词分割。
+    """
     p = s.pipeline
     return {
         "LITEAI_JWKS_URL": s.auth.jwks_url,
