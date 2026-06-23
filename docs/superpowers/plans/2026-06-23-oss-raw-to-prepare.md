@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED by [2026-06-23-catalog-driven-datasets.md](./2026-06-23-catalog-driven-datasets.md)**(owner 选 catalog-driven 模型;本 plan 的 fetch_oss_tars 机制已并入,'约定读'换成 catalog-driven 读)。
+
 # 打通 OSS→管线(S2a raw→prepare)Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development(推荐)或 superpowers:executing-plans 逐任务执行。步骤用 checkbox(`- [ ]`)跟踪。
