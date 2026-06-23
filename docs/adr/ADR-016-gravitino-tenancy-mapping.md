@@ -58,3 +58,7 @@ Metalake: e_0001                          ← 企业(硬边界)
 ### 落地说明
 - v1 dev:fileset catalog 指向 **MinIO**(S3 兼容,复用 dev compose);真 OSS 在 test/cloud。`s3-endpoint` + `location: s3a://…`(Gravitino 要 HCFS/s3a)。
 - 具体 REST 端点 / 镜像版本 / s3 bundle 依赖在 Plan 4 第一任务(Gravitino 探针)实测钉死。
+
+---
+
+→ 部分被 ADR-024 修订(owner 归属):fileset 归属真相源由 `owner_group` 改 `owner_user`;OSS 路径 `e-XXXX/g-YYYY/...` → `e-XXXX/{user}/...`;`owner_group`/`group_id` 保留为属性供 audit/v2。
