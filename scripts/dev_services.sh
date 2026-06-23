@@ -13,19 +13,9 @@ SERVICES=(
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PIDDIR="$ROOT/.dev"; mkdir -p "$PIDDIR"
-JWKS="${JWKS:-http://localhost:8080/realms/lite-ai/protocol/openid-connect/certs}"
 
-_env_for() {  # 各服务启动 env
-  case "$1" in
-    identity) echo "LITEAI_JWKS_URL=$JWKS" ;;
-    metadata) echo "LITEAI_JWKS_URL=$JWKS GRAVITINO_URL=http://localhost:8091" ;;
-    # data-pipeline:JOBS_DIR 状态文件根 + 本地 MinIO 凭据/桶(worker 传给 run_prepare)+ 验签 +
-    # DJ_BIN 默认指向 .dj-venv 的真 Data-Juicer(dev/prod parity;先 `make dj-setup` 建好)。
-    data-pipeline) echo "LITEAI_JWKS_URL=$JWKS JOBS_DIR=$ROOT/.dev/jobs OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 OSS_REGION=us-east-1 DATA_BUCKET=lite-ai AUDIT_BUCKET=lite-ai DJ_BIN=$ROOT/.dj-venv/bin/dj-process" ;;
-    # gateway = BFF:下游反代 URL + OIDC/会话 env(dev 固定值;prod 走 secret 管理 + prod 域名,见 README DoD 硬门)
-    gateway)  echo "IDENTITY_ORG_URL=http://localhost:8001 METADATA_URL=http://localhost:8002 DATA_PIPELINE_URL=http://localhost:8003 LITEAI_JWKS_URL=$JWKS BFF_SESSION_KEY=5SetoEInIYji6K_tuQEB8pJ8NCaoC5yi2vNAxtPi7gg= OIDC_CLIENT_ID=lite-ai-web OIDC_CLIENT_SECRET=dev-web-secret OIDC_ISSUER=http://localhost:8080/realms/lite-ai BFF_REDIRECT_URI=http://localhost:8090/auth/callback" ;;
-    *)        echo "" ;;
-  esac
+_env_for() {  # 单一源:从 configs/$LITEAI_ENV.yaml 取该服务 env(见 libs/config)
+  uv run python "$ROOT/scripts/load_env.py" "$1"
 }
 
 _kill_target() {  # 按 uvicorn target 精确杀(连 uv run 子进程一起);再按端口兜底

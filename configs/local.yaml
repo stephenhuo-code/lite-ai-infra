@@ -1,0 +1,27 @@
+# configs/local.yaml —— 完全本地档(单一源)。固定值均为 dev 非真密钥(宪法 §5.3 允许)。
+env: local
+services:
+  identity_url: http://localhost:8001
+  metadata_url: http://localhost:8002
+  data_pipeline_url: http://localhost:8003
+  gateway_url: http://localhost:8090
+auth:
+  jwks_url: http://localhost:8080/realms/lite-ai/protocol/openid-connect/certs
+bff:
+  session_key: 5SetoEInIYji6K_tuQEB8pJ8NCaoC5yi2vNAxtPi7gg=
+  redirect_uri: http://localhost:8090/auth/callback
+  oidc_client_id: lite-ai-web
+  oidc_client_secret: dev-web-secret
+  oidc_issuer: http://localhost:8080/realms/lite-ai
+oss:
+  endpoint: http://localhost:9000
+  access_key: minio
+  secret_key: minio123
+  region: us-east-1
+  data_bucket: lite-ai
+  audit_bucket: lite-ai
+gravitino:
+  url: http://localhost:8091
+pipeline:
+  jobs_dir: ./.dev/jobs
+  dj_bin: ./.dj-venv/bin/dj-process

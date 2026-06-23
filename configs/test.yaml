@@ -1,0 +1,28 @@
+# configs/test.yaml —— 测试(阿里云 ECS)档骨架。阶段 3(ADR-022)接入真实启动;本轮仅为其输入。
+# 密钥经环境/外部 secret 注入(${VAR});缺失则 load_settings fail-fast。
+env: test
+services:
+  identity_url: http://identity:8001        # TBD(阶段 3):ECS 内网地址
+  metadata_url: http://metadata:8002        # TBD(阶段 3)
+  data_pipeline_url: http://data-pipeline:8003  # TBD(阶段 3)
+  gateway_url: http://gateway:8090          # TBD(阶段 3)
+auth:
+  jwks_url: http://keycloak:8080/realms/lite-ai/protocol/openid-connect/certs  # TBD(阶段 3):ECS KC 地址
+bff:
+  session_key: ${BFF_SESSION_KEY}
+  redirect_uri: http://gateway:8090/auth/callback  # TBD(阶段 3)
+  oidc_client_id: lite-ai-web
+  oidc_client_secret: ${OIDC_CLIENT_SECRET}
+  oidc_issuer: http://keycloak:8080/realms/lite-ai  # TBD(阶段 3)
+oss:
+  endpoint: https://oss-cn-hangzhou.aliyuncs.com  # 真阿里云 OSS(parity 复验,ADR-020)
+  access_key: ${OSS_ACCESS_KEY}
+  secret_key: ${OSS_SECRET_KEY}
+  region: cn-hangzhou
+  data_bucket: ${CI_DATA_BUCKET}             # 独立 CI 桶(ADR-022 §3)
+  audit_bucket: ${CI_AUDIT_BUCKET}
+gravitino:
+  url: http://gravitino:8090                 # TBD(阶段 3):ECS Gravitino 地址
+pipeline:
+  jobs_dir: /var/lib/lite-ai/jobs            # TBD(阶段 3):ECS 路径
+  dj_bin: /opt/dj-venv/bin/dj-process        # TBD(阶段 3)
