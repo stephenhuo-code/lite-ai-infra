@@ -13,7 +13,7 @@
 3. **新增运行时依赖 pipeline→metadata + bearer 传播**:这是**新基建**(data-pipeline 现无 HTTP 客户端、Context 不带 token)——需在 handler 捕获入站 bearer + 建 metadata 只读客户端。HTTP 运行时调用,非 import,不破 `.importlinter` 分层。
 4. **显式注册 + location 服务端钉死(新增逻辑)**:注册是用户显式动作。注册端点**新增**隔离逻辑:raw 省略 location → 服务端用 `DatasetPaths(bucket, enterprise_of(ctx), group, dataset).raw_prefix` 算(eid/gid 来自 ctx);processed 校验给定 Lance URI 必须落在 `DatasetPaths(...).processed_uri` 的 caller 前缀内(eid/gid from ctx)。客户端**不能**指任意 location。(注:现状注册端点直接用 `body.location`,从不钉死——本轮新增。)
 5. **信任链**:catalog 的 location **只在注册闸门写入且服务端钉死** → 管线读时可信;叠加读经 `can()`。若将来开放 location 客户端可改(外部数据集 import),此不变式即破,需重审。
-6. **num_samples 管线权威**(调和 ADR-008):processed 的 `num_samples` 取**作业结果 rows_written**,用户禁填——遵 ADR-008"Layer-1 字段由管线写、用户禁填"。用户仅触发注册。
+6. **num_samples 管线权威 = UI 层强制(v1)**(调和 ADR-008):processed 的 `num_samples` 取**作业结果 rows_written**;**界面只读取值、用户不可编辑**(UI 强制)。架构限制:metadata 注册端点拿不到作业(作业在 data-pipeline),无法服务端独立核验 → v1 服务端接受 body 值但不作权威闸,**服务端权威(注册引用 job_id 跨服务回填 rows_written)标 v-next**。仍遵 ADR-008"Layer-1 字段管线产出、不让用户自由编辑"的意图。
 7. **血缘用数据集名引用**(v1):单 catalog/单 schema 内够用;**接受"来源删后同名重注册→血缘漂移"弱点**;v-next 转不透明 datasetId。**相对 ADR-008(lineage 列 v2)本轮提前交付最小单跳血缘**。
 8. **契约直接破坏性改**(owner 拍;v1 未 GA、无外部消费者):`RegisterDataset.location` 由 required 改可选+服务端控制;`PrepareJobRequest.tar_dir`(required)弃用→新增 `source_dataset`;同 PR 改全部内部消费者(worker/runner)+ 更新 oasdiff 基线。**本条改 [ADR-018](./ADR-018-data-pipeline-job-scheduling.md) 原"加法收紧"口径为"替换"**(在此显式留痕,符合宪法"改 ADR 决策须走 ADR")。
 9. **catalog/schema 显式 bootstrap**:一次性命令/脚本(provisioner-lite)建 metalake+catalog+schema,**非注册时惰性 ensure**;空企业浏览列表对 404 返空(现状会 500,本轮修)。
@@ -21,7 +21,8 @@
 
 ## Consequences
 **正面**:catalog 成数据集真相源(位置/格式/血缘);管线不猜路径;血缘 DAG 起步;为数据域/Organizations 铺路。
-**负面/代价(接受)**:新增 pipeline→metadata 运行时依赖 + bearer 传播基建(承重墙,列首任务/探针);两处破坏性契约(内部消费者同 PR 改);metadata 新持 OSS 凭据(§5.2 分发面扩大,纳入 env-config 单一源 + prod DoD);血缘名引用有重名漂移弱点。
+**负面/代价(接受)**:新增 pipeline→metadata 运行时依赖 + bearer 传播基建(承重墙,列首任务/探针);两处破坏性契约(内部消费者同 PR 改);血缘名引用有重名漂移弱点。
+**密钥面澄清(I-3)**:真正用 OSS 凭据的是 **`scripts/bootstrap_catalog.py` 进程**(建 OSS-fileset catalog 调 `ensure_catalog`);**常驻 metadata 服务运行时不做 OSS 数据面操作**(register 只用 `DATA_BUCKET` 拼钉死 location 字符串)。v1 为简便把 OSS_* 一并注入 metadata env;**prod DoD:OSS 写密钥应只发给 bootstrap 进程、不常驻注入 metadata 服务**(§5.2 最小权限),作为上线硬化项。
 
 ## Alternatives considered
 - **约定读(管线猜 OSS 路径)**:简单,但不可扩展到非约定位置、catalog 不成真相源、无血缘起点。否决。
