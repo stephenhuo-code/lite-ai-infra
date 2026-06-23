@@ -103,7 +103,8 @@ def test_missing_section_raises_config_error_not_typeerror(tmp_path):
 
 _BASELINE = {
     "identity": {"LITEAI_JWKS_URL"},
-    "metadata": {"LITEAI_JWKS_URL", "GRAVITINO_URL"},
+    "metadata": {"LITEAI_JWKS_URL", "GRAVITINO_URL", "OSS_ENDPOINT", "OSS_ACCESS_KEY",
+                 "OSS_SECRET_KEY", "DATA_BUCKET"},
     "data-pipeline": {"LITEAI_JWKS_URL", "JOBS_DIR", "OSS_ENDPOINT", "OSS_ACCESS_KEY",
                       "OSS_SECRET_KEY", "OSS_REGION", "DATA_BUCKET", "AUDIT_BUCKET", "DJ_BIN"},
     "gateway": {"IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",

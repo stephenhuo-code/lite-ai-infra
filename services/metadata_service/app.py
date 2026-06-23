@@ -71,8 +71,14 @@ def build_app(gravitino):
     def list_ds(catalog: str, schema: str, ctx: Context = Depends(context_from_request)):
         ent = enterprise_of(ctx)
         ml = _metalake(ent)
+        try:
+            names = gravitino.list_filesets(ml, catalog, schema)
+        except GravitinoError as e:
+            if getattr(e, "status", None) == 404:   # 空企业:catalog/schema 未建 → 空列表(非 500)
+                return {"datasets": []}
+            raise
         out = []
-        for name in gravitino.list_filesets(ml, catalog, schema):  # N+1:list 仅返回名,逐个 get(ADR-016 规模可忽略)
+        for name in names:  # N+1:list 仅返回名,逐个 get(ADR-016 规模可忽略)
             fs = gravitino.get_fileset(ml, catalog, schema, name)
             if not _owner_group(fs):       # 不可归属 → fail-closed,不列出
                 continue
