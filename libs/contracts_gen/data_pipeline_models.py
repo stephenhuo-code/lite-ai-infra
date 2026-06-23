@@ -12,7 +12,7 @@ from pydantic import BaseModel, conint, constr
 class PrepareJobRequest(BaseModel):
     dataset: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
     group_id: constr(pattern=r'^g-[0-9a-z]+$')
-    tar_dir: str
+    source_dataset: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
     np: conint(ge=1) | None = None
     process: list[dict[str, Any]] | None = None
 

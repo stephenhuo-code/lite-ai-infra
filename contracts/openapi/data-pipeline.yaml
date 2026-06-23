@@ -59,11 +59,11 @@ components:
   schemas:
     PrepareJobRequest:
       type: object
-      required: [dataset, group_id, tar_dir]
+      required: [dataset, group_id, source_dataset]
       properties:
-        dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
+        dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}            # 产出(processed)数据集名
         group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
-        tar_dir: {type: string}                       # S1: 管线宿主机 ops 路径(ADR-018);S2a 改 OSS raw 引用
+        source_dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}     # S2a catalog-driven:源 raw 数据集名;服务端 submit 时(带 bearer)查 metadata 解析 location(kind 须 raw)
         np: {type: [integer, 'null'], minimum: 1}
         process: {type: [array, 'null'], items: {type: object}}   # Layer 1 DJ 算子(spec §8;build_recipe(process=…))
     Job:

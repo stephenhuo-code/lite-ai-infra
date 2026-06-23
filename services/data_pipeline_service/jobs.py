@@ -14,7 +14,7 @@ class JobSpec:
     enterprise_id: str
     role: str            # 提交时调用者在该组的角色快照(worker 复检 can() 用)
     sub: str
-    tar_dir: str
+    source_location: str  # S2a catalog-driven:源 raw 数据集 OSS 前缀(submit 时带 bearer 经 metadata 解析;worker detached 无 bearer 故 submit 时定)
     np: int
     process: list[dict] | None = None
 

@@ -2,7 +2,8 @@ import threading, types
 from services.data_pipeline_service.jobs import JobSpec, JobStore
 from services.data_pipeline_service.scheduler import SubprocessJobRunner
 
-def _spec(jid): return JobSpec(jid, "cc3m", "g-0001", "e-0001", "member", "u-a", "/d", 3, None)
+def _spec(jid): return JobSpec(jid, "cc3m", "g-0001", "e-0001", "member", "u-a",
+                               "s3://b/e-0001/g-0001/raw/cc3m/", 3, None)
 
 def _runner(tmp_path, alive=None):
     """alive=None → 所有 pid 视为活(默认);alive=set(...) → 仅集合内 pid 活(测看门狗)。

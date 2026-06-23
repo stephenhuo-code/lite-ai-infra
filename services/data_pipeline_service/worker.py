@@ -29,7 +29,8 @@ def run_job(job_dir: str) -> None:
     ctx = Context(user=spec.sub, memberships=[
         Membership(EnterpriseId(spec.enterprise_id), GroupId(spec.group_id), spec.role)])
     req = PrepareRequest(
-        tar_dir=spec.tar_dir, work_dir=str(store.job_dir(job_id) / "work"),
+        tar_dir="", source_location=spec.source_location,    # catalog-driven:从 OSS location 取 tar(tar_dir 旧本地路径已废)
+        work_dir=str(store.job_dir(job_id) / "work"),
         bucket=os.environ["DATA_BUCKET"], enterprise_id=spec.enterprise_id,
         group_id=spec.group_id, dataset=spec.dataset, np=spec.np,
         oss_endpoint=os.environ["OSS_ENDPOINT"], access_key=os.environ["OSS_ACCESS_KEY"],

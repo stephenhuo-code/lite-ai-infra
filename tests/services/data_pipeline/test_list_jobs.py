@@ -21,12 +21,17 @@ def _seam(monkeypatch):
     monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
 
 
+class _FakeMeta:
+    def get_dataset(self, catalog, schema, name, *, bearer):
+        return {"name": name, "kind": "raw", "location": f"s3://b/e-0001/g-0001/raw/{name}/"}
+
+
 def _client(tmp_path):
     from libs.audit.oss_audit import AuditWriter
     from services.data_pipeline_service.scheduler import SubprocessJobRunner
     store = JobStore(str(tmp_path))
     runner = SubprocessJobRunner(store, spawn=lambda argv, **kw: None)
-    return TestClient(build_app(runner=runner, audit=AuditWriter(MemSink()))), store
+    return TestClient(build_app(runner=runner, audit=AuditWriter(MemSink()), metadata=_FakeMeta())), store
 
 
 def _hdr(sub, gid):
@@ -35,7 +40,7 @@ def _hdr(sub, gid):
 
 def _submit(c, sub, gid):
     return c.post("/v1/data/prepare", headers=_hdr(sub, gid),
-                  json={"dataset": "cc3m", "group_id": gid, "tar_dir": "/d"}).json()["id"]
+                  json={"dataset": "cc3m", "group_id": gid, "source_dataset": "cc3m-raw"}).json()["id"]
 
 
 def test_lists_only_callers_group(tmp_path):

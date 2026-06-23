@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
-from fastapi import Depends, HTTPException, Query
+from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from libs.authz.engine import can
 from libs.authz.types import Resource
@@ -13,6 +13,7 @@ from libs.identity.ids import EnterpriseId, GroupId
 from services._scaffold.app import make_service_app
 from services._scaffold.auth import context_from_request, enterprise_of   # enterprise_of 本 plan 抽自 metadata-service
 from services.data_pipeline_service.jobs import JobSpec
+from services.data_pipeline_service.metadata_client import MetadataClient
 from services.data_pipeline_service.upload import ObjectMissing
 
 def _audit(audit: AuditWriter, ctx: Context, ent: str, gid: str, resource_uri: str,
@@ -22,21 +23,33 @@ def _audit(audit: AuditWriter, ctx: Context, ent: str, gid: str, resource_uri: s
                            action=action, resource_uri=resource_uri, decision=decision,
                            override=False, reason=reason, metadata=metadata or {}))
 
-def build_app(runner, audit: AuditWriter, uploader=None):
+def build_app(runner, audit: AuditWriter, uploader=None, metadata=None):
     app = make_service_app(title="data-pipeline-service", version="0.1.0")
+    metadata = metadata or MetadataClient()   # 延迟构造(默认参数 None)避免 import 期连接
 
     @app.post("/v1/data/prepare", status_code=202)
-    def prepare(body: PrepareJobRequest, ctx: Context = Depends(context_from_request)):
+    def prepare(body: PrepareJobRequest, request: Request,
+                ctx: Context = Depends(context_from_request)):
         ent = enterprise_of(ctx)
         res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), group_id=GroupId(body.group_id))
         d = can(ctx, "data.prepare", res)
         if not d.allow:                       # deny → 零副作用 + 审计
             _audit(audit, ctx, ent, body.group_id, f"dataset/{body.dataset}", "data.prepare", "deny", d.reason)
             return JSONResponse(status_code=403, content={"reason": d.reason})
+        # catalog-driven:submit 时(带 caller bearer,经 metadata can())按名解析源 raw 数据集的 OSS location。
+        # worker detached 无 bearer,故必须在此解析(探针结论)。kind 须 raw(v1 只从原始数据集产出)。
+        bearer = request.headers.get("authorization", "")
+        try:
+            ds = metadata.get_dataset("data", "datasets", body.source_dataset, bearer=bearer)
+        except Exception:
+            return JSONResponse(status_code=400, content={"reason": "源数据集不存在或不可读"})
+        if ds.get("kind") != "raw":
+            return JSONResponse(status_code=400, content={"reason": "源须为原始数据集(v1)"})
+        source_location = ds["location"]
         job_id = "job-" + uuid.uuid4().hex[:16]      # 服务端不透明 id(不变量 3)
         spec = JobSpec(job_id=job_id, dataset=body.dataset, group_id=body.group_id, enterprise_id=ent,
                        role=ctx.role_in(EnterpriseId(ent), GroupId(body.group_id)) or "member",
-                       sub=ctx.user, tar_dir=body.tar_dir, np=body.np or 3, process=body.process)
+                       sub=ctx.user, source_location=source_location, np=body.np or 3, process=body.process)
         runner.submit(spec)
         return runner.get(job_id)
 

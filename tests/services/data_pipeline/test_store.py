@@ -2,7 +2,7 @@ from services.data_pipeline_service.jobs import JobSpec, JobStore
 
 def _spec(jid="job-1", **kw):
     d = dict(job_id=jid, dataset="cc3m", group_id="g-0001", enterprise_id="e-0001",
-             role="member", sub="u-alice", tar_dir="/d", np=3, process=None)
+             role="member", sub="u-alice", source_location="s3://b/e-0001/g-0001/raw/cc3m/", np=3, process=None)
     d.update(kw); return JobSpec(**d)
 
 def test_create_then_read_is_queued(tmp_path):
@@ -37,4 +37,4 @@ def test_read_unknown_is_none(tmp_path):
 def test_load_spec_roundtrip(tmp_path):
     s = JobStore(str(tmp_path)); s.create(_spec(process=[{"a": 1}]))
     sp = s.load_spec("job-1")
-    assert sp.tar_dir == "/d" and sp.role == "member" and sp.process == [{"a": 1}]
+    assert sp.source_location == "s3://b/e-0001/g-0001/raw/cc3m/" and sp.role == "member" and sp.process == [{"a": 1}]
