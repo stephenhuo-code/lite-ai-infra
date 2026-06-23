@@ -1,4 +1,3 @@
-import os
 import textwrap
 import pytest
 from libs.config import load_settings, ConfigError
@@ -7,7 +6,7 @@ def _write(tmp_path, name, body):
     d = tmp_path / "configs"; d.mkdir(exist_ok=True)
     (d / name).write_text(textwrap.dedent(body)); return tmp_path
 
-def test_load_local_resolves_literal_values(tmp_path, monkeypatch):
+def test_load_local_resolves_literal_values(tmp_path):
     root = _write(tmp_path, "local.yaml", """
         env: local
         oss: {endpoint: 'http://localhost:9000', access_key: minio, secret_key: minio123,
@@ -74,6 +73,22 @@ def test_local_env_with_unfilled_placeholder_is_error(tmp_path):
               oidc_client_secret: s, oidc_issuer: 'http://x'}
         gravitino: {url: 'http://grav'}
         pipeline: {jobs_dir: ./.dev/jobs, dj_bin: ./x}
+    """)
+    with pytest.raises(ConfigError):
+        load_settings("local", root=root)
+
+def test_missing_section_raises_config_error_not_typeerror(tmp_path):
+    # 整段缺失(无 services:)应抛 ConfigError,而非裸 TypeError
+    root = _write(tmp_path, "local.yaml", """
+        env: local
+        oss: {endpoint: 'http://localhost:9000', access_key: minio, secret_key: minio123,
+              region: us-east-1, data_bucket: lite-ai, audit_bucket: lite-ai}
+        auth: {jwks_url: 'http://localhost:8080/x'}
+        bff: {session_key: devkey, redirect_uri: 'http://localhost:8090/auth/callback',
+              oidc_client_id: lite-ai-web, oidc_client_secret: dev-web-secret,
+              oidc_issuer: 'http://localhost:8080/realms/lite-ai'}
+        gravitino: {url: 'http://localhost:8091'}
+        pipeline: {jobs_dir: ./.dev/jobs, dj_bin: ./.dj-venv/bin/dj-process}
     """)
     with pytest.raises(ConfigError):
         load_settings("local", root=root)

@@ -104,15 +104,20 @@ def load_settings(env: str | None = None, root: Path | None = None) -> Settings:
     def grp(name):
         return {k: _expand(v, missing) for k, v in (data.get(name) or {}).items()}
 
-    settings = Settings(
-        env=data.get("env", env),
-        services=_Services(**grp("services")),
-        auth=_Auth(**grp("auth")),
-        bff=_Bff(**grp("bff")),
-        oss=_Oss(**grp("oss")),
-        gravitino=_Gravitino(**grp("gravitino")),
-        pipeline=_Pipeline(**grp("pipeline")),
-    )
+    try:
+        settings = Settings(
+            env=data.get("env", env),
+            services=_Services(**grp("services")),
+            auth=_Auth(**grp("auth")),
+            bff=_Bff(**grp("bff")),
+            oss=_Oss(**grp("oss")),
+            gravitino=_Gravitino(**grp("gravitino")),
+            pipeline=_Pipeline(**grp("pipeline")),
+        )
+    except TypeError as e:
+        raise ConfigError(
+            f"[{env}] 配置结构错误(缺字段或多余字段): {e}"
+        ) from e
     if missing:
         raise ConfigError(
             f"[{env}] 必需配置占位未注入: {', '.join(sorted(set(missing)))} "
