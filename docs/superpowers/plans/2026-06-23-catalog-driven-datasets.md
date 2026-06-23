@@ -426,6 +426,7 @@ git commit -m "feat(frontend): 注册按钮(raw/processed)+ CreateJob 源下拉 
   - 应看到:`bootstrapped e_0001/data/datasets`。
 - [ ] **2. 造数据并上传到对象存储**
   - 跑:`uv run --with datasets --with pillow python scripts/make_coco_smoke_tar.py`(产出 `./.smoke/coco-smoke.tar`;`datasets`/`pillow` 是夹具专用依赖,`--with` 临时带,不进项目 deps)
+  - **国内网络连不上 HuggingFace** 时,前面加镜像:`HF_ENDPOINT=https://hf-mirror.com uv run --with datasets --with pillow python scripts/make_coco_smoke_tar.py`
   - 跑:`docker run --rm --network dev_default -v "$PWD/.smoke:/d" --entrypoint sh minio/mc -c "mc alias set x http://minio:9000 minio minio123 && mc cp /d/coco-smoke.tar x/lite-ai/e-0001/g-0001/raw/coco/coco-smoke.tar"`
   - 应看到:拷贝成功。
 - [ ] **3. 浏览器:注册原始数据集**
