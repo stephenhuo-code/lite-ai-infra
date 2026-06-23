@@ -22,6 +22,17 @@ class _FakeMeta:
         return self._ds
 
 
+class _FakeMeta403:
+    """fake metadata client:get_dataset 抛 403(模拟跨组 metadata can() 拒绝 dataset.read)。"""
+    def __init__(self): self.calls = []
+
+    def get_dataset(self, catalog, schema, name, *, bearer):
+        self.calls.append((catalog, schema, name, bearer))
+        raise httpx.HTTPStatusError(
+            "403", request=httpx.Request("GET", "http://x"),
+            response=httpx.Response(403))
+
+
 class _FakeRunner:
     def __init__(self): self.spec = None
     def submit(self, spec): self.spec = spec
@@ -72,3 +83,15 @@ def test_missing_source_400(tmp_path):
                json={"dataset": "out", "group_id": "g-0001", "source_dataset": "nope"})
     assert r.status_code == 400
     assert runner.spec is None
+
+
+def test_unreadable_source_403_maps_to_400(tmp_path):
+    # 隔离负例:调用者对源数据集无 dataset.read → metadata can() 返 403 →
+    # prepare 必须返 400(不泄露存在性),且零副作用(不 submit)。
+    meta = _FakeMeta403()                                # get_dataset 抛 403
+    c, runner = _client(meta)
+    r = c.post("/v1/data/prepare", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+               json={"dataset": "out", "group_id": "g-0001", "source_dataset": "other-group-ds"})
+    assert r.status_code == 400
+    assert r.json()["reason"] == "源数据集不存在或不可读"
+    assert runner.spec is None                           # 零副作用:未提交

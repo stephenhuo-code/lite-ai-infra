@@ -134,6 +134,8 @@ def build_app(gravitino):
                  "kind": kind, "format": fmt}
         if body.derived_from:
             props["derived_from"] = body.derived_from
+        # num_samples:v1 由 UI 只读取自作业 rows_written(用户不可编辑,FR-010 UI 层强制)。
+        # metadata 注册时拿不到作业,故此处接受 body 值但不作服务端权威闸;服务端权威(引用 job_id 回填)= v-next(ADR-023 §6)。
         if body.num_samples is not None:
             props["num_samples"] = str(body.num_samples)
         if body.size_bytes is not None:
