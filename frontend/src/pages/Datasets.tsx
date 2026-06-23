@@ -17,6 +17,8 @@ type Dataset = MetaComp['schemas']['Dataset']
 type RawDataset = PipeComp['schemas']['RawDataset']
 
 // 合并后的统一行模型(字段名以生成类型为准)。
+// 详情抽屉(US1 AC4)展示已有属性,故 Row 额外携带 location/scope/status。
+// 注:不携带 e-/g- 内部 ID(FR-004)。
 type Row = {
   key: string
   name: string
@@ -25,6 +27,9 @@ type Row = {
   numSamples: number | null
   sizeBytes: number | null
   createdBy: string | null
+  location: string | null
+  scope: Dataset['scope'] | null
+  status: RawDataset['status'] | null // 仅原始数据有
   raw: boolean
 }
 
@@ -41,6 +46,9 @@ function toRows(
     numSamples: d.num_samples ?? null,
     sizeBytes: d.size_bytes ?? null,
     createdBy: d.created_by ?? d.owner ?? null,
+    location: d.location ?? null,
+    scope: d.scope ?? null,
+    status: null,
     raw: false,
   }))
   const rawRows: Row[] = (raw.raw ?? []).map((r: RawDataset) => ({
@@ -51,6 +59,9 @@ function toRows(
     numSamples: null,
     sizeBytes: r.size ?? null,
     createdBy: null,
+    location: null,
+    scope: null,
+    status: r.status ?? null,
     raw: true,
   }))
   return [...metaRows, ...rawRows]
@@ -74,12 +85,81 @@ function fmtNum(n: number | null): string {
   return n === null || n === undefined ? '—' : n.toLocaleString('en-US')
 }
 
+// 是否共享:scope 文案(私有/已共享),缺值显「—」。
+function scopeLabel(s: Dataset['scope'] | null): string {
+  if (s === 'shared') return '已共享'
+  if (s === 'private') return '私有'
+  return '—'
+}
+
+// 原始数据状态文案(就绪/处理中/失败),缺值显「—」。
+function statusLabel(s: RawDataset['status'] | null): string {
+  if (s === 'ready') return '就绪'
+  if (s === 'pending') return '处理中'
+  if (s === 'failed') return '失败'
+  return '—'
+}
+
+// 数据集详情侧抽屉(US1 AC4):展示该数据集已有属性。
+// 复用 Pipelines.tsx 的右侧抽屉模式。不显 e-/g- 内部 ID(FR-004)。
+function DatasetDetail({ row, onClose }: { row: Row; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-30 flex justify-end">
+      <div className="absolute inset-0 bg-slate-900/30" onClick={onClose} />
+      <div className="relative w-full max-w-md h-full bg-white shadow-xl overflow-auto">
+        <div className="h-16 px-6 flex items-center border-b border-slate-100">
+          <h2 className="font-semibold text-base">数据集详情</h2>
+          <button
+            onClick={onClose}
+            aria-label="关闭"
+            className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <h3 className="font-semibold text-lg break-all">{row.name}</h3>
+            {row.raw && <span className="text-[10px] font-normal text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">原始</span>}
+          </div>
+
+          <dl className="grid grid-cols-[88px_1fr] gap-y-3 text-sm">
+            <dt className="text-slate-500">描述</dt>
+            <dd className="text-slate-700">{dash(row.desc)}</dd>
+            <dt className="text-slate-500">格式</dt>
+            <dd className="text-slate-700">{dash(row.format)}</dd>
+            <dt className="text-slate-500">样本数</dt>
+            <dd className="text-slate-700">{fmtNum(row.numSamples)}</dd>
+            <dt className="text-slate-500">大小</dt>
+            <dd className="text-slate-700">{fmtBytes(row.sizeBytes)}</dd>
+            <dt className="text-slate-500">创建人</dt>
+            <dd className="text-slate-700">{dash(row.createdBy)}</dd>
+            <dt className="text-slate-500">位置</dt>
+            <dd className="text-slate-700 break-all">{dash(row.location)}</dd>
+            <dt className="text-slate-500">是否共享</dt>
+            <dd className="text-slate-700">{scopeLabel(row.scope)}</dd>
+            {/* 原始数据则显状态 */}
+            {row.raw && (
+              <>
+                <dt className="text-slate-500">状态</dt>
+                <dd className="text-slate-700">{statusLabel(row.status)}</dd>
+              </>
+            )}
+          </dl>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Datasets() {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
   const [showUpload, setShowUpload] = useState(false)
+  const [detailKey, setDetailKey] = useState<string | null>(null)
 
   const load = useCallback(() => {
     return Promise.all([
@@ -98,6 +178,11 @@ export function Datasets() {
     if (!term) return rows
     return rows.filter(r => r.name.toLowerCase().includes(term))
   }, [rows, q])
+
+  const detailRow = useMemo(
+    () => rows.find(r => r.key === detailKey) ?? null,
+    [rows, detailKey],
+  )
 
   return (
     <div>
@@ -145,7 +230,11 @@ export function Datasets() {
               <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-400">暂无数据集</td></tr>
             )}
             {!loading && !error && filtered.map(r => (
-              <tr key={r.key}>
+              <tr
+                key={r.key}
+                onClick={() => setDetailKey(r.key)}
+                className="cursor-pointer hover:bg-slate-50"
+              >
                 <td className="px-5 py-3">
                   <div className="font-medium text-[#4F46E5] flex items-center gap-2">
                     {r.name}
@@ -158,7 +247,10 @@ export function Datasets() {
                 <td className="px-5 py-3 text-slate-500">{fmtBytes(r.sizeBytes)}</td>
                 <td className="px-5 py-3 text-slate-600">{dash(r.createdBy)}</td>
                 <td className="px-5 py-3">
-                  <button className="text-xs text-[#4F46E5] hover:underline">详情</button>
+                  <button
+                    onClick={e => { e.stopPropagation(); setDetailKey(r.key) }}
+                    className="text-xs text-[#4F46E5] hover:underline"
+                  >详情</button>
                 </td>
               </tr>
             ))}
@@ -171,6 +263,10 @@ export function Datasets() {
           onClose={() => setShowUpload(false)}
           onDone={() => { setLoading(true); setError(''); void load() }}
         />
+      )}
+
+      {detailRow && (
+        <DatasetDetail row={detailRow} onClose={() => setDetailKey(null)} />
       )}
     </div>
   )

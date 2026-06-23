@@ -4,7 +4,7 @@ import { Catalog } from './Catalog'
 
 // 数据目录 Catalog Explorer 两栏(US3):左树(企业→catalog→schema→数据集,可展开)、右详情。
 // 断言:左树渲染 catalog data;点开 data 出 schema datasets;点 schema 后右侧列出两条数据集。
-// 禁:权限/策略 Tab、共享/注册/新建 按钮(spec Out);不显 e-/g- 原始 ID(FR-004)。
+// 禁:详情/权限/策略 Tab、共享/注册/新建 按钮(spec Out);不显 e-/g- 原始 ID(FR-004)。
 beforeEach(() => { vi.restoreAllMocks() })
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -60,7 +60,7 @@ it('左树渲染 catalog;点开出 schema;选中 schema 后右侧列出数据集
   expect(screen.getByText('Catalog Explorer')).toBeTruthy()
 })
 
-it('只含 概览/详情 Tab;无 权限/策略 Tab、无 共享/注册/新建 按钮;不显 e-/g- ID', async () => {
+it('只含 概览 Tab;无 详情/权限/策略 Tab、无 共享/注册/新建 按钮;不显 e-/g- ID', async () => {
   mockApis()
   render(<Catalog />)
   await waitFor(() => expect(screen.getByText('data')).toBeTruthy())
@@ -69,9 +69,9 @@ it('只含 概览/详情 Tab;无 权限/策略 Tab、无 共享/注册/新建 �
   fireEvent.click(screen.getByText('datasets'))
   await waitFor(() => expect(screen.getByText('cc3m')).toBeTruthy())
 
-  // Tab 仅 概览/详情
+  // Tab 仅 概览(US3 由概览满足;去掉建设中的「详情」占位)
   expect(screen.getByText('概览')).toBeTruthy()
-  expect(screen.getByText('详情')).toBeTruthy()
+  expect(screen.queryByText('详情')).toBeNull()
 
   // 禁:权限/策略 Tab
   expect(screen.queryByText('权限')).toBeNull()
@@ -89,7 +89,7 @@ it('只含 概览/详情 Tab;无 权限/策略 Tab、无 共享/注册/新建 �
   expect(screen.queryByText(/g-1/)).toBeNull()
 })
 
-it('详情 Tab 为占位', async () => {
+it('无「详情」Tab 与「建设中」占位(US3 由概览满足)', async () => {
   mockApis()
   render(<Catalog />)
   await waitFor(() => expect(screen.getByText('data')).toBeTruthy())
@@ -98,10 +98,9 @@ it('详情 Tab 为占位', async () => {
   fireEvent.click(screen.getByText('datasets'))
   await waitFor(() => expect(screen.getByText('cc3m')).toBeTruthy())
 
-  fireEvent.click(screen.getByText('详情'))
-  await waitFor(() => expect(screen.getByText('详情视图建设中')).toBeTruthy())
-  // 切到详情后概览表不再显示
-  expect(screen.queryByText('cc3m')).toBeNull()
+  // 「详情」Tab 与建设中占位均已移除
+  expect(screen.queryByText('详情')).toBeNull()
+  expect(screen.queryByText(/建设中/)).toBeNull()
 })
 
 it('展开 schema 的箭头加载其下数据集(树第四层)', async () => {

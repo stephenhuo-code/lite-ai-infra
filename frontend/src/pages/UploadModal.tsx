@@ -68,7 +68,7 @@ export function UploadModal({ onClose, onDone }: Props) {
             placeholder="如 cc3m"
             className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-[#6366F1] outline-none"
           />
-          <p className="text-[11px] text-slate-400 mt-1.5">归属你 · 上传后出现在数据集列表,可用于创建作业</p>
+          <p className="text-[11px] text-slate-400 mt-1.5">归属你 · 上传后出现在数据集列表</p>
         </div>
 
         {/* 选文件(不选组——组由身份带出) */}
@@ -114,7 +114,7 @@ export function UploadModal({ onClose, onDone }: Props) {
         {phase === 'done' && (
           <div className="mt-3.5 flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5">
             <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
-            上传完成,可在「创建作业」选为源。
+            上传完成,已出现在数据集列表。
           </div>
         )}
 

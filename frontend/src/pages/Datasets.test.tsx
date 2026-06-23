@@ -70,6 +70,43 @@ it('渲染名称/格式/样本数/大小/创建人;null 显「—」;无 模态/
   expect(screen.queryByText('用户组')).toBeNull()
 })
 
+it('点详情打开侧抽屉,展示 location/scope 等已有字段,不显 e-/g- 内部 ID(US1 AC4 / FR-004)', async () => {
+  mockApis()
+  render(<Datasets />)
+  await waitFor(() => expect(screen.getByText('cc3m-clean')).toBeTruthy())
+
+  // 点该行的「详情」按钮
+  const row = screen.getByText('cc3m-clean').closest('tr')!
+  fireEvent.click(within(row).getByText('详情'))
+
+  // 抽屉打开:标题 + 已有字段(位置/是否共享)
+  const drawer = await screen.findByText('数据集详情')
+  const panel = drawer.closest('div.relative')!
+  expect(within(panel as HTMLElement).getByText('位置')).toBeTruthy()
+  expect(within(panel as HTMLElement).getByText('lance://x')).toBeTruthy() // location
+  expect(within(panel as HTMLElement).getByText('是否共享')).toBeTruthy()
+  expect(within(panel as HTMLElement).getByText('私有')).toBeTruthy()       // scope=private
+  expect(within(panel as HTMLElement).getByText('清洗后')).toBeTruthy()     // 描述
+
+  // 不暴露 e-/g- 内部 ID(FR-004)
+  expect(within(panel as HTMLElement).queryByText('e-1')).toBeNull()
+  expect(within(panel as HTMLElement).queryByText('g-1')).toBeNull()
+})
+
+it('原始数据详情抽屉显状态字段', async () => {
+  mockApis()
+  render(<Datasets />)
+  await waitFor(() => expect(screen.getByText('docs-pdf')).toBeTruthy())
+
+  const row = screen.getByText('docs-pdf').closest('tr')!
+  fireEvent.click(within(row).getByText('详情'))
+
+  const drawer = await screen.findByText('数据集详情')
+  const panel = drawer.closest('div.relative')! as HTMLElement
+  expect(within(panel).getByText('状态')).toBeTruthy()
+  expect(within(panel).getByText('就绪')).toBeTruthy() // status=ready
+})
+
 it('搜索框按名称过滤', async () => {
   mockApis()
   render(<Datasets />)

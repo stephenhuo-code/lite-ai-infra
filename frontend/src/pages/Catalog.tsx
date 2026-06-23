@@ -5,7 +5,7 @@ import type { Dataset } from '../api/catalog'
 // 数据目录 Catalog Explorer 两栏(US3):左=目录树(可展开/折叠)、右=详情。
 // 层级:企业(metalake) → catalog → schema → 数据集(fileset),逐层点开加载下一层。
 // 这是只读浏览/发现视图,区别于「数据集」页(管理)。
-// 本轮 Tab 仅 概览/详情;禁出现 权限/策略 Tab、共享/注册/+添加标签/树「新建」按钮(spec Out)。
+// 本轮右栏仅「概览」(US3 由概览满足);禁出现 权限/策略 Tab、共享/注册/+添加标签/树「新建」按钮(spec Out)。
 // 不显 e-/g- 原始 ID(FR-004):顶层企业标签显示「我的企业」,不显 metalake ID。
 // 视觉照高保真原型 2026-06-22-data-domain-hifi.html 数据目录段(靛蓝 #6366F1)。
 
@@ -45,8 +45,6 @@ const iconDataset = (
   <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
 )
 
-type Tab = 'overview' | 'detail'
-
 // 选中的 schema 坐标。
 type Selection = { catalog: string; schema: string }
 
@@ -66,7 +64,6 @@ export function Catalog() {
   const [datasets, setDatasets] = useState<Record<string, Dataset[]>>({})
 
   const [selected, setSelected] = useState<Selection | null>(null)
-  const [tab, setTab] = useState<Tab>('overview')
 
   useEffect(() => {
     listCatalogs()
@@ -103,7 +100,6 @@ export function Catalog() {
   // 选中 schema:高亮 + 右栏渲染;同时确保其 datasets 已加载(供概览清单)。
   const selectSchema = useCallback((c: string, s: string) => {
     setSelected({ catalog: c, schema: s })
-    setTab('overview')
     const key = schemaKey(c, s)
     setDatasets(prev => {
       if (prev[key]) return prev
@@ -133,14 +129,14 @@ export function Catalog() {
           )}
           {!loadingCatalogs && !treeError && (
             <>
-              {/* metalake = 企业(v1 单企业,不显 e- ID) */}
+              {/* 企业(v1 单企业,不显 e- ID 与后端术语) */}
               <button
                 onClick={() => setEnterpriseOpen(o => !o)}
                 className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-slate-700"
               >
                 {chevron(enterpriseOpen)}
                 <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /></svg>
-                我的企业 <span className="text-[10px] text-slate-400 ml-1">metalake</span>
+                我的企业
               </button>
 
               {enterpriseOpen && (
@@ -254,25 +250,17 @@ export function Catalog() {
                 <h2 className="text-xl font-semibold">{selected.schema}</h2>
                 <span className="text-xs text-slate-400 border border-slate-200 rounded px-1.5 py-0.5">schema</span>
               </div>
-              {/* Tab 仅 概览/详情(禁权限/策略) */}
+              {/* Tab 仅 概览(US3 由概览满足;禁权限/策略) */}
               <div className="flex items-center gap-5 text-sm border-b border-slate-200 mb-4">
                 <button
-                  onClick={() => setTab('overview')}
-                  className={`pb-2.5 ${tab === 'overview' ? 'border-b-2 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
-                  style={tab === 'overview' ? { borderColor: BRAND, color: BRAND_DARK } : undefined}
+                  className="pb-2.5 border-b-2 font-medium"
+                  style={{ borderColor: BRAND, color: BRAND_DARK }}
                 >概览</button>
-                <button
-                  onClick={() => setTab('detail')}
-                  className={`pb-2.5 ${tab === 'detail' ? 'border-b-2 font-medium' : 'text-slate-500 hover:text-slate-700'}`}
-                  style={tab === 'detail' ? { borderColor: BRAND, color: BRAND_DARK } : undefined}
-                >详情</button>
               </div>
             </div>
 
             <div className="px-6 pb-6">
-              {tab === 'overview' && (
-                <>
-                  {/* 概览 = 该 schema 下数据集清单:名称/owner/格式/注册时间/scope */}
+              {/* 概览 = 该 schema 下数据集清单:名称/owner/格式/注册时间/scope */}
                   <div className="bg-white border border-slate-200/70 rounded-2xl p-4 shadow-sm mb-5">
                     <table className="w-full text-sm">
                       <thead className="text-slate-500 text-xs border-b border-slate-100">
@@ -318,14 +306,6 @@ export function Catalog() {
                     <dt className="text-slate-500">Catalog</dt>
                     <dd className="text-slate-600">{selected.catalog}</dd>
                   </dl>
-                </>
-              )}
-
-              {tab === 'detail' && (
-                <div className="bg-white border border-slate-200/70 rounded-2xl p-8 shadow-sm text-sm text-slate-400 text-center">
-                  详情视图建设中
-                </div>
-              )}
             </div>
           </>
         )}
