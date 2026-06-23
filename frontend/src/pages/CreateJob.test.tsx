@@ -3,9 +3,9 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { CreateJob } from './CreateJob'
 
-// 创建作业页(catalog-driven · ADR-023):
+// 创建作业页(catalog-driven · ADR-023 / owner 模型 · ADR-024):
 // 挂载拉 listDatasets()→ 过滤 kind==='raw'→ 源下拉只列 raw;
-// 提交 POST /v1/data/prepare body {dataset,group_id,source_dataset} 且无 tar_dir。
+// 提交 POST /v1/data/prepare body {dataset,source_dataset} 且无 group_id / tar_dir。
 beforeEach(() => { vi.restoreAllMocks() })
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -19,8 +19,8 @@ function mockApis() {
     if (u === '/v1/catalogs/data/schemas/datasets/datasets' && (!init || init.method === 'GET' || !init.method)) {
       return new Response(JSON.stringify({
         datasets: [
-          { name: 'coco', enterprise_id: 'e-1', group_id: 'g-1', scope: 'private', location: 'oss://x', kind: 'raw' },
-          { name: 'coco-clean', enterprise_id: 'e-1', group_id: 'g-1', scope: 'private', location: 'lance://y', kind: 'processed' },
+          { name: 'coco', enterprise_id: 'e-1', owner: 'u-1', scope: 'private', location: 'oss://x', kind: 'raw' },
+          { name: 'coco-clean', enterprise_id: 'e-1', owner: 'u-1', scope: 'private', location: 'lance://y', kind: 'processed' },
         ],
       }), { status: 200 })
     }
@@ -28,7 +28,7 @@ function mockApis() {
       lastPrepareBody = JSON.parse(init.body)
       return new Response(JSON.stringify({
         id: 'job-1', status: 'queued', terminal: false, dataset: lastPrepareBody.dataset,
-        group_id: lastPrepareBody.group_id, enterprise_id: 'e-1',
+        owner_user: 'u-1', enterprise_id: 'e-1',
       }), { status: 202 })
     }
     return new Response('', { status: 404 })
@@ -50,7 +50,7 @@ it('源下拉只列 kind=raw 的数据集(coco),不列 processed(coco-clean)', a
   expect(within_options(select)).not.toContain('coco-clean')
 })
 
-it('选源 + 填产出名/组 + 提交 → POST body {dataset,group_id,source_dataset} 且无 tar_dir', async () => {
+it('选源 + 填产出名 + 提交 → POST body {dataset,source_dataset} 且无 group_id / tar_dir', async () => {
   mockApis()
   renderPage()
 
@@ -59,15 +59,14 @@ it('选源 + 填产出名/组 + 提交 → POST body {dataset,group_id,source_da
 
   fireEvent.change(select, { target: { value: 'coco' } })
   fireEvent.change(screen.getByLabelText('产出数据集名'), { target: { value: 'coco-clean' } })
-  fireEvent.change(screen.getByLabelText('用户组(group_id)'), { target: { value: 'g-research' } })
 
   fireEvent.click(screen.getByRole('button', { name: '提交作业' }))
 
   await waitFor(() => expect(lastPrepareBody).not.toBeNull())
   expect(lastPrepareBody.dataset).toBe('coco-clean')
-  expect(lastPrepareBody.group_id).toBe('g-research')
   expect(lastPrepareBody.source_dataset).toBe('coco')
-  // tar_dir 已删,不得出现在 body
+  // group_id 已删(owner 模型 · ADR-024),tar_dir 已删,均不得出现在 body
+  expect('group_id' in lastPrepareBody).toBe(false)
   expect('tar_dir' in lastPrepareBody).toBe(false)
 })
 
@@ -76,9 +75,8 @@ it('未选源时不可提交(canSubmit 判 source)', async () => {
   renderPage()
   await waitFor(() => expect((screen.getByLabelText('源数据集') as HTMLSelectElement).options.length).toBeGreaterThan(1))
 
-  // 只填产出名/组、不选源 → 提交按钮 disabled
+  // 只填产出名、不选源 → 提交按钮 disabled
   fireEvent.change(screen.getByLabelText('产出数据集名'), { target: { value: 'coco-clean' } })
-  fireEvent.change(screen.getByLabelText('用户组(group_id)'), { target: { value: 'g-research' } })
   expect((screen.getByRole('button', { name: '提交作业' }) as HTMLButtonElement).disabled).toBe(true)
 })
 

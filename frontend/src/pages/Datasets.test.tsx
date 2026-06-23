@@ -18,7 +18,7 @@ function mockApis() {
     if (u === '/v1/catalogs/data/schemas/datasets/datasets' && init?.method === 'POST') {
       lastRegisterBody = JSON.parse(init.body)
       return new Response(JSON.stringify({
-        name: lastRegisterBody.name, enterprise_id: 'e-1', group_id: lastRegisterBody.group_id,
+        name: lastRegisterBody.name, enterprise_id: 'e-1', owner: 'u-1',
         scope: 'private', location: 'oss://e/g/raw', kind: 'raw',
       }), { status: 201 })
     }
@@ -27,14 +27,14 @@ function mockApis() {
         datasets: [
           // 已处理:含 kind=processed + derived_from(血缘)
           {
-            name: 'cc3m-clean', enterprise_id: 'e-1', group_id: 'g-1', scope: 'private',
+            name: 'cc3m-clean', enterprise_id: 'e-1', owner: 'u-1', scope: 'private',
             location: 'lance://x', comment: '清洗后', created_by: '韩工',
             format: 'lance', num_samples: 3300000, size_bytes: 1288490188,
             kind: 'processed', derived_from: 'cc3m-raw',
           },
-          // 已处理 + num_samples=null(缺值显 —)
+          // 已处理 + num_samples=null + created_by=null:创建人回退到 owner 字段
           {
-            name: 'docs-partial', enterprise_id: 'e-1', group_id: 'g-1', scope: 'private',
+            name: 'docs-partial', enterprise_id: 'e-1', owner: '李工', scope: 'private',
             location: 'lance://y', comment: null, created_by: null,
             format: 'parquet', num_samples: null, size_bytes: null,
             kind: 'processed', derived_from: null,
@@ -46,7 +46,7 @@ function mockApis() {
       return new Response(JSON.stringify({
         raw: [
           {
-            id: 'raw-9', name: 'docs-pdf', group_id: 'g-1', enterprise_id: 'e-1',
+            id: 'raw-9', name: 'docs-pdf', owner_user: '王工', enterprise_id: 'e-1',
             oss_key: 'e/g/raw/x', status: 'ready', size: 335544320,
           },
         ],
@@ -66,12 +66,18 @@ it('渲染名称/格式/样本数/大小/创建人;null 显「—」;无 模态/
   expect(screen.getByText('lance')).toBeTruthy()
   expect(screen.getByText('3,300,000')).toBeTruthy() // 样本数
   expect(screen.getByText('1.2 GB')).toBeTruthy()    // 大小
-  expect(screen.getByText('韩工')).toBeTruthy()       // 创建人
+  expect(screen.getByText('韩工')).toBeTruthy()       // 创建人(created_by)
 
-  // 原始行渲染并标「原始」(格式列 + 名称旁徽标各一处)
+  // 创建人列 = owner(owner 模型 · ADR-024):
+  // 原始上传项显其 owner_user(王工);已处理项 created_by 缺失时回退 owner(李工)。
+  const partialRowOwner = screen.getByText('docs-partial').closest('tr')!
+  expect(within(partialRowOwner).getByText('李工')).toBeTruthy() // owner 回退
+
+  // 原始行渲染并标「原始」(格式列 + 名称旁徽标各一处)+ 显 owner(王工)
   expect(screen.getByText('docs-pdf')).toBeTruthy()
   const rawRow = screen.getByText('docs-pdf').closest('tr')!
   expect(within(rawRow).getAllByText('原始').length).toBeGreaterThan(0)
+  expect(within(rawRow).getByText('王工')).toBeTruthy() // owner_user
 
   // 缺值显「—」不报错:docs-partial 的 num_samples=null、created_by=null
   const partialRow = screen.getByText('docs-partial').closest('tr')!
@@ -151,7 +157,8 @@ it('原始上传项(ready,未在 catalog)点「注册到目录」→ POST body k
   await waitFor(() => expect(lastRegisterBody).not.toBeNull())
   expect(lastRegisterBody.name).toBe('docs-pdf')
   expect(lastRegisterBody.kind).toBe('raw')
-  expect(lastRegisterBody.group_id).toBe('g-1')
+  // group_id 已删(owner 模型 · ADR-024),不得出现在注册 body
+  expect('group_id' in lastRegisterBody).toBe(false)
   // raw 注册不带 location(服务端钉死)
   expect(lastRegisterBody.location ?? null).toBeNull()
 })

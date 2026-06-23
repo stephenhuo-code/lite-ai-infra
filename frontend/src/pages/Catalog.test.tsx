@@ -21,12 +21,12 @@ function mockApis() {
       return new Response(JSON.stringify({
         datasets: [
           {
-            name: 'cc3m', enterprise_id: 'e-1', group_id: 'g-1', scope: 'private',
-            location: 'oss://x', owner: '韩工', format: 'lance', created_at: '2026-06-20T10:00:00Z',
+            name: 'cc3m', enterprise_id: 'e-1', owner: '韩工', scope: 'private',
+            location: 'oss://x', format: 'lance', created_at: '2026-06-20T10:00:00Z',
           },
           {
-            name: 'laion-clean', enterprise_id: 'e-1', group_id: 'g-1', scope: 'shared',
-            location: 'oss://y', owner: '李工', format: 'parquet', created_at: '2026-06-19T09:00:00Z',
+            name: 'laion-clean', enterprise_id: 'e-1', owner: '李工', scope: 'shared',
+            location: 'oss://y', format: 'parquet', created_at: '2026-06-19T09:00:00Z',
           },
         ],
       }), { status: 200 })

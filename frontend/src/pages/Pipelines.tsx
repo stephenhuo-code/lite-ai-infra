@@ -67,7 +67,6 @@ function JobDetail({ id, onClose }: { id: string; onClose: () => void }) {
     setRegisterErr('')
     registerDataset({
       name: j.dataset,
-      group_id: j.group_id,
       kind: 'processed',
       scope: 'private',
       format: 'lance',
@@ -128,8 +127,8 @@ function JobDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 <dd className="text-slate-700 break-all">{dash(job.id)}</dd>
                 <dt className="text-slate-500">数据集</dt>
                 <dd className="text-slate-700">{dash(job.dataset)}</dd>
-                <dt className="text-slate-500">用户组</dt>
-                <dd className="text-slate-700">{dash(job.group_id)}</dd>
+                <dt className="text-slate-500">创建人</dt>
+                <dd className="text-slate-700">{dash(job.owner_user)}</dd>
                 <dt className="text-slate-500">输入行数</dt>
                 <dd className="text-slate-700">{fmtNum(job.rows_in)}</dd>
                 <dt className="text-slate-500">写入行数</dt>

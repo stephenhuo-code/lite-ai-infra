@@ -11,7 +11,8 @@ import { UploadModal } from './UploadModal'
 // 列表 = metadata 数据集(GET /v1/catalogs/data/schemas/datasets/datasets,含 raw+processed、带 kind)
 //        + pipeline 原始上传(GET /v1/data/raw,标「原始」)合并。
 // 原始上传 ready 且尚未在 catalog → 显「注册到目录」(registerDataset kind=raw,无 location)。
-// 列 = 名称/类型/格式/样本数/大小/创建人/操作。已处理项展示血缘(derived_from)。
+// 列 = 名称/类型/格式/样本数/大小/创建人(owner)/操作。已处理项展示血缘(derived_from)。
+// 创建人 = owner(上传/创建者,owner 模型 · ADR-024);缺失显「—」。
 // 缺值显「—」不报错(FR-008)。禁出现 模态/标签/用户组 列(FR-012 + 组织模型)。
 // 视觉照高保真原型 2026-06-22-data-domain-hifi.html 数据集页(靛蓝 #6366F1)。
 
@@ -20,7 +21,7 @@ type RawDataset = PipeComp['schemas']['RawDataset']
 
 // 合并后的统一行模型(字段名以生成类型为准)。
 // 详情抽屉(US1 AC4)展示已有属性,故 Row 额外携带 location/scope/status/kind/derivedFrom。
-// 注:不携带 e-/g- 内部 ID(FR-004),groupId 仅用于「注册到目录」调用(不展示)。
+// 注:不携带 e-/g- 内部 ID(FR-004)。归属真相源 = owner(创建人,ADR-024)。
 type Row = {
   key: string
   name: string
@@ -35,7 +36,6 @@ type Row = {
   derivedFrom: string | null // 已处理数据集的血缘来源
   status: RawDataset['status'] | null // 仅原始上传项有
   raw: boolean // true = 来自 /v1/data/raw 的上传项
-  groupId: string | null // 原始上传项:注册到目录用
   registerable: boolean // 原始上传项 ready 且尚未在 catalog → 可注册
 }
 
@@ -60,7 +60,6 @@ function toRows(
     derivedFrom: d.derived_from ?? null,
     status: null,
     raw: false,
-    groupId: null,
     registerable: false,
   }))
   const rawRows: Row[] = (raw.raw ?? []).map((r: RawDataset) => ({
@@ -71,13 +70,12 @@ function toRows(
     format: '原始',
     numSamples: null,
     sizeBytes: r.size ?? null,
-    createdBy: null,
+    createdBy: r.owner_user ?? null,
     location: null,
     scope: null,
     derivedFrom: null,
     status: r.status ?? null,
     raw: true,
-    groupId: r.group_id ?? null,
     // ready 且尚未在 catalog → 可「注册到目录」(已在 catalog 的不再重复登记)。
     registerable: r.status === 'ready' && !inCatalog.has(r.name),
   }))
@@ -211,10 +209,9 @@ export function Datasets() {
   // 原始上传项「注册到目录」:registerDataset kind=raw,无 location(服务端钉死)。
   // 成功后刷新列表(注册后该项归入 catalog,不再显注册按钮)。
   const register = useCallback((row: Row) => {
-    if (!row.groupId) return
     setRegistering(row.key)
     setError('')
-    registerDataset({ name: row.name, group_id: row.groupId, kind: 'raw', scope: 'private' })
+    registerDataset({ name: row.name, kind: 'raw', scope: 'private' })
       .then(() => load())
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setRegistering(null))

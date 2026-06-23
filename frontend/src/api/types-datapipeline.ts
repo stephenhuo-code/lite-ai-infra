@@ -317,7 +317,6 @@ export interface components {
     schemas: {
         PrepareJobRequest: {
             dataset: string;
-            group_id: string;
             source_dataset: string;
             np?: number | null;
             process?: Record<string, never>[] | null;
@@ -328,8 +327,8 @@ export interface components {
             status: "queued" | "running" | "succeeded" | "failed";
             terminal: boolean;
             dataset: string;
-            group_id: string;
             enterprise_id: string;
+            owner_user?: string | null;
             source_dataset?: string | null;
             rows_in?: number | null;
             rows_written?: number | null;
@@ -344,7 +343,6 @@ export interface components {
         };
         RawUploadRequest: {
             dataset: string;
-            group_id: string;
             filename: string;
             /** @default false */
             multipart: boolean;
@@ -368,8 +366,8 @@ export interface components {
         RawDataset: {
             id: string;
             name: string;
-            group_id: string;
             enterprise_id: string;
+            owner_user?: string | null;
             oss_key: string;
             /** @enum {string} */
             status: "pending" | "ready" | "failed";

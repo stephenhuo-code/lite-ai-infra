@@ -12,17 +12,17 @@ afterEach(() => { vi.restoreAllMocks() })
 
 const FAILED: Job = {
   id: 'job-fail', status: 'failed', terminal: true, dataset: 'cc3m-bad',
-  group_id: 'g-1', enterprise_id: 'e-1', rows_in: 100, rows_written: 0,
+  owner_user: 'u-1', enterprise_id: 'e-1', rows_in: 100, rows_written: 0,
   error: 'tar 解包失败:坏文件 0007.tar', created_at: '2026-06-14T08:00:00Z',
 }
 const RUNNING: Job = {
   id: 'job-run', status: 'running', terminal: false, dataset: 'cc3m-run',
-  group_id: 'g-1', enterprise_id: 'e-1', rows_in: null, rows_written: null,
+  owner_user: 'u-1', enterprise_id: 'e-1', rows_in: null, rows_written: null,
   created_at: '2026-06-14T09:00:00Z',
 }
 const SUCCEEDED: Job = {
   id: 'job-ok', status: 'succeeded', terminal: true, dataset: 'cc3m-ok',
-  group_id: 'g-1', enterprise_id: 'e-1', rows_in: 200, rows_written: 200,
+  owner_user: 'u-1', enterprise_id: 'e-1', rows_in: 200, rows_written: 200,
   lance_uri: 'lance://out/cc3m-ok', source_dataset: 'coco', created_at: '2026-06-14T07:00:00Z',
 }
 
@@ -86,7 +86,7 @@ it('succeeded 详情「注册产物」→ POST body kind=processed/format=lance/
     const u = String(url)
     if (u === '/v1/catalogs/data/schemas/datasets/datasets' && init?.method === 'POST') {
       registerBody = JSON.parse(init.body)
-      return new Response(JSON.stringify({ name: registerBody.name, enterprise_id: 'e-1', group_id: registerBody.group_id, scope: 'private', location: registerBody.location, kind: 'processed' }), { status: 201 })
+      return new Response(JSON.stringify({ name: registerBody.name, enterprise_id: 'e-1', owner: 'u-1', scope: 'private', location: registerBody.location, kind: 'processed' }), { status: 201 })
     }
     return new Response('', { status: 404 })
   })

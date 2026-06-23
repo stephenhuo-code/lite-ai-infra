@@ -8,7 +8,8 @@ import type { Dataset } from '../api/datasets'
 // 创建作业页(US4 提交)。
 // 源 = 已注册的 raw 数据集(catalog-driven · ADR-023):挂载拉 listDatasets()→
 // 过滤 kind==='raw'→ 下拉选 source_dataset;提交 source_dataset(不再传 tar_dir)。
-// 表单:源数据集(下拉) + 产出数据集名 + group_id + 并行度(np) + 算子(可选 chips)。
+// 表单:源数据集(下拉) + 产出数据集名 + 并行度(np) + 算子(可选 chips)。
+// 归属 = owner(当前用户,服务端从身份带出),不再选 group(owner 模型 · ADR-024)。
 // → createJob → 202 提示 → 跳 /pipelines。
 // 视觉照高保真原型 2026-06-22-data-domain-hifi.html 创建作业段(靛蓝 #6366F1)。
 
@@ -23,7 +24,6 @@ export function CreateJob() {
   const [source, setSource] = useState('')
   const [sources, setSources] = useState<Dataset[]>([])
   const [dataset, setDataset] = useState('')
-  const [groupId, setGroupId] = useState('')
   const [np, setNp] = useState('')
   const [ops, setOps] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
@@ -41,7 +41,7 @@ export function CreateJob() {
   const toggleOp = (op: string) =>
     setOps(prev => (prev.includes(op) ? prev.filter(o => o !== op) : [...prev, op]))
 
-  const canSubmit = source.trim() && dataset.trim() && groupId.trim() && !submitting
+  const canSubmit = source.trim() && dataset.trim() && !submitting
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,7 +55,6 @@ export function CreateJob() {
       : undefined
     createJob({
       dataset: dataset.trim(),
-      group_id: groupId.trim(),
       source_dataset: source,
       np: np.trim() ? Number(np) : undefined,
       process,
@@ -104,19 +103,6 @@ export function CreateJob() {
             value={dataset}
             onChange={e => setDataset(e.target.value)}
             placeholder="例:cc3m-clean"
-            className={inputCls}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="group_id" className="block text-sm font-medium text-slate-700 mb-1.5">
-            用户组(group_id)
-          </label>
-          <input
-            id="group_id"
-            value={groupId}
-            onChange={e => setGroupId(e.target.value)}
-            placeholder="例:g-research"
             className={inputCls}
           />
         </div>

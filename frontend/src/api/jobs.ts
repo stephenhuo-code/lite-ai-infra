@@ -2,9 +2,10 @@ import { api } from './client'
 import type { components } from './types-datapipeline'
 
 // 数据准备作业 API（契约 contracts/openapi/data-pipeline.yaml）。
-// Job: id/status/terminal/dataset/group_id/rows_in/rows_written/lance_uri/error。
-// JobList: {jobs,total}。PrepareJobRequest: {dataset,group_id,source_dataset,np?,process?}
-// (catalog-driven:源=已注册的 raw 数据集名 source_dataset,tar_dir 已删 · ADR-023)。
+// Job: id/status/terminal/dataset/owner_user/rows_in/rows_written/lance_uri/error。
+// JobList: {jobs,total}。PrepareJobRequest: {dataset,source_dataset,np?,process?}
+// (catalog-driven:源=已注册的 raw 数据集名 source_dataset,tar_dir 已删 · ADR-023;
+//  归属 owner,不再传 group_id · ADR-024)。
 export type Job = components['schemas']['Job']
 export type JobList = components['schemas']['JobList']
 export type PrepareJobRequest = components['schemas']['PrepareJobRequest']

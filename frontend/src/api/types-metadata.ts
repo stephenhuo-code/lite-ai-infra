@@ -230,8 +230,7 @@ export interface components {
         Dataset: {
             name: string;
             enterprise_id: string;
-            group_id: string;
-            owner?: string | null;
+            owner: string | null;
             /** @enum {string} */
             scope: "private" | "shared";
             location: string;
@@ -249,7 +248,6 @@ export interface components {
         };
         RegisterDataset: {
             name: string;
-            group_id: string;
             /** @enum {string} */
             kind: "raw" | "processed";
             location?: string | null;
