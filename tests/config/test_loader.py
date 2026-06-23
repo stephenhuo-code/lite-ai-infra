@@ -77,6 +77,13 @@ def test_local_env_with_unfilled_placeholder_is_error(tmp_path):
     with pytest.raises(ConfigError):
         load_settings("local", root=root)
 
+def test_repo_local_yaml_loads():
+    # 仓库真 configs/local.yaml 必须能在无任何 env 注入下解析(本地不依赖密钥)
+    s = load_settings("local")
+    assert s.oss.endpoint == "http://localhost:9000"
+    assert s.gravitino.url == "http://localhost:8091"
+    assert "aliyuncs" not in s.oss.endpoint   # local 绝不指云(SC-001)
+
 def test_missing_section_raises_config_error_not_typeerror(tmp_path):
     # 整段缺失(无 services:)应抛 ConfigError,而非裸 TypeError
     root = _write(tmp_path, "local.yaml", """

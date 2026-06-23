@@ -1,0 +1,27 @@
+# configs/prod.yaml —— 生产档骨架。未定项显式 TBD(spec FR-009);prod 上线前补齐 + 走 ADR/runbook 硬化。
+env: prod
+services:
+  identity_url: # TBD(prod):内网服务地址
+  metadata_url: # TBD(prod)
+  data_pipeline_url: # TBD(prod)
+  gateway_url: # TBD(prod):对外域名
+auth:
+  jwks_url: # TBD(prod):prod Keycloak JWKS
+bff:
+  session_key: ${BFF_SESSION_KEY}
+  redirect_uri: # TBD(prod):https 回调
+  oidc_client_id: lite-ai-web
+  oidc_client_secret: ${OIDC_CLIENT_SECRET}
+  oidc_issuer: # TBD(prod)
+oss:
+  endpoint: # TBD(prod):prod OSS endpoint
+  access_key: ${OSS_ACCESS_KEY}
+  secret_key: ${OSS_SECRET_KEY}
+  region: # TBD(prod)
+  data_bucket: # TBD(prod)
+  audit_bucket: # TBD(prod)
+gravitino:
+  url: # TBD(prod)
+pipeline:
+  jobs_dir: # TBD(prod)
+  dj_bin: # TBD(prod)
