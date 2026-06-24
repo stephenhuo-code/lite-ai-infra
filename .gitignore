@@ -32,3 +32,8 @@ spikes/*/out/
 
 # 本地服务 PID/日志
 .dev/
+
+# 本地运行时产物(不入仓):原始上传记录 / 夹具 tar / 本地数据
+.raw/
+.smoke/
+data/
