@@ -47,7 +47,7 @@ components:
       required: [name, enterprise_id, owner, scope, location]               # owner 模型(ADR-024):去 group_id required,owner 必填
       properties:
         name: {type: string}
-        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        enterprise_id: {type: string, pattern: '^[a-z][a-z0-9-]{3,}$'}
         owner: {type: [string, 'null']}    # owner(ADR-024):上传/注册用户(sub,§1.4 不透明)
         scope: {type: string, enum: [private, shared]}
         location: {type: string}

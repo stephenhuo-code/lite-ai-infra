@@ -9,6 +9,11 @@ from services._scaffold.drift import assert_openapi_subset_of_contract
 @pytest.fixture(autouse=True)
 def _seam(monkeypatch):
     monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
+    # 注入假企业显示名解析器(单测不打真 KC):e-0001 → 演示企业,其余 → None。
+    import services.identity_org_service.app as appmod
+    from services.identity_org_service.org_directory import OrgDirectory
+    monkeypatch.setattr(appmod, "_ORG_DIR",
+                        OrgDirectory(resolver=lambda a: {"e-0001": "演示企业"}.get(a)))
 
 
 def _client():
@@ -25,9 +30,23 @@ def test_me_orgs_contract_shape():
     r = _client().get("/v1/me/orgs", headers=_hdr("u-alice", ["e-0001"]))
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"user", "is_platform_admin", "memberships"}
+    assert set(body) == {"user", "is_platform_admin", "memberships", "enterprises"}
     # 身份降两级:投影只含 enterprise_id/role(无 group_id)
     assert body["memberships"][0] == {"enterprise_id": "e-0001", "role": "member"}
+
+
+def test_me_orgs_enterprises_carry_display_name():
+    # FR-002b:enterprises 含 alias + 企业显示名(界面渲染,非 alias)
+    r = _client().get("/v1/me/orgs", headers=_hdr("u-alice", ["e-0001"]))
+    body = r.json()
+    assert body["enterprises"] == [{"alias": "e-0001", "display_name": "演示企业"}]
+
+
+def test_me_orgs_enterprises_deduped_display_name_nullable():
+    # 多 membership 同企业 → enterprises 去重;无显示名解析 → display_name 可空(界面回退 alias)
+    r = _client().get("/v1/me/orgs", headers=_hdr("u-bob", ["ent-x", "ent-x"]))
+    body = r.json()
+    assert body["enterprises"] == [{"alias": "ent-x", "display_name": None}]
 
 
 def test_me_orgs_unauthenticated_401(monkeypatch):

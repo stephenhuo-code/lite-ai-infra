@@ -3,7 +3,7 @@ info: {title: identity-org, version: 0.1.0}
 paths:
   /v1/me/orgs:
     get:
-      summary: 从 token 解析调用者的 企业/组/角色 成员关系
+      summary: 从 token 解析调用者的 企业/角色 成员关系(身份降两级:无访问组)
       responses:
         '200':
           description: memberships
@@ -17,12 +17,18 @@ components:
       type: object
       required: [enterprise_id, role]
       properties:
-        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
-        group_id: {type: [string, 'null'], pattern: '^g-[0-9a-z]+$'}
-        role: {type: string, enum: [member, group-admin, enterprise-admin]}
+        enterprise_id: {type: string, pattern: '^[a-z][a-z0-9-]{3,}$'}   # KC Organization 不透明 alias
+        role: {type: string, enum: [member, enterprise-admin]}
+    Enterprise:
+      type: object
+      required: [alias]
+      properties:
+        alias: {type: string, pattern: '^[a-z][a-z0-9-]{3,}$'}           # 不透明标识(界面绝不渲染)
+        display_name: {type: [string, 'null']}                           # 企业显示名(界面渲染;可空时回退 alias)
     Memberships:
       type: object
       properties:
         user: {type: string}
         is_platform_admin: {type: boolean}
         memberships: {type: array, items: {$ref: '#/components/schemas/Membership'}}
+        enterprises: {type: array, items: {$ref: '#/components/schemas/Enterprise'}}  # FR-002b:企业 + 显示名供界面渲染

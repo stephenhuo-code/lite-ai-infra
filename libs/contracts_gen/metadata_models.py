@@ -19,7 +19,7 @@ class Scope(Enum):
 
 class Dataset(BaseModel):
     name: str
-    enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
+    enterprise_id: constr(pattern=r'^[a-z][a-z0-9-]{3,}$')
     owner: str | None
     scope: Scope
     location: str

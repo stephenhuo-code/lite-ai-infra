@@ -165,13 +165,13 @@
 
 **Files:** Modify `contracts/openapi/{identity-org,metadata,data-pipeline}.yaml`;regen `libs/contracts_gen/*` + `frontend/src/api/types-*.ts`;Test `tests/contracts/*`(若有)。
 
-- [ ] **Step 1: 改契约**
+- [x] **Step 1: 改契约**
   - 三契约 `enterprise_id` pattern `^e-[0-9a-z]+$` → **`^[a-z][a-z0-9-]{3,}$`**(容不透明 alias,4 处)。
   - `identity-org.yaml`:`Membership` 删 `group_id`/`^g-` pattern;`/v1/me/orgs` 响应加 `enterprises`(alias[])+ 每企业 `display_name`(可空)。
-- [ ] **Step 2: 重生成 + 校验确定性**
+- [x] **Step 2: 重生成 + 校验确定性**
   Run:`make gen && git diff --stat libs/contracts_gen/`(应只反映本次契约改动)+ `make fe-types`。
-- [ ] **Step 3: 跑绿** `uv run pytest -q`(契约模型变更后服务/测试仍绿)。
-- [ ] **Step 4: Commit** `git commit -am "contract: enterprise_id pattern 放宽容不透明 alias;identity-org 去 group_id + 加 organization/display_name;regen"`
+- [x] **Step 3: 跑绿** `uv run pytest -q`(契约模型变更后服务/测试仍绿)。
+- [x] **Step 4: Commit** `git commit -am "contract: enterprise_id pattern 放宽容不透明 alias;identity-org 去 group_id + 加 organization/display_name;regen"`
 
 ---
 
