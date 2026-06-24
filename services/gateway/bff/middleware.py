@@ -111,7 +111,11 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
         except Exception:
             return JSONResponse(status_code=401, content={"reason": "invalid token"})
         ctx = parse_context(sub=c["sub"], groups=c.get("groups", []))
-        return {"user": ctx.user, "is_platform_admin": ctx.is_platform_admin, "csrf": sd.csrf}
+        # 真实展示信息(来自 Keycloak token claims):用户名优先 preferred_username,回退 name;邮箱可空。
+        # user(sub,§1.4 不透明)仍返回供前端内部使用;界面展示用 username/email。
+        return {"user": ctx.user, "is_platform_admin": ctx.is_platform_admin, "csrf": sd.csrf,
+                "username": c.get("preferred_username") or c.get("name") or ctx.user,
+                "email": c.get("email")}
 
     @app.middleware("http")
     async def _session(request: Request, call_next):

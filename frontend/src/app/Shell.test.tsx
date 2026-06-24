@@ -6,7 +6,7 @@ it('侧栏可折叠', () => {
   render(<MemoryRouter><Shell /></MemoryRouter>)
   const aside = document.querySelector('aside')!
   expect(aside.className).toContain('w-64')
-  fireEvent.click(screen.getByLabelText('折叠'))
+  fireEvent.click(screen.getByLabelText('折叠侧栏'))
   expect(aside.className).toContain('w-16')
 })
 

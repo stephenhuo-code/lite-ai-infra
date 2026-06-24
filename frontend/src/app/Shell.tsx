@@ -11,19 +11,19 @@ type NavItem = { to: string; label: string; group?: string; icon: React.ReactNod
 
 const NAV: NavItem[] = [
   { to: '/datasets', label: '数据集', group: '数据', icon: (
-    <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
   ) },
   { to: '/catalog', label: '数据目录', icon: (
-    <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
   ) },
   { to: '/pipelines', label: '数据管线', group: '作业', icon: (
-    <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a2 2 0 012 2v1.5M8.5 18H14a2 2 0 002-2v-1.5"/></svg>
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a2 2 0 012 2v1.5M8.5 18H14a2 2 0 002-2v-1.5"/></svg>
   ) },
   { to: '/create', label: '创建作业', icon: (
-    <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
   ) },
   { to: '/account', label: '我的账户', group: '账户', icon: (
-    <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>
   ) },
 ]
 
@@ -45,11 +45,24 @@ export function Shell() {
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800">
       <aside className={`${asideWidth} shrink-0 h-screen sticky top-0 bg-white border-r border-slate-200/70 flex flex-col transition-[width] duration-150`}>
-        <div className="h-16 flex items-center gap-2.5 px-4 border-b border-slate-100">
-          <div className="h-9 w-9 rounded-xl grid place-items-center text-white shrink-0 shadow-sm" style={{ background: 'linear-gradient(to bottom right, #6366F1, #d946ef)' }}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M12 3l1.9 4.8L18.8 9.7l-4.9 1.5L12 16l-1.9-4.8L5.2 9.7l4.9-1.9z"/></svg>
-          </div>
-          {!collapsed && <span className="font-semibold tracking-tight text-base">Lite-AI</span>}
+        <div className="h-16 flex items-center px-4 border-b border-slate-100">
+          {!collapsed && (
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl grid place-items-center text-white shrink-0 shadow-sm" style={{ background: 'linear-gradient(to bottom right, #6366F1, #d946ef)' }}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M12 3l1.9 4.8L18.8 9.7l-4.9 1.5L12 16l-1.9-4.8L5.2 9.7l4.9-1.9z"/></svg>
+              </div>
+              <span className="font-semibold tracking-tight text-base">Lite-AI</span>
+            </div>
+          )}
+          {/* 折叠/展开按钮:标题栏右上方(展开时靠右,收起时居中) */}
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            aria-label={collapsed ? '展开侧栏' : '折叠侧栏'}
+            title={collapsed ? '展开' : '折叠'}
+            className={`${collapsed ? 'mx-auto' : 'ml-auto'} p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 shrink-0`}
+          >
+            <svg className={`w-5 h-5 ${collapsed ? 'scale-x-[-1]' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M14 9l-2 3 2 3"/></svg>
+          </button>
         </div>
 
         <nav className="p-3.5 space-y-1 flex-1">
@@ -75,14 +88,7 @@ export function Shell() {
           ))}
         </nav>
 
-        <div className="p-3 border-t border-slate-100 flex items-center gap-2">
-          <button
-            onClick={() => setCollapsed(c => !c)}
-            aria-label="折叠"
-            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 shrink-0"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M14 9l-2 3 2 3"/></svg>
-          </button>
+        <div className="p-3 border-t border-slate-100 h-12 flex items-center">
           {!collapsed && <span className="text-[11px] text-slate-400">v0.1 · 数据域</span>}
         </div>
       </aside>
@@ -92,8 +98,9 @@ export function Shell() {
           <div className="ml-auto flex items-center gap-3">
             <button
               onClick={logout}
-              className="text-sm text-red-600 hover:bg-slate-50 rounded-xl px-3 py-1.5"
+              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg px-3 py-1.5 transition-colors"
             >
+              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></svg>
               登出
             </button>
           </div>
