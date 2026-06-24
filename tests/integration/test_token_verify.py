@@ -11,4 +11,5 @@ def test_real_token_verifies_and_parses(kc_token):
     # 身份降两级:企业归属来自 organization claim(org alias);角色经 realm role
     ctx = parse_context(sub=claims["sub"], organization=claims.get("organization", []),
                         realm_roles=(claims.get("realm_access") or {}).get("roles", []))
-    assert any(m.enterprise_id == "ent-demo" and m.role == "member" for m in ctx.memberships)
+    # dev 实数据:alice = ent-demo 成员 + realm role enterprise-admin(见 realm-lite-ai.json)
+    assert any(m.enterprise_id == "ent-demo" and m.role == "enterprise-admin" for m in ctx.memberships)

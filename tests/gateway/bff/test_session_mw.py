@@ -176,3 +176,15 @@ def test_refresh_coordinator_failure_clears_lock_and_allows_retry():
 
     r = asyncio.run(go())
     assert r["access_token"] == "ok" and len(attempts) == 2
+
+
+# ---- _claim_org_roles 归一(含 RESULTS F3 多-org null 守卫)----
+
+def test_claim_org_roles_normalizes_null_and_str(monkeypatch):
+    _env(monkeypatch)   # OidcConfig 读 env(import 期不需,但保持一致)
+    from services.gateway.bff.middleware import _claim_org_roles
+    assert _claim_org_roles({"organization": None}) == ([], [])          # 多-org bug 发 null → 空,不产 [None]
+    assert _claim_org_roles({"organization": "ent-demo"}) == (["ent-demo"], [])  # 单字符串归一
+    assert _claim_org_roles({"organization": ["a", "b"], "realm_access": {"roles": ["enterprise-admin"]}}) \
+        == (["a", "b"], ["enterprise-admin"])
+    assert _claim_org_roles({}) == ([], [])                              # 缺省

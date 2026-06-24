@@ -235,9 +235,9 @@
 
 **Files:** Modify 本计划(嵌 runbook);全门禁。
 
-- [ ] **Step 1: 全绿门禁** `make gen && make lint && uv run pytest -q` + `cd frontend && npx vitest run && npm run build`;`make gen` 后 `git diff --exit-code libs/contracts_gen/` clean。
-- [ ] **Step 2: runbook 写入本文件 + Commit**(见下)。
-- [ ] **Step 3: 独立 code review**(superpowers:requesting-code-review)整分支,重点:企业硬隔离不被绕过(org claim 伪造防线)、多-org `organization:*` 固化、group_id 无残留、宪法 ≡ 实现、契约/生成物/前端类型一致。修 Critical/Important。
+- [x] **Step 1: 全绿门禁** `make gen && make lint && uv run pytest -q` + `cd frontend && npx vitest run && npm run build`;`make gen` 后 `git diff --exit-code libs/contracts_gen/` clean。
+- [x] **Step 2: runbook 写入本文件 + Commit**(见下)。
+- [x] **Step 3: 独立 code review**(superpowers:requesting-code-review)整分支,重点:企业硬隔离不被绕过(org claim 伪造防线)、多-org `organization:*` 固化、group_id 无残留、宪法 ≡ 实现、契约/生成物/前端类型一致。修 Critical/Important。
 
 ---
 

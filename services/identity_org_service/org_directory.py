@@ -19,11 +19,12 @@ class OrgDirectory:
         self._cache: dict[str, str | None] = {}
 
     def display(self, alias: str) -> str | None:
-        if alias not in self._cache:
-            try:
-                self._cache[alias] = self._resolver(alias)
-            except Exception:
-                self._cache[alias] = None   # 降级:解析失败不阻塞,界面回退 alias
+        if alias in self._cache:           # 命中:含"org 无显示名"的合法 None(已成功解析过)
+            return self._cache[alias]
+        try:
+            self._cache[alias] = self._resolver(alias)   # 仅成功解析才入缓存
+        except Exception:
+            return None                    # 降级:解析失败不缓存(下次重试)、不阻塞,界面回退 alias
         return self._cache[alias]
 
 

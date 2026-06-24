@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from libs.identity.context import parse_context
 from libs.identity.tokens import verify_and_decode
+from services._scaffold.auth import _as_list
 from services.gateway.bff import oidc
 from services.gateway.bff.orgs import OrgInviter
 from services.gateway.bff.routes import make_auth_router
@@ -81,9 +82,9 @@ class RefreshCoordinator:
 
 
 def _claim_org_roles(c: dict) -> tuple[list[str], list[str]]:
-    """从 token claims 取 organization(alias 数组,multivalued=false 单字符串归一)+ realm 角色。"""
-    org = c.get("organization", [])
-    organization = list(org) if isinstance(org, list) else [org]
+    """从 token claims 取 organization(alias 数组,multivalued=false 单字符串归一)+ realm 角色。
+    organization 归一与 scaffold/auth 共用 _as_list(含 None 守卫:RESULTS F3 多-org bug 可能发 null)。"""
+    organization = _as_list(c.get("organization"))
     realm_roles = (c.get("realm_access") or {}).get("roles", [])
     return organization, realm_roles
 

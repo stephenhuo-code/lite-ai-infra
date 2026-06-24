@@ -18,7 +18,7 @@
 3. 标识符：`enterprise_id = KC Organization 的不透明 alias`（全局唯一，realm 内唯一；如 `ent-<随机>`，**非语义编码** `e-XXXX`）。
 4. **资源命名必须含 `enterprise_id`**；**`display_name` 严禁**出现在资源名 / 路径 / schema / index / label（**界面渲染/展示用途例外**：§1.4 允许显示名作展示，FR-002b——展示场景的代码须标注 `display-name-ok` 经评审豁免）。
 5. **资源归属编码在资源自身**（OSS 路径 / K8s label / MLflow tag / Gravitino schema 名），授权与过滤据此读取。
-6. **硬隔离不变式**：非 admin 路径必须 `resource.enterprise_id == ctx.enterprise_id`；私有资源按 **owner**（owner==user 或 `enterprise-admin`，衔接 ADR-024 owner 模型，不再按 group_id 匹配）；**跨企业仅 `platform-admin` 走显式特权 API**。
+6. **硬隔离不变式**：非 admin 路径必须 `resource.enterprise_id` 命中 `ctx` 的某条 membership（`any(m.enterprise_id == resource.enterprise_id)`）；私有资源按 **owner**（owner==user 或 `enterprise-admin`，衔接 ADR-024 owner 模型，不再按 group_id 匹配）；**跨企业仅 `platform-admin` 走显式特权 API**。
 
 ## 2. 身份与授权（ADR-002 / ADR-010 / ADR-011 / ADR-012 / ADR-025）
 1. 身份：**Keycloak 26.6.2**，**单一 realm + Organizations（企业，不透明 alias）+ 自助注册（按邮箱域自动归企业）/ 邀请**，**HA 双副本 + RDS 主备**。**v1 移除 Group 子组层**（身份降两级）。
