@@ -1,31 +1,71 @@
 import { it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { Account } from './Account'
 
-// Account 角色来自真实 GET /v1/me/orgs 的 memberships[].role,
-// 不可用 is_platform_admin 派生。一个 group-admin 的 is_platform_admin=False
-// 必须显示「组管理员」,而非「成员」。且界面禁止出现 e-/g- 内部 ID(FR-004)。
+// 身份降两级(ADR-025):账户页显示企业 **显示名**(FR-002b,非不透明 alias/UUID),
+// 角色 member|enterprise-admin;enterprise-admin 见「邀请成员」入口 → POST /auth/orgs/invite。
 beforeEach(() => { vi.restoreAllMocks() })
 afterEach(() => { vi.restoreAllMocks() })
 
-it('显示真实组内角色(group-admin → 组管理员),且不渲染 e-/g- ID', async () => {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(JSON.stringify({
-      user: 'alice',
-      is_platform_admin: false, // 关键:平台管理员标志为假,但她是组管理员
-      memberships: [{ enterprise_id: 'e-1234', group_id: 'g-5678', role: 'group-admin' }],
-    }), { status: 200 }),
-  )
+function mockApi(orgs: unknown, me: unknown, onInvite?: (body: unknown) => void) {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.includes('/v1/me/orgs')) return new Response(JSON.stringify(orgs), { status: 200 })
+    if (url.includes('/auth/me')) return new Response(JSON.stringify(me), { status: 200 })
+    if (url.includes('/auth/orgs/invite')) {
+      onInvite?.(JSON.parse(String(init?.body ?? '{}')))
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }
+    return new Response('null', { status: 200 })
+  })
+}
 
+const ADMIN_ORGS = {
+  user: 'alice', is_platform_admin: false,
+  memberships: [{ enterprise_id: 'ent-demo', role: 'enterprise-admin' }],
+  enterprises: [{ alias: 'ent-demo', display_name: 'Demo 企业' }],
+}
+const ME = { user: 'alice', username: 'alice', email: 'alice@acme.test', is_platform_admin: false }
+
+it('显示企业 display_name(非 alias)+ 角色,且不渲染不透明 alias', async () => {
+  mockApi(ADMIN_ORGS, ME)
   render(<Account />)
+  await waitFor(() => expect(screen.getByText('Demo 企业')).toBeTruthy())
+  expect(screen.getByText('企业管理员')).toBeTruthy()
+  // FR-002b/§1.4:界面绝不渲染不透明 alias
+  expect(document.body.textContent).not.toContain('ent-demo')
+})
 
-  // 等真实角色渲染出来
-  await waitFor(() => expect(screen.getByText('组管理员')).toBeTruthy())
-  // 用户名照常显示(头部 + 「用户」字段各一处)
-  expect(screen.getAllByText('alice').length).toBeGreaterThan(0)
-  // 不得错显成「成员」(那是 is_platform_admin 派生的 bug)
-  expect(screen.queryByText('成员')).toBeNull()
-  // FR-004:界面绝不出现 e-/g- 原始 ID
-  expect(document.body.textContent).not.toContain('e-1234')
-  expect(document.body.textContent).not.toContain('g-5678')
+it('enterprise-admin 见邀请入口,提交调用 POST /auth/orgs/invite', async () => {
+  const invites: unknown[] = []
+  mockApi(ADMIN_ORGS, ME, (b) => invites.push(b))
+  render(<Account />)
+  await waitFor(() => expect(screen.getByText('Demo 企业')).toBeTruthy())
+  const input = screen.getByPlaceholderText(/邮箱/) as HTMLInputElement
+  fireEvent.change(input, { target: { value: 'newhire@x.com' } })
+  fireEvent.click(screen.getByText('发送邀请'))
+  await waitFor(() => expect(invites).toEqual([{ email: 'newhire@x.com' }]))
+})
+
+it('member 无邀请入口', async () => {
+  const memberOrgs = {
+    user: 'bob', is_platform_admin: false,
+    memberships: [{ enterprise_id: 'ent-demo', role: 'member' }],
+    enterprises: [{ alias: 'ent-demo', display_name: 'Demo 企业' }],
+  }
+  mockApi(memberOrgs, { user: 'bob', username: 'bob', email: null, is_platform_admin: false })
+  render(<Account />)
+  await waitFor(() => expect(screen.getByText('Demo 企业')).toBeTruthy())
+  expect(screen.queryByText('邀请成员')).toBeNull()
+})
+
+it('display_name 为空时回退 alias(诚实降级,不悬空)', async () => {
+  const orgs = {
+    user: 'carol', is_platform_admin: false,
+    memberships: [{ enterprise_id: 'ent-x', role: 'member' }],
+    enterprises: [{ alias: 'ent-x', display_name: null }],
+  }
+  mockApi(orgs, { user: 'carol', username: 'carol', email: null, is_platform_admin: false })
+  render(<Account />)
+  await waitFor(() => expect(screen.getByText('ent-x')).toBeTruthy())
 })

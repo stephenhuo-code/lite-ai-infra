@@ -222,12 +222,12 @@
 
 **Files:** Modify `frontend/src/pages/Account.tsx`、`frontend/src/auth/useOrgs.ts`/`useMe.ts`;Create 邀请 UI(账户页或独立);regen types;Test vitest。
 
-- [ ] **Step 1: 改红 vitest**
+- [x] **Step 1: 改红 vitest**
   `Account.test.tsx`:mock `/v1/me/orgs` 返回 `{enterprises:[{alias:"ent-demo",display_name:"Demo 企业"}], ...}`(无 group_id)→ 断言页面显示 **"Demo 企业"**(非 alias、非 UUID);角色显示 member/enterprise-admin。
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
   `useOrgs.ts`/`useMe.ts`:类型随新契约(去 group_id、加 enterprises+display_name);`Account.tsx`:企业行显示 `display_name`,无访问组维度;enterprise-admin 显示「邀请成员」入口 → 调 `POST /auth/orgs/invite`。
-- [ ] **Step 3: 跑绿门禁** `make fe-types && cd frontend && npx vitest run && npm run lint && npm run build` → 全绿。
-- [ ] **Step 4: Commit** `git commit -m "feat(frontend): 账户页企业 display_name + enterprise-admin 邀请入口;去 group_id"`
+- [x] **Step 3: 跑绿门禁** `make fe-types && cd frontend && npx vitest run && npm run lint && npm run build` → 全绿。
+- [x] **Step 4: Commit** `git commit -m "feat(frontend): 账户页企业 display_name + enterprise-admin 邀请入口;去 group_id"`
 
 ---
 
