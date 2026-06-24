@@ -179,14 +179,14 @@
 
 **Files:** Verify/Modify `services/metadata_service/app.py`(`_metalake`)、`pipelines/data_prep/paths.py`、`scripts/bootstrap_catalog.py`;Test `tests/services/metadata/*`、`tests/pipelines/test_paths.py`。
 
-- [ ] **Step 1: 确认 `_metalake` 对不透明 alias 合法**
+- [x] **Step 1: 确认 `_metalake` 对不透明 alias 合法**
   `_metalake(ent) = ent.replace("-","_")`;alias `ent-demo` → `ent_demo`(合法 `[a-z0-9_]`)。`tests/services/metadata/...` 加 `_metalake("ent-demo")=="ent_demo"` 断言。
-- [ ] **Step 2: paths/契约 pattern 一致**
+- [x] **Step 2: paths/契约 pattern 一致**
   `tests/pipelines/test_paths.py`:`DatasetPaths(bucket,"ent-demo",user,ds).raw_prefix` == `ent-demo/{user}/raw/{ds}/`(企业段为不透明 alias)。`DatasetPaths` 无需改(纯字符串);确认 dataset/filename 校验不误伤 alias。
-- [ ] **Step 3: bootstrap 接受不透明 alias**
+- [x] **Step 3: bootstrap 接受不透明 alias**
   `scripts/bootstrap_catalog.py`:`main(eid)` 的 `eid` 现可为 `ent-demo`;metalake=`ent_demo`。Run:`make bootstrap-catalog EID=ent-demo` → `bootstrapped ent_demo/data/datasets`。
-- [ ] **Step 4: 跑绿** `uv run pytest tests/services/metadata tests/pipelines -q` → PASS。
-- [ ] **Step 5: Commit** `git commit -am "feat(tenancy): Gravitino metalake/OSS 按不透明 alias;bootstrap 接受 alias"`
+- [x] **Step 4: 跑绿** `uv run pytest tests/services/metadata tests/pipelines -q` → PASS。
+- [x] **Step 5: Commit** `git commit -am "feat(tenancy): Gravitino metalake/OSS 按不透明 alias;bootstrap 接受 alias"`
 
 ---
 
