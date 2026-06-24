@@ -31,7 +31,7 @@
 | # | 出口 | S1 形态 | 验收 |
 |---|---|---|---|
 | ① | 100GB 一行命令清洗(多模态)→ Lance | 完整:DJ+Ray on ECS → Lance on OSS 隔离路径 | 一行命令跑完 100GB,Lance 可读 |
-| ② | Gravitino schema 可查 | 完整:docker 单容器,schema `e_0001_g_0001` | API 查到 schema/表 + owner/scope 属性 |
+| ② | Gravitino 可查 | 完整:docker 单容器,metalake `e_XXXX`/catalog `data`/schema `datasets`(ADR-016)| API 查到 fileset + owner_user/scope/kind/format 属性 |
 | ③ | 薄 can() 企业隔离 | S0 已交付;S1 接入管线入口与两个新服务 | 隔离用例过(单测+集成) |
 | ⑤ | **真 GUI 经 API 端到端调通**(重定义,ADR-019;原"SDK/CLI 可调") | React/Vite 数据域控制台 → BFF(OIDC 会话)→ 经 gateway 调服务 | 浏览器登录→列数据集→上传→建作业→跟踪终态(GUI 全链路);CLI 推迟为 ops 工具 |
 | 新 | **服务化**(spec S1 P1 项) | data-pipeline-service + metadata-service,契约先行 | 契约↔实现一致,经 gateway can()+audit |
@@ -52,7 +52,7 @@ SDK(生成) ──┘        │
         │                        │
    pipelines/data_prep      Gravitino(docker@ECS)
    (DJ+Ray 批作业@大ECS)         │
-        └──→ Lance on OSS(oss://…/e-0001/g-0001/…)←─ 注册
+        └──→ Lance on OSS(oss://…/e-0001/{user}/processed/…)←─ 注册
 ```
 
 **关键决策:**
@@ -66,11 +66,11 @@ SDK(生成) ──┘        │
 
 ## 3. 数据流与隔离(宪法 §1 落地)
 
-1. **取数**:公开图文数据集(首选 LAION-400M 子集,fallback CC3M/COCO 混合;W1 D1 实测可达性后定)→ ECS 内网拉 → `oss://<bucket>/e-0001/g-0001/raw/<dataset>/`
+1. **取数**:公开图文数据集(首选 LAION-400M 子集,fallback CC3M/COCO 混合;W1 D1 实测可达性后定)→ ECS 内网拉 → `oss://<bucket>/e-0001/{user}/raw/<dataset>/`(owner 路径,ADR-024)
 2. **清洗**:DJ+Ray(单机 Ray cluster on 大内存 ECS),真实算子集:图文去重、CLIP 相似度过滤、图像尺寸/比例、文本长度/质量;分片 + spill 参数由 Spike 2 的 OOM 边界结论喂入
-3. **落盘**:Lance → `oss://<bucket>/e-0001/g-0001/processed/<dataset>/`(列含 image/text/元特征;列设计实现期随 Spike 1 结论微调)
-4. **注册**:Gravitino schema `e_0001_g_0001`,表属性带 owner/scope
-5. **全程隔离**:路径/schema 仅不透明 ID;跨企业访问被 `can()` 拒(集成用例覆盖)
+3. **落盘**:Lance → `oss://<bucket>/e-0001/{user}/processed/<dataset>.lance`(列含 image/text/元特征;列设计实现期随 Spike 1 结论微调)
+4. **注册**:Gravitino metalake `e_XXXX`/catalog `data`/schema `datasets`(ADR-016)下建 fileset,属性带 owner_user/scope/kind/format/derived_from;location 记 `s3a://`(ADR-023/024)
+5. **全程隔离**:路径/schema 仅不透明 ID;企业硬隔离 + owner 归属,跨企业/非 owner 访问被 `can()` 拒(集成用例覆盖)
 
 ## 4. 错误处理与测试
 

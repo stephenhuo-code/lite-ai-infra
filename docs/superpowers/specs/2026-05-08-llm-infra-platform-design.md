@@ -6,6 +6,12 @@
 > **目标上线**：v1 原 ≈2026-07-11(**将后移**,S2 计划时走 ADR 重排,宪法 §7.4);GA 原 ≈2026-11-28
 > **执行现状**:S0 已关闭(ADR-014 carry-over);S1 进行中,出口①③ 已验收 —— 见 §5.3 各 sprint 内的修订块与文末"修订记录(2026-06-12)"
 
+> **as-built 修订(2026-06-24,以 ADR 为准)**:本文为全平台**愿景**(含 Workspace/配额/Cerbos/CLI 等尚未建部分),下述**已实现并合并 main**的部分,口径已被后续 ADR 收敛:
+> - **数据集归属 = owner(上传用户 sub),非 group**([ADR-024](../../adr/ADR-024-owner-based-dataset-ownership.md),amend ADR-010/011/016)。**数据集** OSS 路径 = `e-XXXX/{user}/{raw,processed}/…`(不再 `e-0001/g-0001/…`)。**group 退为访问/审计维度**(跨用户分享/group 访问 → Cerbos v2);企业仍硬隔离。
+> - **Gravitino 映射 = metalake `e_XXXX` / catalog `data` / schema `datasets`,每数据集 = 一个 fileset**([ADR-016](../../adr/ADR-016-gravitino-tenancy-mapping.md)),**非** `e_0001_g_0001` schema。catalog 为数据集位置真相源,管线按名查 catalog 拿 location([ADR-023](../../adr/ADR-023-catalog-driven-datasets.md));location 记 `s3a://`(HCFS),lance 读写用 `s3://`。
+> - **仍成立(本次未改)**:K8s/Kueue 命名空间、配额、Keycloak `/e-XXXX/g-YYYY/{admins,members}` 结构、Cerbos+STS 路径级访问控制、group-admin 角色 —— 这些是 group 维度的**访问/计算/组织**用途,与"数据集归属"正交。
+> - **v1 已实现**:数据管线(DJ→Lance)+ 元数据(Gravitino)+ BFF + React 控制台 + catalog-driven + owner 模型;全链路 live 验收通过。下文凡涉数据集归属/Gravitino schema 的旧写法,以本 callout + 对应 ADR 为准。
+
 ---
 
 ## 0. Executive Summary
@@ -407,6 +413,10 @@ group_id：      g-XXXX   (如 g-0001，企业内唯一)
 
 首个客户 = enterprise_id "e-0001"，其下用户组 g-0001…；display_name "X-user"
 ```
+
+> **as-built 修订(ADR-016/023/024)**:上表中**数据集相关**两项已变更——
+> ① **数据集 OSS 路径**按 owner:`.../e-0001/{user}/{raw,processed}/...`(不再 `.../e-0001/g-0001/...`;ADR-024)。② **Gravitino**:metalake `e_XXXX` / catalog `data` / schema `datasets`,每数据集 = fileset(不再 `e_0001_g_0001` schema;ADR-016)。
+> 其余项(K8s/Kueue 路径与命名空间、MLflow tag、Keycloak Org/Group 子组、display_name)**不变**——group 仍是访问/计算/组织维度。**非数据集资源**(Workspace/作业/推理)的 group 路径属未建愿景,按本表愿景值理解。
 
 #### 组织 / 成员 API（Platform API 薄层封装 Keycloak Admin API）
 
