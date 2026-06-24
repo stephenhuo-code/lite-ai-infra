@@ -45,24 +45,24 @@
 
 > 探针 RESULTS 已实测机制;本 task 把它落到 lite-ai dev realm + 幂等置备脚本(供 prod/重导)。
 
-- [ ] **Step 1: realm JSON 开 organizations + 注册 + mailpit SMTP**
+- [x] **Step 1: realm JSON 开 organizations + 注册 + mailpit SMTP**
   `realm-lite-ai.json` 顶层加 `"organizationsEnabled": true`、`"registrationAllowed": true`、`"registrationEmailAsUsername": true`、`"smtpServer": {"host":"mailpit","port":"1025","from":"noreply@lite-ai.dev"}`;新增一个 org 节点:`"organizations":[{"name":"Demo","alias":"ent-demo","domains":[{"name":"acme.test","verified":true}],"redirectUrl":"","attributes":{"display_name":["Demo 企业"]}}]`(alias 不透明、不复用 e-XXXX);把 `organization` client scope 加到 `lite-ai-web`/`gateway` client 的 `defaultClientScopes`。
   - 注:realm import 不一定建 org 成员关系 → 成员由 Step 3 脚本补。
 
-- [ ] **Step 2: docker-compose 加 mailpit**
+- [x] **Step 2: docker-compose 加 mailpit**
   `deploy/dev/docker-compose.yml` 加服务:`mailpit: { image: axllent/mailpit, ports: ["8025:8025","1025:1025"] }`(8025 web UI 看邮件,1025 SMTP)。
 
-- [ ] **Step 3: 写 `scripts/provision_orgs.py`(幂等)**
+- [x] **Step 3: 写 `scripts/provision_orgs.py`(幂等)**
   用 KC admin REST(admin/admin,master/admin-cli):① 建/取 org(by alias `ent-demo`,设 domains + display_name attribute);② 把现有 realm 用户(alice 等,by username)以 **unmanaged** `POST organizations/{id}/members`(已是成员则跳);③ 确认 `organization` mapper `access.token.claim=true`、`multivalued=true`;④ 把 `organization` scope 设为 client default scope;⑤ **移除旧 `/e-XXXX/g-YYYY/` 子组**(by group path,存在才删)。每步查重幂等。
 
-- [ ] **Step 4: 契约级测试**
+- [x] **Step 4: 契约级测试**
   `tests/identity/test_provision_orgs.py`:mock KC admin httpx,断言脚本对"org 已存在/成员已存在"幂等(不重复 POST)、对缺失则建。
 
-- [ ] **Step 5: 真机验证 token(owner runbook 也覆盖)**
-  Run:`make deps-dev` 起 KC → `uv run python scripts/provision_orgs.py` → 取 alice token(scope `openid organization:*`)→ 解 `organization` claim == `["ent-demo"]`。
+- [~] **Step 5: 真机验证 token(owner runbook 也覆盖)** — 延后到 owner runbook §1。
+  需 `make dev-reset && make deps-dev` 重导 realm(realm 级 `organizationsEnabled` 才生效),该操作会清空本机 KC/MinIO 卷(毁灭性),headless 不擅自执行;置备逻辑已由 `tests/identity/test_provision_orgs.py` 契约级幂等测试锁定。
   Expected:claim 带不透明 alias;无选择器多-org 才为 null(单 org 用户不受影响)。
 
-- [ ] **Step 6: Commit** `git add -A && git commit -m "feat(kc): realm Organizations + 注册 + mailpit + 幂等 provision_orgs 脚本"`
+- [x] **Step 6: Commit** `git add -A && git commit -m "feat(kc): realm Organizations + 注册 + mailpit + 幂等 provision_orgs 脚本"`
 
 ---
 

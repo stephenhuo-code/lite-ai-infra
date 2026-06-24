@@ -1,9 +1,18 @@
 {
   "realm": "lite-ai", "enabled": true,
   "internationalizationEnabled": true, "supportedLocales": ["zh-CN", "en"], "defaultLocale": "zh-CN",
+  "organizationsEnabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "smtpServer": {
+    "host": "mailpit", "port": "1025", "from": "noreply@lite-ai.dev", "fromDisplayName": "Lite AI",
+    "ssl": "false", "starttls": "false", "auth": "false"
+  },
   "clients": [{
     "clientId": "gateway", "publicClient": false, "secret": "dev-secret",
     "directAccessGrantsEnabled": true, "standardFlowEnabled": true, "redirectUris": ["*"],
+    "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "basic", "email", "organization"],
     "protocolMappers": [{
       "name": "groups", "protocol": "openid-connect",
       "protocolMapper": "oidc-group-membership-mapper",
@@ -16,12 +25,19 @@
     "redirectUris": ["http://localhost:8090/auth/callback"],
     "webOrigins": ["http://localhost:8090"],
     "attributes": {"post.logout.redirect.uris": "http://localhost:8090/*"},
+    "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "basic", "email", "organization"],
     "protocolMappers": [{
       "name": "groups", "protocol": "openid-connect",
       "protocolMapper": "oidc-group-membership-mapper",
       "config": {"full.path": "true", "claim.name": "groups",
                  "access.token.claim": "true", "id.token.claim": "true"}
     }]
+  }],
+  "organizations": [{
+    "name": "Demo", "alias": "ent-demo", "enabled": true,
+    "redirectUrl": "",
+    "domains": [{"name": "acme.test", "verified": true}],
+    "attributes": {"display_name": ["Demo 企业"]}
   }],
   "groups": [
     {"name": "platform-admins"},
@@ -30,7 +46,7 @@
     ]}
   ],
   "users": [{
-    "username": "alice", "enabled": true, "email": "alice@e-0001.test",
+    "username": "alice", "enabled": true, "email": "alice@acme.test",
     "firstName": "Alice", "lastName": "Anderson",
     "emailVerified": true, "requiredActions": [],
     "credentials": [{"type": "password", "value": "alice", "temporary": false}],
