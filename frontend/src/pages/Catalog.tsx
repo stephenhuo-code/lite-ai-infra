@@ -283,8 +283,8 @@ export function Catalog() {
                                       {(sDatasets ?? []).map(d => (
                                         <button
                                           key={d.name}
-                                          onClick={() => selectSchema(c, s)}
-                                          className="w-full flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-slate-50 text-slate-600 text-[13px]"
+                                          onClick={() => { selectSchema(c, s); setDetail(d) }}
+                                          className="w-full flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-slate-50 text-slate-600 text-[13px] cursor-pointer"
                                         >
                                           {iconDataset}
                                           {d.name}
