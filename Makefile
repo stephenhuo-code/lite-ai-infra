@@ -1,4 +1,5 @@
-.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup
+.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog
+EID ?= e-0001
 sync:             ; uv sync --extra dev
 # dev/prod parity:建独立 .dj-venv(同云上 Data-Juicer+Ray);本地真跑数据管线前先 `make dj-setup` 一次
 dj-setup:         ; bash scripts/dj_setup.sh
@@ -32,3 +33,12 @@ run-identity:      ; env $$($(LOAD) identity) uv run uvicorn services.identity_o
 run-metadata:      ; env $$($(LOAD) metadata) uv run uvicorn services.metadata_service.main:app --port 8002 --reload
 run-gateway:       ; env $$($(LOAD) gateway) uv run uvicorn services.gateway.main:app --port 8090 --reload
 run-data-pipeline: ; env $$($(LOAD) data-pipeline) uv run uvicorn services.data_pipeline_service.main:app --port 8003 --reload
+# 一次性建企业目录骨架(metalake+catalog+schema);需 metadata env 带 OSS_*/DATA_BUCKET
+bootstrap-catalog: ; env $$($(LOAD) metadata) uv run python scripts/bootstrap_catalog.py $(EID)
+# 数据域控制台前端(Plan 8b):node 工具链隔离在 frontend/
+fe-install: ; cd frontend && npm install
+fe-types:   ; cd frontend && npx openapi-typescript ../contracts/openapi/metadata.yaml -o src/api/types-metadata.ts && npx openapi-typescript ../contracts/openapi/data-pipeline.yaml -o src/api/types-datapipeline.ts && npx openapi-typescript ../contracts/openapi/identity-org.yaml -o src/api/types-identity.ts
+fe-build:   ; cd frontend && npm run build
+fe-lint:    ; cd frontend && npm run lint
+fe-test:    ; cd frontend && npx vitest run
+fe-e2e:     ; cd frontend && npx playwright test

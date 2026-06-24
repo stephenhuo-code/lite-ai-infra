@@ -1,5 +1,6 @@
 {
   "realm": "lite-ai", "enabled": true,
+  "internationalizationEnabled": true, "supportedLocales": ["zh-CN", "en"], "defaultLocale": "zh-CN",
   "clients": [{
     "clientId": "gateway", "publicClient": false, "secret": "dev-secret",
     "directAccessGrantsEnabled": true, "standardFlowEnabled": true, "redirectUris": ["*"],
@@ -14,6 +15,7 @@
     "standardFlowEnabled": true, "directAccessGrantsEnabled": false,
     "redirectUris": ["http://localhost:8090/auth/callback"],
     "webOrigins": ["http://localhost:8090"],
+    "attributes": {"post.logout.redirect.uris": "http://localhost:8090/*"},
     "protocolMappers": [{
       "name": "groups", "protocol": "openid-connect",
       "protocolMapper": "oidc-group-membership-mapper",

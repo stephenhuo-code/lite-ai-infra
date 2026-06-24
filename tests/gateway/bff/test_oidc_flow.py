@@ -16,7 +16,7 @@ def _app(monkeypatch):
 
     # token 端点交换 seam:返回假 token(I-3:真交换用真 KC,测试注入)
     def fake_exchange(code, verifier):
-        return {"access_token": "at", "refresh_token": "rt", "expires_in": 300}
+        return {"access_token": "at", "refresh_token": "rt", "expires_in": 300, "id_token": "idtok"}
 
     return build_auth_router_app(exchange_code=fake_exchange)
 
@@ -58,9 +58,39 @@ def test_callback_happy_sets_session_and_csrf(monkeypatch):
     assert sd.access_token == "at" and sd.refresh_token == "rt"
     assert sd.csrf == csrf_cookie and sd.csrf != ""
     assert sd.expires_at > 0
+    assert c.cookies.get("id_token") == "idtok"   # id_token 落独立 cookie(不进会话 blob,避免 >4KB)
 
 
-def test_logout_clears_cookie(monkeypatch):
+def test_logout_clears_cookie_and_returns_end_session(monkeypatch):
+    # 无会话 cookie 直接登出:仍清 cookie + 返回 end_session(降级:无 id_token_hint,但有 post_logout_redirect_uri)
     r = TestClient(_app(monkeypatch)).post("/auth/logout", follow_redirects=False)
     sc = r.headers.get("set-cookie", "")
     assert "session=" in sc and "Max-Age=0" in sc
+    body = r.json()
+    assert body["ok"] is True
+    es = body["end_session"]
+    assert es.startswith("http://kc/realms/x/protocol/openid-connect/logout?")
+    assert "post_logout_redirect_uri=" in es and "%2Fauth%2Flogin" in es
+    assert "client_id=lite-ai-web" in es
+
+
+def test_logout_includes_id_token_hint_when_session_present(monkeypatch):
+    # 登录→回调建会话(含 id_token)→ 登出:end_session 带 id_token_hint=idtok(无缝,跳过 KC 确认页)
+    c = TestClient(_app(monkeypatch))
+    r = c.get("/auth/login", follow_redirects=False)
+    state = urllib.parse.parse_qs(urllib.parse.urlparse(r.headers["location"]).query)["state"][0]
+    c.get(f"/auth/callback?code=thecode&state={state}", follow_redirects=False)
+    out = c.post("/auth/logout", follow_redirects=False)
+    assert "id_token_hint=idtok" in out.json()["end_session"]
+
+
+def test_end_session_url_unit(monkeypatch):
+    # oidc.end_session_url:有 hint 带 hint;无 hint 省略该参(降级)
+    from services.gateway.bff import oidc
+    _app(monkeypatch)                      # 设好 env 供 OidcConfig 读取
+    cfg = oidc.OidcConfig()
+    with_hint = oidc.end_session_url(cfg, id_token_hint="ID", post_logout_redirect_uri="http://gw/auth/login")
+    assert "id_token_hint=ID" in with_hint and "post_logout_redirect_uri=" in with_hint
+    assert "client_id=lite-ai-web" in with_hint
+    no_hint = oidc.end_session_url(cfg, id_token_hint="", post_logout_redirect_uri="http://gw/auth/login")
+    assert "id_token_hint" not in no_hint

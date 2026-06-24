@@ -20,6 +20,19 @@ def test_roundtrip_preserves_csrf():
     assert c.decode(c.encode(s)).csrf == "tok-123"
 
 
+def test_decode_ignores_unknown_keys():
+    # 跨字段增减平滑:含未知键(如曾误塞进会话的 id_token)的 cookie 仍能解出,未知键被忽略
+    import json
+    from cryptography.fernet import Fernet
+    key = Fernet.generate_key()
+    blob = Fernet(key).encrypt(
+        json.dumps({"access_token": "a", "refresh_token": "r", "expires_at": 1900000000,
+                    "csrf": "c", "id_token": "stale", "future_field": 1}).encode()
+    ).decode()
+    sd = SessionCodec(key).decode(blob)
+    assert sd is not None and sd.access_token == "a" and sd.csrf == "c"
+
+
 def test_tampered_cookie_returns_none():
     assert _codec().decode("not-a-valid-token") is None
 

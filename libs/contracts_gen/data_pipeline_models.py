@@ -11,8 +11,7 @@ from pydantic import BaseModel, conint, constr
 
 class PrepareJobRequest(BaseModel):
     dataset: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
-    group_id: constr(pattern=r'^g-[0-9a-z]+$')
-    tar_dir: str
+    source_dataset: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
     np: conint(ge=1) | None = None
     process: list[dict[str, Any]] | None = None
 
@@ -29,8 +28,9 @@ class Job(BaseModel):
     status: Status
     terminal: bool
     dataset: str
-    group_id: constr(pattern=r'^g-[0-9a-z]+$')
     enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
+    owner_user: str | None = None
+    source_dataset: str | None = None
     rows_in: int | None = None
     rows_written: int | None = None
     lance_uri: str | None = None
@@ -46,7 +46,6 @@ class JobList(BaseModel):
 
 class RawUploadRequest(BaseModel):
     dataset: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
-    group_id: constr(pattern=r'^g-[0-9a-z]+$')
     filename: str
     multipart: bool | None = False
     parts: conint(ge=1, le=10000) | None = None
@@ -79,8 +78,8 @@ class Status1(Enum):
 class RawDataset(BaseModel):
     id: str
     name: str
-    group_id: constr(pattern=r'^g-[0-9a-z]+$')
     enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
+    owner_user: str | None = None
     oss_key: str
     status: Status1
     size: int | None = None

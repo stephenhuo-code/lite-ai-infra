@@ -172,9 +172,11 @@ def _flat(s: Settings) -> dict[str, str | None]:
 # 每服务注入子集 == 现 _env_for 实测基线(顺序无关)
 SERVICE_ENV_KEYS: dict[str, list[str]] = {
     "identity": ["LITEAI_JWKS_URL"],
-    "metadata": ["LITEAI_JWKS_URL", "GRAVITINO_URL"],
+    "metadata": ["LITEAI_JWKS_URL", "GRAVITINO_URL", "OSS_ENDPOINT", "OSS_ACCESS_KEY",
+                 "OSS_SECRET_KEY", "DATA_BUCKET"],
     "data-pipeline": ["LITEAI_JWKS_URL", "JOBS_DIR", "OSS_ENDPOINT", "OSS_ACCESS_KEY",
-                      "OSS_SECRET_KEY", "OSS_REGION", "DATA_BUCKET", "AUDIT_BUCKET", "DJ_BIN"],
+                      "OSS_SECRET_KEY", "OSS_REGION", "DATA_BUCKET", "AUDIT_BUCKET", "DJ_BIN",
+                      "METADATA_URL"],   # S2a:submit 时按名查 metadata 解析源 location
     "gateway": ["IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
                 "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
                 "BFF_REDIRECT_URI"],

@@ -31,26 +31,30 @@ def test_lance_create_then_register(minio_s3, minio_bucket, gravitino_url, monke
     """串 Plan 2/4:MinIO 建真 Lance → metadata-service 注册 → 查回 → 读回验证。
     scheme 二元性:同一物理对象,lance 读写用 s3://(object_store),Gravitino location 记 s3a://(HCFS)。"""
     monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
+    # owner 模型(ADR-024):processed 路径/前缀校验按上传用户(sub=u-alice),非 group。
+    # 注册端点用 os.environ["DATA_BUCKET"] 拼 allowed 前缀,故对齐到本测试 bucket。
+    monkeypatch.setenv("DATA_BUCKET", minio_bucket)
     n = f"ds_{uuid.uuid4().hex[:6]}"
 
-    # 1) MinIO 上建真 Lance 数据集(lance 用 s3://)
+    # 1) MinIO 上建真 Lance 数据集(lance 用 s3://;路径按 owner=u-alice)
     opts = lance_storage_options("http://localhost:9000", minio_bucket, "minio", "minio123", region="us-east-1")
-    uri = f"s3://{minio_bucket}/e-0001/g-0001/processed/{n}.lance"
+    uri = f"s3://{minio_bucket}/e-0001/u-alice/processed/{n}.lance"
     lance.write_dataset(pa.table({"text": ["a", "b", "c"]}), uri, storage_options=opts, mode="overwrite")
 
-    # 2) metadata-service(真 Gravitino)注册 → 查回(Gravitino location 记 s3a://,同 bucket/key)
+    # 2) metadata-service(真 Gravitino)注册 → 查回。
+    # scheme 二元性:客户端送 s3://(object_store/lance),Gravitino location 记 s3a://(HCFS,同 bucket/key)。
     g = GravitinoClient(base_url=gravitino_url)
     _ensure_tree(g, minio_s3)
     client = TestClient(build_app(gravitino=g))
     base = "/v1/catalogs/data/schemas/datasets/datasets"
     hdr = {"x-test-claims": json.dumps({"sub": "u-alice", "groups": ["/e-0001/g-0001/members"]})}
-    loc = f"s3a://{minio_bucket}/e-0001/g-0001/processed/{n}.lance"
+    expect_loc = f"s3a://{minio_bucket}/e-0001/u-alice/processed/{n}.lance"   # Gravitino 存 s3a://
 
     assert client.post(base, headers=hdr,
-                       json={"name": n, "group_id": "g-0001", "location": loc}).status_code == 201
+                       json={"name": n, "kind": "processed", "format": "lance", "location": uri}).status_code == 201
     got = client.get(f"{base}/{n}", headers=hdr).json()
-    assert got["group_id"] == "g-0001"
-    assert got["location"] == loc
+    assert got["owner"] == "u-alice" and got["kind"] == "processed"   # owner 模型:归属=上传用户
+    assert got["location"] == expect_loc                              # 服务端转 s3a://
 
     # 3) 注册的 location 确实指向真 Lance(读回 3 行)
     assert lance.dataset(uri, storage_options=opts).count_rows() == 3

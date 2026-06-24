@@ -152,3 +152,7 @@ Keycloak 26.6.2(`--features=organization`,docker-compose,seeded realm),脚本 `s
 **判定:go**(本地)。阿里云测试环境复验同脚本改 `KC_BASE` 重跑。
 
 **阿里云复验(2026-06-11,ECS @ cn-hangzhou,Keycloak 26.6.2 + Postgres 16)**:同脚本经云助手在实例上执行,三段全 PASS——双组全路径 claim ✓;移组后 **110ms** 签发的新 token 即时反映 ✓;stale 窗口 = accessTokenLifespan = 300s ✓。与本地 compose 行为一致,**Spike A 闭环,判定 go**。
+
+---
+
+→ 部分被 ADR-024 修订(owner 归属):资源归属真相源由"用户组私有"改为 `owner_user`(上传用户);group 降为访问维度,不参与 v1 can() 决策。

@@ -150,3 +150,7 @@ resourcePolicy:
 - Context.memberships → Cerbos principal.attr 映射直接(数组 + `exists()` CEL 表达式),derived roles 可表达 owner/同组成员/组管理员/同企业四类语义。
 
 **判定:go** —— ADR-011 的 seam 设计验证成立,v2 接 Cerbos 无架构风险。
+
+---
+
+→ 部分被 ADR-024 修订(owner 归属):v1 `can()` 收敛为企业硬隔离 + owner-only;group 访问(same_group_member / shared_reader / 跨用户共享)整体下放 Cerbos v2。

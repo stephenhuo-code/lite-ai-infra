@@ -3,28 +3,32 @@ from __future__ import annotations
 from libs.identity.context import Context
 from libs.authz.types import Resource, Decision
 
-_ROLE_RANK = {"member": 0, "group-admin": 1, "enterprise-admin": 2}
-
 def can(ctx: Context, action: str, resource: Resource) -> Decision:
-    """v1 薄 PolicyEngine。授权的唯一出入口（宪法 §2.4）。
-    强制：认证(=有 ctx) + 企业隔离 + owner + 角色门槛。
-    用户组 scope / 共享 / 派生规则属 v2（Cerbos）——can() 签名不变。"""
-    # platform-admin 只能走 /admin/* 特权路径；普通业务路径仍按企业隔离
+    """v1 薄 PolicyEngine。授权的唯一出入口（宪法 §2.4）。owner 模型(ADR-024)。
+    强制：认证(=有 ctx) + 企业硬隔离 + owner-only(owner==user 或 enterprise-admin)。
+    GPU>4 配额门槛 = enterprise-admin。
+    group 访问(scope / 跨用户共享)属 v2(Cerbos),v1 can() 不按 group 判隔离——签名不变。
+    resource.group_id 保留为属性(audit / Cerbos v2),不参与本决策。"""
+    # platform-admin 只能走 /admin/* 特权路径；普通业务路径不允许
     if ctx.is_platform_admin:
         return Decision(False, "platform-admin must use /admin/* privileged API")
 
-    role = ctx.role_in(resource.enterprise_id, resource.group_id)
-    if role is None:  # AC-6/13/26：硬企业隔离
-        in_enterprise = any(m.enterprise_id == resource.enterprise_id for m in ctx.memberships)
-        return Decision(False, "cross-group" if in_enterprise else "cross-enterprise")
+    # 企业硬隔离(§1.6):ctx 无任一 membership 命中资源企业 → 跨企业 deny
+    in_enterprise = any(m.enterprise_id == resource.enterprise_id for m in ctx.memberships)
+    if not in_enterprise:
+        return Decision(False, "cross-enterprise")
 
-    rank = _ROLE_RANK[role]
-    # 角色门槛：大 GPU 作业需 group-admin+
-    if action == "job.submit" and (resource.attrs or {}).get("gpu", 0) > 4 and rank < 1:
-        return Decision(False, "> 4 GPU job requires group-admin+")
-    # mutation 的 owner 检查。owner=None(资源无主,如 S0 stub 解析不出 owner)时
-    # 有意放行任何本组成员——企业/组隔离已在上面强制;owner 细化随真实资源查找落地(vN+)。
-    if action.endswith((".delete", ".cancel", ".update")) and resource.owner not in (None, ctx.user):
-        if rank < 1:
-            return Decision(False, "only owner / group-admin / enterprise-admin")
+    ent_admin = any(m.enterprise_id == resource.enterprise_id and m.role == "enterprise-admin"
+                    for m in ctx.memberships)
+
+    # GPU 配额门槛(owner 模型:enterprise-admin)
+    if action == "job.submit" and (resource.attrs or {}).get("gpu", 0) > 4 and not ent_admin:
+        return Decision(False, "> 4 GPU job requires enterprise-admin")
+
+    # owner-only(v1):owner 或 enterprise-admin;group 访问/跨用户共享 → Cerbos v2。
+    # owner=None(资源无主,如 S0 stub 解析不出 owner)放行本企业成员——企业隔离已强制。
+    is_owner = resource.owner in (None, ctx.user)
+    if not (is_owner or ent_admin):
+        return Decision(False, "owner / enterprise-admin only (group sharing → Cerbos v-next)")
+
     return Decision(True, "")

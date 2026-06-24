@@ -28,7 +28,8 @@ def _downstream():
 
 
 def _claims(_token):
-    return {"sub": "u-alice", "groups": ["/e-0001/g-0001/members"]}
+    return {"sub": "u-alice", "groups": ["/e-0001/g-0001/members"],
+            "preferred_username": "alice", "email": "alice@example.com"}
 
 
 def _env(monkeypatch):
@@ -124,6 +125,7 @@ def test_auth_me_returns_user_and_csrf(monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["user"] == "u-alice" and body["is_platform_admin"] is False and body["csrf"] == "csrf-xyz"
+    assert body["username"] == "alice" and body["email"] == "alice@example.com"  # 真实展示信息
 
 
 def test_auth_me_no_session_401(monkeypatch):

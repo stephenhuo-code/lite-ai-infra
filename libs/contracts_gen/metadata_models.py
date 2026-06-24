@@ -20,8 +20,7 @@ class Scope(Enum):
 class Dataset(BaseModel):
     name: str
     enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
-    group_id: constr(pattern=r'^g-[0-9a-z]+$')
-    owner: str | None = None
+    owner: str | None
     scope: Scope
     location: str
     comment: str | None = None
@@ -30,16 +29,24 @@ class Dataset(BaseModel):
     format: str | None = None
     num_samples: int | None = None
     size_bytes: int | None = None
+    kind: str | None = None
+    derived_from: str | None = None
 
 
 class DatasetList(BaseModel):
     datasets: list[Dataset] | None = None
 
 
+class Kind(Enum):
+    raw = 'raw'
+    processed = 'processed'
+
+
 class RegisterDataset(BaseModel):
     name: constr(pattern=r'^[a-z0-9][a-z0-9_-]{0,63}$')
-    group_id: constr(pattern=r'^g-[0-9a-z]+$')
-    location: str
+    kind: Kind
+    location: str | None = None
+    derived_from: str | None = None
     scope: Scope | None = 'private'
     comment: str | None = None
     format: str | None = None

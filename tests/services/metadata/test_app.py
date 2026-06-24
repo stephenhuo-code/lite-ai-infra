@@ -11,6 +11,7 @@ from services._scaffold.drift import assert_openapi_subset_of_contract
 @pytest.fixture(autouse=True)
 def _seam(monkeypatch):
     monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
+    monkeypatch.setenv("DATA_BUCKET", "b")   # 注册端服务端钉死/前缀校验用
 
 
 class FakeG:
@@ -76,10 +77,12 @@ def test_list_datasets_can_filtered_to_own_group():
 
 def test_dataset_projection_has_audit_and_comment():
     d = _client().get(f"{_DS}/cc3m", headers=_ALICE).json()
-    assert d == {"name": "cc3m", "enterprise_id": "e-0001", "group_id": "g-0001", "owner": "u-alice",
+    # owner 模型(ADR-024):投影去 group_id,owner 必带
+    assert d == {"name": "cc3m", "enterprise_id": "e-0001", "owner": "u-alice",
                  "scope": "private", "location": "s3a://b/e-0001/g-0001/processed/cc3m.lance",
                  "comment": "c", "created_at": "2026-06-13T00:00:00Z", "created_by": "u-alice",
-                 "format": None, "num_samples": None, "size_bytes": None}
+                 "format": None, "num_samples": None, "size_bytes": None,
+                 "kind": None, "derived_from": None}
 
 
 def test_get_cross_group_403():
@@ -103,10 +106,11 @@ def test_unattributed_fileset_fail_closed_not_500():
     assert r.status_code == 200 and "orphan" not in [d["name"] for d in r.json()["datasets"]]
 
 
-def test_register_own_group_201():
+def test_register_own_prefix_201():
+    # owner 模型(ADR-024):processed location 须落在 caller 自己的 user 前缀(e-0001/u-alice)
     g = FakeG()
-    r = _client(g).post(_DS, headers=_ALICE, json={"name": "newds", "group_id": "g-0001",
-                                                   "location": "s3a://b/e-0001/g-0001/processed/newds.lance"})
+    r = _client(g).post(_DS, headers=_ALICE, json={"name": "newds", "kind": "processed",
+                                                   "location": "s3://b/e-0001/u-alice/processed/newds.lance"})
     assert r.status_code == 201 and "newds" in g._fs
 
 
@@ -117,17 +121,19 @@ def test_register_existing_returns_409_not_500():
         def create_fileset(self, *a, **k):
             raise GravitinoError("409 already exists", status=409)
     r = _client(Conflicting()).post(_DS, headers=_ALICE,
-        json={"name": "cc3m", "group_id": "g-0001", "location": "s3a://b/e-0001/g-0001/processed/cc3m.lance"})
+        json={"name": "cc3m", "kind": "processed",
+              "location": "s3://b/e-0001/u-alice/processed/cc3m.lance"})
     assert r.status_code == 409
 
 
-def test_register_other_group_403():
-    assert _client().post(_DS, headers=_ALICE, json={"name": "x", "group_id": "g-0002",
+def test_register_foreign_location_403():
+    # owner 模型(ADR-024):processed location 落在 caller 自己 user 前缀之外 → 403(越权位置拒)。
+    assert _client().post(_DS, headers=_ALICE, json={"name": "x", "kind": "processed",
                                                      "location": "s3a://b/x.lance"}).status_code == 403
 
 
 def test_register_missing_field_422():
-    # 契约模型校验:缺 group_id/location → 422(不是 500)
+    # 契约模型校验:缺 kind → 422(不是 500)。owner 模型:group_id 已非 required。
     r = _client().post(_DS, headers=_ALICE, json={"name": "x"})
     assert r.status_code == 422
 
@@ -135,7 +141,8 @@ def test_register_missing_field_422():
 def test_register_invalid_name_422():
     # name 违反契约 pattern → 422
     r = _client().post(_DS, headers=_ALICE,
-                       json={"name": "Bad Name!", "group_id": "g-0001", "location": "s3a://b/x.lance"})
+                       json={"name": "Bad Name!", "kind": "processed",
+                             "location": "s3a://b/x.lance"})
     assert r.status_code == 422
 
 
@@ -161,8 +168,8 @@ def test_register_persists_and_returns_three_fields():
     c = _client()
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
                headers=_h("u-alice", ["/e-0001/g-0001/members"]),
-               json={"name": "cc3m_clean", "group_id": "g-0001",
-                     "location": "s3a://b/e-0001/g-0001/processed/cc3m_clean.lance",
+               json={"name": "cc3m_clean", "kind": "processed",
+                     "location": "s3://b/e-0001/u-alice/processed/cc3m_clean.lance",
                      "format": "Lance", "num_samples": 300, "size_bytes": 67891})
     assert r.status_code == 201
     body = r.json()
@@ -178,11 +185,12 @@ def test_register_without_three_fields_returns_null():
     c = _client()
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
                headers=_h("u-alice", ["/e-0001/g-0001/members"]),
-               json={"name": "plain_ds", "group_id": "g-0001",
-                     "location": "s3a://b/e-0001/g-0001/processed/plain_ds.lance"})
+               json={"name": "plain_ds", "kind": "processed",
+                     "location": "s3://b/e-0001/u-alice/processed/plain_ds.lance"})
     assert r.status_code == 201
     body = r.json()
-    assert body["format"] is None and body["num_samples"] is None and body["size_bytes"] is None
+    # processed 未给 format → 服务端默认 "lance"(钉死语义);计数字段仍 None
+    assert body["format"] == "lance" and body["num_samples"] is None and body["size_bytes"] is None
 
 
 def test_existing_dataset_projection_has_null_three_fields():
@@ -198,8 +206,8 @@ def test_register_zero_counts_roundtrip_as_zero_not_null():
     c = _client()
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
                headers=_h("u-alice", ["/e-0001/g-0001/members"]),
-               json={"name": "empty_ds", "group_id": "g-0001",
-                     "location": "s3a://b/e-0001/g-0001/processed/empty_ds.lance",
+               json={"name": "empty_ds", "kind": "processed",
+                     "location": "s3://b/e-0001/u-alice/processed/empty_ds.lance",
                      "num_samples": 0, "size_bytes": 0})
     assert r.status_code == 201
     g = c.get("/v1/catalogs/data/schemas/datasets/datasets/empty_ds",

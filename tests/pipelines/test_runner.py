@@ -36,7 +36,7 @@ def test_happy_path_runs_stages_and_audits(tmp_path):
     out = run_prepare(ctx, _req(tmp_path), AuditWriter(sink), **_ok_fakes(calls))
     assert [c[0] for c in calls] == ["convert", "dj", "lance"]
     assert out["rows_written"] == 5
-    assert out["lance_uri"] == "s3://bkt/e-0001/g-0001/processed/cc3m.lance"
+    assert out["lance_uri"] == "s3://bkt/e-0001/u-alice/processed/cc3m.lance"   # owner 路径(ADR-024)
     assert json.loads(sink.items[0][1])["decision"] == "allow"
 
 def test_dj_failure_audited_and_raises(tmp_path):

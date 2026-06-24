@@ -3,17 +3,18 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from libs.identity.ids import EnterpriseId, GroupId
+from libs.identity.ids import EnterpriseId
 
 _RE_DATASET = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _RE_FILENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")  # 单段文件名,首字符非 '.' → 排除 '..'/'.hidden';无 '/' → 无路径穿越
 
 @dataclass(frozen=True)
 class DatasetPaths:
-    """资源命名只含不透明 ID(宪法 §1.4):oss://<bucket>/<eid>/<gid>/{raw,cleaned,processed}/…"""
+    """资源命名只含不透明 ID(宪法 §1.4):oss://<bucket>/<eid>/<user>/{raw,cleaned,processed}/…
+    owner 模型(ADR-024):路径按上传用户(user_id=ctx.user=sub,§1.4 不透明),不再按 group。"""
     bucket: str
     enterprise_id: EnterpriseId
-    group_id: GroupId
+    user_id: str
     dataset: str
 
     def __post_init__(self):
@@ -22,7 +23,7 @@ class DatasetPaths:
 
     @property
     def _base(self) -> str:
-        return f"{self.enterprise_id}/{self.group_id}"
+        return f"{self.enterprise_id}/{self.user_id}"
 
     @property
     def raw_prefix(self) -> str:

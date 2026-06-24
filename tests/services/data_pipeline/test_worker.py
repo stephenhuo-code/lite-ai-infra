@@ -1,5 +1,5 @@
 import pytest
-from libs.identity.ids import EnterpriseId, GroupId
+from libs.identity.ids import EnterpriseId
 from services.data_pipeline_service.jobs import JobSpec, JobStore
 from services.data_pipeline_service import worker as W
 
@@ -11,8 +11,10 @@ def _oss_env(monkeypatch):
         monkeypatch.setenv(k, v)
 
 def _seed(tmp_path, **kw):
+    # owner 模型(ADR-024):JobSpec 去 group_id;owner=sub,路径段按 user
     store = JobStore(str(tmp_path))
-    sp = JobSpec("job-1", "cc3m", "g-0001", "e-0001", "member", "u-a", "/d", 3, kw.get("process"))
+    sp = JobSpec("job-1", "cc3m", "e-0001", "member", "u-a",
+                 "s3://b/e-0001/u-a/raw/cc3m/", 3, process=kw.get("process"))
     store.create(sp); store.update("job-1", "running")
     return store
 
@@ -20,7 +22,8 @@ def test_success_writes_terminal(tmp_path, monkeypatch):
     store = _seed(tmp_path, process=[{"a": 1}])
     seen = {}
     def fake_run_prepare(ctx, req, audit):
-        seen["ctx_role"] = ctx.role_in(EnterpriseId("e-0001"), GroupId("g-0001"))
+        seen["ctx_user"] = ctx.user            # owner 模型:worker 重建 Context 用 sub(=owner)
+        seen["ctx_role"] = ctx.role_in(EnterpriseId("e-0001"))   # 企业级角色(无组)
         seen["process"] = req.process
         return {"rows_in": 15138, "rows_written": 15000, "lance_uri": "s3://b/cc3m.lance"}
     monkeypatch.setattr(W, "run_prepare", fake_run_prepare)
@@ -28,7 +31,8 @@ def test_success_writes_terminal(tmp_path, monkeypatch):
     W.run_job(str(store.job_dir("job-1")))
     r = store.read("job-1")
     assert r["status"] == "succeeded" and r["rows_written"] == 15000 and r["lance_uri"].endswith(".lance")
-    assert seen["ctx_role"] == "member"          # 快照角色重建正确
+    assert seen["ctx_user"] == "u-a"             # 重建身份=owner(sub)
+    assert seen["ctx_role"] == "member"          # 快照角色重建正确(企业级,无组)
     assert seen["process"] == [{"a": 1}]         # spec.process 透传给 run_prepare
 
 def test_permission_error_marks_failed(tmp_path, monkeypatch):

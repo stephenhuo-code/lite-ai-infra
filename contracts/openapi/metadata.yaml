@@ -44,12 +44,11 @@ components:
       properties: {names: {type: array, items: {type: string}}}
     Dataset:
       type: object
-      required: [name, enterprise_id, group_id, scope, location]
+      required: [name, enterprise_id, owner, scope, location]               # owner 模型(ADR-024):去 group_id required,owner 必填
       properties:
         name: {type: string}
         enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
-        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
-        owner: {type: [string, 'null']}
+        owner: {type: [string, 'null']}    # owner(ADR-024):上传/注册用户(sub,§1.4 不透明)
         scope: {type: string, enum: [private, shared]}
         location: {type: string}
         comment: {type: [string, 'null']}
@@ -58,16 +57,19 @@ components:
         format: {type: [string, 'null']}          # Lance / 原始 / parquet…
         num_samples: {type: [integer, 'null']}    # 样本数(行数)
         size_bytes: {type: [integer, 'null']}     # 占用字节
+        kind: {type: [string, 'null']}            # raw | processed(缺失=未知,前端显未知)
+        derived_from: {type: [string, 'null']}    # 来源数据集名(processed 的单跳血缘)
     DatasetList:
       type: object
       properties: {datasets: {type: array, items: {$ref: '#/components/schemas/Dataset'}}}
     RegisterDataset:
       type: object
-      required: [name, group_id, location]
+      required: [name, kind]                                              # owner 模型(ADR-024):去 group_id
       properties:
         name: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
-        group_id: {type: string, pattern: '^g-[0-9a-z]+$'}
-        location: {type: string}
+        kind: {type: string, enum: [raw, processed]}   # raw: 服务端钉死 location;processed: 校验 caller 前缀
+        location: {type: [string, 'null']}             # raw 省略(服务端钉死);processed 须落 caller 前缀
+        derived_from: {type: [string, 'null']}         # processed 的来源数据集名(单跳血缘)
         scope: {type: string, enum: [private, shared], default: private}
         comment: {type: [string, 'null']}
         format: {type: [string, 'null']}
