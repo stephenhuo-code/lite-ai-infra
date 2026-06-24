@@ -89,6 +89,18 @@ KC admin REST,**每步带幂等判据**:① 建 org(**by alias/name 查重**,存
 - **可观测**:企业归属、注册自动归属、邀请接受 写审计。
 - **规模**:v1 单企业;parse_context O(claims) 解析,无新外部往返(org 在 token 内)。
 
+## 扩展性:未来 group + 角色回归(v-next,不锁死)
+本设计用 **seam**(`token claims → parse_context() → Context{Membership} → can()`)正是为将来能加 group 维度。三个扩展点均**加法**:`Membership` 是 dataclass(可加 `groups` 字段);`parse_context` 是唯一解析点(多读 claim 即可,改动局限于此);`can()` 是授权唯一入口(group 授权在此插入)。**保持稳定**:enterprise=alias、owner 归属、BFF/注入 plumbing 不动。
+
+**三条可选回归路径(KC/Cerbos 均支持,探针已证机制在)**:
+| 路径 | token 怎么带 group | 取舍 |
+|---|---|---|
+| **A. KC Organization Groups(26.6 原生)** | org 内建 group + org-group mapper → `organization` claim 由"alias 数组"变**对象** `{"<alias>":{"groups":["/算法组"]}}` | 最贴 org 模型;mapper 重配 → **`parse_context` 解析改一处**(seam 隔离,下游不动)|
+| **B. realm group 并存(老机制)** | token 同带 `organization`(企业)+ `groups`(组路径) | 改动最小、最熟;两套树并存 |
+| **C. Cerbos 自管 group(解耦)** | **token 不带 group**;成员关系在 Cerbos 侧;授权时 Cerbos 解析,"显示哪个组"由查询端点问 Cerbos/identity | 最干净,身份/授权彻底解耦 |
+
+**"显示具体哪个组 + roles" 要加什么(全加法)**:① `Membership` 加 `groups:[{name/display_name, role}]`;② `/v1/me/orgs`(或 `/auth/me`)响应**加** `groups`(组显示名 + role),企业字段不动;③ 账户页**加** "我的组 + 角色" 区块;④ `can()` 加 group-grant 分支(Cerbos),owner/企业判定不动。**唯一非加法**:若走路径 A,`organization` claim 形态变 → 改 `parse_context` 一处(seam 的意义)。
+
 ## 依赖引用(既有家)
 - 契约:`contracts/openapi/{identity-org,metadata,data-pipeline}.yaml`(enterprise_id pattern 4 处)+ BFF 邀请端点(gateway 内部,非 /v1)。
 - 身份:`libs/identity/context.py`(parse_context seam)、`libs/identity/ids.py`(EnterpriseId)、`services/_scaffold/auth.py`、`services/gateway/bff/`。
