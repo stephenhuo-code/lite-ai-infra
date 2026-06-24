@@ -44,25 +44,31 @@ function toRows(
   meta: MetaComp['schemas']['DatasetList'],
   raw: PipeComp['schemas']['RawDatasetList'],
 ): Row[] {
-  // 已在 catalog 的名字集合(用于判断原始上传项是否已注册)。
+  // 已在 catalog 的名字集合 + 同名原始上传索引(注册=同一数据集的状态流转,非新实体)。
   const inCatalog = new Set((meta.datasets ?? []).map(d => d.name))
-  const metaRows: Row[] = (meta.datasets ?? []).map((d: Dataset) => ({
-    key: `meta:${d.name}`,
-    name: d.name,
-    desc: d.comment ?? null,
-    kind: d.kind ?? null,
-    format: d.format ?? null,
-    numSamples: d.num_samples ?? null,
-    sizeBytes: d.size_bytes ?? null,
-    createdBy: d.created_by ?? d.owner ?? null,
-    location: d.location ?? null,
-    scope: d.scope ?? null,
-    derivedFrom: d.derived_from ?? null,
-    status: null,
-    raw: false,
-    registerable: false,
-  }))
-  const rawRows: Row[] = (raw.raw ?? []).map((r: RawDataset) => ({
+  const rawByName = new Map<string, RawDataset>((raw.raw ?? []).map(r => [r.name, r]))
+  const metaRows: Row[] = (meta.datasets ?? []).map((d: Dataset) => {
+    // 已注册的数据集若来自一次原始上传,把上传记录并入本行(补大小);不再单独列一行。
+    const up = rawByName.get(d.name)
+    return {
+      key: `meta:${d.name}`,
+      name: d.name,
+      desc: d.comment ?? null,
+      kind: d.kind ?? null,
+      format: d.format ?? null,
+      numSamples: d.num_samples ?? null,
+      sizeBytes: d.size_bytes ?? up?.size ?? null,        // catalog 无大小时取原始上传的
+      createdBy: d.owner ?? d.created_by ?? null,         // owner 优先(ADR-024 归属真相;Gravitino creator 可能是 anonymous)
+      location: d.location ?? null,
+      scope: d.scope ?? null,
+      derivedFrom: d.derived_from ?? null,
+      status: up?.status ?? null,
+      raw: false,
+      registerable: false,
+    }
+  })
+  // 仅列尚未注册的原始上传(已在 catalog 的已并入上面的 metaRows,避免同名重复两行)。
+  const rawRows: Row[] = (raw.raw ?? []).filter(r => !inCatalog.has(r.name)).map((r: RawDataset) => ({
     key: `raw:${r.id}`,
     name: r.name,
     desc: null,
@@ -76,8 +82,7 @@ function toRows(
     derivedFrom: null,
     status: r.status ?? null,
     raw: true,
-    // ready 且尚未在 catalog → 可「注册到目录」(已在 catalog 的不再重复登记)。
-    registerable: r.status === 'ready' && !inCatalog.has(r.name),
+    registerable: r.status === 'ready',   // 未注册 + ready → 可「注册到目录」
   }))
   return [...metaRows, ...rawRows]
 }

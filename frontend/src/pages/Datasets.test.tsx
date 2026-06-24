@@ -66,10 +66,11 @@ it('渲染名称/格式/样本数/大小/创建人;null 显「—」;无 模态/
   expect(screen.getByText('lance')).toBeTruthy()
   expect(screen.getByText('3,300,000')).toBeTruthy() // 样本数
   expect(screen.getByText('1.2 GB')).toBeTruthy()    // 大小
-  expect(screen.getByText('韩工')).toBeTruthy()       // 创建人(created_by)
 
-  // 创建人列 = owner(owner 模型 · ADR-024):
-  // 原始上传项显其 owner_user(王工);已处理项 created_by 缺失时回退 owner(李工)。
+  // 创建人列 = owner 优先(owner 模型 · ADR-024;Gravitino created_by 可能是 anonymous):
+  // cc3m-clean owner='u-1' 优先于 created_by='韩工';原始上传显 owner_user(王工);created_by 缺失回退 owner(李工)。
+  expect(within(screen.getByText('cc3m-clean').closest('tr')!).getByText('u-1')).toBeTruthy() // owner 优先于 created_by
+  expect(screen.queryByText('韩工')).toBeNull()       // created_by 不再优先展示
   const partialRowOwner = screen.getByText('docs-partial').closest('tr')!
   expect(within(partialRowOwner).getByText('李工')).toBeTruthy() // owner 回退
 
@@ -87,6 +88,43 @@ it('渲染名称/格式/样本数/大小/创建人;null 显「—」;无 模态/
   expect(screen.queryByText('模态')).toBeNull()
   expect(screen.queryByText('标签')).toBeNull()
   expect(screen.queryByText('用户组')).toBeNull()
+})
+
+it('注册=状态流转:同名原始上传并入 catalog 行(单行、补大小、owner 创建人),不重复两行', async () => {
+  // catalog 有已注册的 raw 数据集 coco(无大小、created_by=anonymous),
+  // raw 存储也有同名上传 coco(3.3MB)。应合并成一行,而非两行。
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any) => {
+    const u = String(url)
+    if (u === '/v1/catalogs/data/schemas/datasets/datasets') {
+      return new Response(JSON.stringify({
+        datasets: [{
+          name: 'coco', enterprise_id: 'e-1', owner: 'u-sub', scope: 'private',
+          location: 's3a://b/raw/coco', comment: null, created_by: 'anonymous',
+          format: 'webdataset', num_samples: null, size_bytes: null, kind: 'raw', derived_from: null,
+        }],
+      }), { status: 200 })
+    }
+    if (u === '/v1/data/raw') {
+      return new Response(JSON.stringify({
+        raw: [{ id: 'raw-1', name: 'coco', owner_user: 'u-sub', enterprise_id: 'e-1',
+                oss_key: 'e/raw/coco', status: 'ready', size: 3460000 }],
+        total: 1,
+      }), { status: 200 })
+    }
+    return new Response('', { status: 404 })
+  })
+  render(<Datasets />)
+  await waitFor(() => expect(screen.getByText('coco')).toBeTruthy())
+
+  // 只有一行 coco(并入,非重复两行)
+  const cocoRows = new Set(screen.getAllByText('coco').map(el => el.closest('tr')))
+  expect(cocoRows.size).toBe(1)
+
+  const row = screen.getByText('coco').closest('tr')! as HTMLElement
+  expect(within(row).getByText('3.3 MB')).toBeTruthy()            // 大小来自原始上传
+  expect(within(row).getByText('u-sub')).toBeTruthy()            // 创建人=owner
+  expect(within(row).queryByText('anonymous')).toBeNull()        // 不显 Gravitino creator
+  expect(within(row).queryByText('注册到目录')).toBeNull()        // 已注册 → 无注册按钮
 })
 
 it('点详情打开侧抽屉,展示 location/scope 等已有字段,不显 e-/g- 内部 ID(US1 AC4 / FR-004)', async () => {
