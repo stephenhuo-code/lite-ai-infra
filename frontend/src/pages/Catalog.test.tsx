@@ -1,5 +1,5 @@
 import { it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { Catalog } from './Catalog'
 
 // 数据目录 Catalog Explorer 两栏(US3):左树(企业→catalog→schema→数据集,可展开)、右详情。
@@ -101,6 +101,32 @@ it('无「详情」Tab 与「建设中」占位(US3 由概览满足)', async () 
   // 「详情」Tab 与建设中占位均已移除
   expect(screen.queryByText('详情')).toBeNull()
   expect(screen.queryByText(/建设中/)).toBeNull()
+})
+
+it('点击数据集名打开详情面板,展示元数据(位置/格式/owner/scope),关闭后消失', async () => {
+  mockApis()
+  render(<Catalog />)
+  await waitFor(() => expect(screen.getByText('data')).toBeTruthy())
+  fireEvent.click(screen.getByText('data'))
+  await waitFor(() => expect(screen.getByText('datasets')).toBeTruthy())
+  fireEvent.click(screen.getByText('datasets'))
+  await waitFor(() => expect(screen.getByText('cc3m')).toBeTruthy())
+
+  // 点击数据集名(表格)→ 详情抽屉出现
+  fireEvent.click(screen.getByText('cc3m'))
+  await waitFor(() => expect(screen.getByText('数据集详情')).toBeTruthy())
+
+  // 抽屉内展示该数据集元数据:位置(仅抽屉显)、格式、创建人、scope
+  const drawerHeading = screen.getByText('数据集详情')
+  const drawer = drawerHeading.closest('div.relative') as HTMLElement
+  expect(within(drawer).getByText('oss://x')).toBeTruthy()       // 位置(列表不显,抽屉独有)
+  expect(within(drawer).getByText('lance')).toBeTruthy()          // 格式
+  expect(within(drawer).getByText('韩工')).toBeTruthy()           // 创建人(owner)
+  expect(within(drawer).getByText('私有')).toBeTruthy()           // scope
+
+  // 关闭 → 抽屉消失
+  fireEvent.click(screen.getByLabelText('关闭'))
+  await waitFor(() => expect(screen.queryByText('数据集详情')).toBeNull())
 })
 
 it('展开 schema 的箭头加载其下数据集(树第四层)', async () => {

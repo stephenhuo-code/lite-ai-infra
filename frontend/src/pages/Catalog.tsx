@@ -28,6 +28,25 @@ function scopeLabel(s: Dataset['scope'] | undefined): string {
   return '—'
 }
 
+// 详情面板用(镜像 Datasets.tsx 同款,保持两页一致)。
+function kindLabel(kind: string | null | undefined): string {
+  if (kind === 'raw') return '原始'
+  if (kind === 'processed') return '已处理'
+  return '—'
+}
+function fmtNum(n: number | null | undefined): string {
+  return n === null || n === undefined ? '—' : n.toLocaleString('en-US')
+}
+function fmtBytes(b: number | null | undefined): string {
+  if (b === null || b === undefined) return '—'
+  if (b < 1024) return `${b} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let v = b / 1024
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  return `${v.toFixed(1)} ${units[i]}`
+}
+
 const chevron = (open: boolean) => (
   <svg
     className={`w-3.5 h-3.5 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -48,6 +67,66 @@ const iconDataset = (
 // 选中的 schema 坐标。
 type Selection = { catalog: string; schema: string }
 
+// 数据集详情侧抽屉:展示该 fileset 已加载的元数据/属性/血缘/位置(只读,null-safe)。
+// 数据已在列表响应里(list_ds 返回全投影),直接复用行对象,无额外请求。
+// 镜像 Datasets.tsx 的 DatasetDetail 结构,保持两页一致。列式 schema(Lance)为 v-next。
+function DatasetDetail({ d, onClose }: { d: Dataset; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-30 flex justify-end">
+      <div className="absolute inset-0 bg-slate-900/30" onClick={onClose} />
+      <div className="relative w-full max-w-md h-full bg-white shadow-xl overflow-auto">
+        <div className="h-16 px-6 flex items-center border-b border-slate-100">
+          <h2 className="font-semibold text-base">数据集详情</h2>
+          <button
+            onClick={onClose}
+            aria-label="关闭"
+            className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 cursor-pointer"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <h3 className="font-semibold text-lg break-all">{d.name}</h3>
+            {d.kind && <span className="text-[10px] font-normal text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">{kindLabel(d.kind)}</span>}
+          </div>
+
+          <dl className="grid grid-cols-[88px_1fr] gap-y-3 text-sm">
+            <dt className="text-slate-500">描述</dt>
+            <dd className="text-slate-700">{dash(d.comment)}</dd>
+            <dt className="text-slate-500">类型</dt>
+            <dd className="text-slate-700">{kindLabel(d.kind)}</dd>
+            <dt className="text-slate-500">格式</dt>
+            <dd className="text-slate-700">{dash(d.format)}</dd>
+            {/* 已处理数据集显血缘来源(derived_from) */}
+            {d.kind === 'processed' && (
+              <>
+                <dt className="text-slate-500">来源</dt>
+                <dd className="text-slate-700 break-all">{dash(d.derived_from)}</dd>
+              </>
+            )}
+            <dt className="text-slate-500">样本数</dt>
+            <dd className="text-slate-700">{fmtNum(d.num_samples)}</dd>
+            <dt className="text-slate-500">大小</dt>
+            <dd className="text-slate-700">{fmtBytes(d.size_bytes)}</dd>
+            <dt className="text-slate-500">创建人</dt>
+            <dd className="text-slate-700 break-all">{dash(d.owner)}</dd>
+            <dt className="text-slate-500">注册时间</dt>
+            <dd className="text-slate-700">{fmtDate(d.created_at)}</dd>
+            <dt className="text-slate-500">创建者</dt>
+            <dd className="text-slate-700 break-all">{dash(d.created_by)}</dd>
+            <dt className="text-slate-500">位置</dt>
+            <dd className="text-slate-700 break-all">{dash(d.location)}</dd>
+            <dt className="text-slate-500">是否共享</dt>
+            <dd className="text-slate-700">{scopeLabel(d.scope)}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Catalog() {
   // 树:企业 → catalogs。catalog/ schema 的展开状态与子项缓存。
   const [enterpriseOpen, setEnterpriseOpen] = useState(true)
@@ -64,6 +143,7 @@ export function Catalog() {
   const [datasets, setDatasets] = useState<Record<string, Dataset[]>>({})
 
   const [selected, setSelected] = useState<Selection | null>(null)
+  const [detail, setDetail] = useState<Dataset | null>(null)  // 点击数据集名打开的详情面板
 
   useEffect(() => {
     listCatalogs()
@@ -279,9 +359,13 @@ export function Catalog() {
                         {selectedDatasets.map(d => (
                           <tr key={d.name}>
                             <td className="py-2.5 pr-4">
-                              <span className="font-medium inline-flex items-center gap-1.5" style={{ color: BRAND_DARK }}>
+                              <button
+                                onClick={() => setDetail(d)}
+                                className="font-medium inline-flex items-center gap-1.5 cursor-pointer hover:underline"
+                                style={{ color: BRAND_DARK }}
+                              >
                                 {iconDataset}{d.name}
-                              </span>
+                              </button>
                             </td>
                             <td className="py-2.5 pr-4 text-slate-600">{dash(d.owner)}</td>
                             <td className="py-2.5 pr-4 text-slate-500">{dash(d.format)}</td>
@@ -310,6 +394,8 @@ export function Catalog() {
           </>
         )}
       </div>
+
+      {detail && <DatasetDetail d={detail} onClose={() => setDetail(null)} />}
     </div>
   )
 }
