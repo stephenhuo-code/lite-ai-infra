@@ -1,6 +1,6 @@
 # ADR-016: Gravitino 租户/资源映射 — enterprise=metalake,group=资源属性(非 schema)
 
-- 状态：Accepted（2026-06-13，owner)
+- 状态：Accepted（2026-06-13，owner);**被 [ADR-024](./ADR-024-owner-based-dataset-ownership.md)(fileset 归属 owner_user、路径 e-XXXX/{user}/) 与 [ADR-025](./ADR-025-keycloak-organizations-as-enterprise.md)(企业标识改不透明 org id;metalake = 该 id `replace("-","_")`;移除 group 维度) amend**
 - 决策人：owner
 - 相关：ADR-010(两级租户模型)、ADR-011(授权 = Cerbos/can(),非数据源内置 RBAC);constitution §1(标识/隔离)/ §1.5(归属编码在资源)/ §1.6(硬隔离);S1 设计 spec §9(metadata-service);Gravitino 1.1.0
 

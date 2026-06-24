@@ -1,6 +1,6 @@
 # ADR-010: 多企业 SaaS 租户模型 — 单 Realm + Keycloak Organizations（身份/组织/角色全在 Keycloak）
 
-- 状态：Accepted
+- 状态：Accepted；**部分被 [ADR-024](./ADR-024-owner-based-dataset-ownership.md)(归属 group→owner)与 [ADR-025](./ADR-025-keycloak-organizations-as-enterprise.md)(企业=org 不透明 id、v1 移除"用户组"层降两级、角色经 org 属性/realm role 不再 group 路径编码、注册/邀请)修订**
 - 日期：2026-06-04
 - 决策人：平台团队（P1/P2/P3）
 - 相关：**修订 ADR-002**（单 realm 多 group → 单 realm + Organizations）/ design §0 核心架构原则 / design §3.2 租户模型 / **ADR-011**（Cerbos 授权）/ ADR-005（日志栈，审计索引）

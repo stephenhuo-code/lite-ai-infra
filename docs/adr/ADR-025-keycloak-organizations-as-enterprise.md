@@ -1,7 +1,7 @@
 # ADR-025: 企业 = Keycloak Organization(不透明 id)+ 注册/邀请;v1 移除"用户组"层(group→Cerbos)
 
-- 状态：**Proposed(待 owner 拍板;过 DoR + 本 ADR Accepted 后方进 writing-plans)**
-- 决策人：owner(拍板前置)
+- 状态：**Accepted(2026-06-24,owner 拍板)**。宪法本体同步(§1.1/1.2/1.3/1.4/1.6/2.1/2.2/5.1/8 + CLAUDE.md)+ 代码实现**随 [KC-org plan](../superpowers/plans/2026-06-24-kc-organizations-enterprise/) 同批落地**(保持宪法 ≡ 实现现实);本 ADR 决策即生效,进 writing-plans 仍需过 DoR(④ KC 探针为 plan 首任务)。
+- 决策人：owner
 - 相关：**supersede [ADR-010](./ADR-010-multi-enterprise-tenancy-model.md)**(两级租户/资源归属模型)、**amend [ADR-016](./ADR-016-gravitino-tenancy-mapping.md)**(企业标识来源/值)、**沿用并衔接 [ADR-024](./ADR-024-owner-based-dataset-ownership.md)**(owner 授权;本 ADR 顺势移除 group 维度)、**修订 constitution** §1.1/1.2/1.3/1.4/1.6/2.1/2.2/5.1/8(见末尾同步草案)。
 - 调研：[spike 2026-06-23 KC Organizations vs groups](../superpowers/spikes/2026-06-23-kc-organizations-vs-groups.md)(KC 26.6.2 实测;**注:spike 的"alias=e-XXXX 零迁移"前提已被本 ADR"不透明 id"决策取代**)。spec/design:[`2026-06-24-kc-organizations-enterprise/`](../superpowers/plans/2026-06-24-kc-organizations-enterprise/)。
 
