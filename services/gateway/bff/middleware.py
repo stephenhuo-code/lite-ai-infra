@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from libs.identity.context import parse_context
 from libs.identity.tokens import verify_and_decode
 from services.gateway.bff import oidc
+from services.gateway.bff.orgs import OrgInviter
 from services.gateway.bff.routes import make_auth_router
 from services.gateway.bff.session import (
     SESSION_COOKIE,
@@ -79,16 +80,26 @@ class RefreshCoordinator:
             return tok
 
 
-def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=None) -> None:
-    """把 BFF 装到 gateway app:auth 路由(login/callback/logout)+ 会话中间件 + /auth/me。
+def _claim_org_roles(c: dict) -> tuple[list[str], list[str]]:
+    """从 token claims 取 organization(alias 数组,multivalued=false 单字符串归一)+ realm 角色。"""
+    org = c.get("organization", [])
+    organization = list(org) if isinstance(org, list) else [org]
+    realm_roles = (c.get("realm_access") or {}).get("roles", [])
+    return organization, realm_roles
+
+
+def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=None, inviter=None) -> None:
+    """把 BFF 装到 gateway app:auth 路由(login/callback/logout)+ 会话中间件 + /auth/me + 企业邀请。
     seam:
       exchange_code(code, verifier)->token  —— 默认真 KC code 交换(lite-ai-web)
       refresh_fn(refresh_token)->token      —— 默认真 KC refresh
       claims_fn(access_token)->claims dict  —— 默认 JWKS 验签解码(/auth/me 解会话内 access,M-3)
+      inviter.invite(org_alias, email)      —— 默认真 KC org 邀请(enterprise-admin 调)
     """
     cfg = oidc.OidcConfig()
     codec = SessionCodec(os.environ["BFF_SESSION_KEY"].encode())
     coordinator = RefreshCoordinator(refresh_fn or (lambda rt: oidc.refresh_tokens(cfg, rt)))
+    org_inviter = inviter or OrgInviter()
 
     def _default_claims(token: str) -> dict:
         return verify_and_decode(token, jwks_url=os.environ["LITEAI_JWKS_URL"],
@@ -110,9 +121,7 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
             c = claims(bearer)
         except Exception:
             return JSONResponse(status_code=401, content={"reason": "invalid token"})
-        org = c.get("organization", [])
-        organization = list(org) if isinstance(org, list) else [org]  # multivalued=false → 单字符串
-        realm_roles = (c.get("realm_access") or {}).get("roles", [])
+        organization, realm_roles = _claim_org_roles(c)
         ctx = parse_context(sub=c["sub"], organization=organization, realm_roles=realm_roles)
         # 真实展示信息(来自 Keycloak token claims):用户名优先 preferred_username,回退 name;邮箱可空。
         # user(sub,§1.4 不透明)仍返回供前端内部使用;界面展示用 username/email。
@@ -121,6 +130,42 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
                 "username": c.get("preferred_username") or c.get("name") or ctx.user,
                 "email": c.get("email"),
                 "enterprises": [m.enterprise_id for m in ctx.memberships]}
+
+    @app.post("/auth/orgs/invite")
+    async def invite_member(request: Request):
+        # 企业邀请(enterprise-admin):会话取 caller 的 org(alias)+ 角色 → 仅 ent-admin 放行 →
+        # KC org 邀请。CSRF 由会话中间件强制(变更方法非豁免)。
+        sd: SessionData | None = getattr(request.state, "session", None)
+        bearer = getattr(request.state, "bearer", None)
+        if sd is None or not bearer:
+            return JSONResponse(status_code=401, content={"reason": "unauthenticated"})
+        try:
+            c = claims(bearer)
+        except Exception:
+            return JSONResponse(status_code=401, content={"reason": "invalid token"})
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        email = (body or {}).get("email", "").strip()
+        if not email:
+            return JSONResponse(status_code=400, content={"reason": "email required"})
+        organization, realm_roles = _claim_org_roles(c)
+        ctx = parse_context(sub=c["sub"], organization=organization, realm_roles=realm_roles)
+        aliases: list[str] = []
+        for m in ctx.memberships:
+            if m.enterprise_id not in aliases:
+                aliases.append(m.enterprise_id)
+        if len(aliases) != 1:   # v1 单企业:0/多企业显式拒(不静默挑第一个)
+            return JSONResponse(status_code=400, content={"reason": "ambiguous enterprise membership"})
+        alias = aliases[0]
+        if ctx.role_in(alias) != "enterprise-admin":   # 仅企业管理员可邀请
+            return JSONResponse(status_code=403, content={"reason": "enterprise-admin only"})
+        try:
+            org_inviter.invite(alias, email)
+        except Exception:
+            return JSONResponse(status_code=502, content={"reason": "invite failed"})
+        return {"ok": True}
 
     @app.middleware("http")
     async def _session(request: Request, call_next):

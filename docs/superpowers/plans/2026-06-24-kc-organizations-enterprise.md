@@ -194,15 +194,13 @@
 
 **Files:** Create BFF 邀请路由(`services/gateway/bff/orgs.py` 或并入 routes)+ KC admin 客户端;Test `tests/gateway/bff/test_orgs_invite.py`;e2e 用 mailpit。
 
-- [ ] **Step 1: 邀请端点(改红)**
-  `tests/gateway/bff/test_orgs_invite.py`:`POST /auth/orgs/invite`(body `{email}`)→ 仅 `enterprise-admin`(can() 或会话角色)可调;mock KC admin httpx,断言转发到 `organizations/{id}/members/invite-user`;非 admin → 403;无 CSRF → 403。
-- [ ] **Step 2: 实现邀请端点**
-  BFF 新路由:会话取 caller 的 org(alias)+ 角色 → enterprise-admin 才放行 → 用 KC admin client(service account 或 admin 凭据,env 注入,§5.2)调 `invite-user`。CSRF 同其它变更端点。
-- [ ] **Step 3: 注册自动归属 e2e(手动 runbook 钉死)**
-  起栈(含 mailpit)→ 浏览器 `localhost:8090` 注册 `x@acme.test`(已登记域)→ 登录后 `/auth/me` 的 enterprises 含 `ent-demo`,能上传/见本企业数据(不撞无企业 403);注册 `y@nodomain.test`(无匹配域)→ **显式提示"待分配/拒绝"**,不悬空。
-- [ ] **Step 4: 邀请 e2e**
-  enterprise-admin 调邀请 `newhire@x.com` → mailpit(`localhost:8025`)收到邀请邮件 → 接受 → 成 `ent-demo` 成员。
-- [ ] **Step 5: 跑绿 + Commit** `uv run pytest tests/gateway/bff/test_orgs_invite.py -q` → PASS;`git commit -am "feat(bff): 企业邀请端点(enterprise-admin)+ 注册按域归属 e2e"`
+- [x] **Step 1: 邀请端点(改红)**
+  `tests/gateway/bff/test_orgs_invite.py`:`POST /auth/orgs/invite`(body `{email}`)→ 仅 `enterprise-admin`(会话角色)可调;mock KC admin httpx,断言转发到 `organizations/{id}/members/invite-user`;非 admin → 403;无 CSRF → 403。
+- [x] **Step 2: 实现邀请端点**
+  BFF 新路由 `POST /auth/orgs/invite`(`services/gateway/bff/orgs.py` OrgInviter + middleware install_bff 路由):会话取 caller 的 org(alias)+ 角色 → enterprise-admin 才放行 → KC admin client(admin 凭据 env 注入,§5.2)调 `invite-user`。CSRF 由会话中间件强制(变更方法非豁免)。
+- [~] **Step 3: 注册自动归属 e2e(手动 runbook 钉死)** — 延后到 owner runbook §3(需 live KC + 浏览器,headless 不可跑;机制已就位:realm registrationAllowed + org domains acme.test + mailpit)。
+- [~] **Step 4: 邀请 e2e** — 延后到 owner runbook §4(需 live KC + mailpit;端点/inviter 已契约级测试锁定)。
+- [x] **Step 5: 跑绿 + Commit** `uv run pytest tests/gateway/bff/test_orgs_invite.py -q` → PASS。
 
 ---
 
