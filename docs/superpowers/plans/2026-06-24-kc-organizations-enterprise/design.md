@@ -74,7 +74,7 @@ KC realm 开自助注册 + **identity-first**:输入邮箱 → 按域匹配 org 
 企业管理员 → 经 BFF 调 KC org 邀请 API(`/admin/realms/{realm}/organizations/{id}/members/invite-*`)→ 受邀者接受 → 成 member。过期/撤销 → KC 拒。**对外契约**:BFF 新增"发起邀请/列邀请"端点(can() = enterprise-admin)。
 
 ### 4. 迁移/切换(US6,幂等脚本)
-KC admin REST,**每步带幂等判据**:① 建 org(**by alias/name 查重**,存在则取用)+ 设 domains(by domain 查重);② 现有用户以 **unmanaged** 加入(**by user→org 反查**,已是成员则跳);③ 配 `organization` mapper + 角色表达(by mapper name 查重);④ **移除现有 `/e-XXXX/g-YYYY/` 子组结构**(by group path,存在才删;v1 无访问组层);⑤ Gravitino/OSS 在**新 org-uuid** 下 bootstrap(**by metalake name 查重**;**prod 无数据 → 是纯建非迁,dev 重建**)。**半态处理**:脚本记录"已切换"标记(或纯靠各步查重)→ 重跑安全、不留半态;**校验步**:跑完断言"旧 `e-XXXX` 路径无残留引用、新 org-uuid 下可读"。huo(无企业)→ 邮箱域归属或邀请纳入。
+KC admin REST,**每步带幂等判据**:① 建 org(**by alias/name 查重**,存在则取用)+ 设 domains(by domain 查重);② 现有用户以 **unmanaged** 加入(**by user→org 反查**,已是成员则跳);③ 配 `organization` mapper + 角色表达(by mapper name 查重);④ **移除现有 `/e-XXXX/g-YYYY/` 子组结构**(by group path,存在才删;v1 无访问组层);⑤ Gravitino/OSS 在**新不透明 alias** 下 bootstrap(**by metalake name 查重**;**prod 无数据 → 是纯建非迁,dev 重建**)。**半态处理**:脚本记录"已切换"标记(或纯靠各步查重)→ 重跑安全、不留半态;**校验步**:跑完断言"旧 `e-XXXX` 路径无残留引用、新 alias 下可读"。huo(无企业)→ 邮箱域归属或邀请纳入。
 
 ## 授权 / 安全 / 红线
 - `can()`/owner 模型(ADR-024)**不改**;企业边界值来源换 org,判定不动。
@@ -100,7 +100,7 @@ KC admin REST,**每步带幂等判据**:① 建 org(**by alias/name 查重**,存
 |---|---|---|
 | 1 | 范围与出口 | **已决定**:企业=org(不透明 id)+ 注册/邀请;**v1 两级租户、无访问组层**(group→Cerbos);per-org SSO/org-groups/多企业 v-next(spec) |
 | 2 | 接口契约 | **已决定 + 部分待定**:下游 enterprise_id pattern 放宽(4 契约);`/v1/me/orgs` **删 group_id**、加 organization + 企业 display_name;BFF 邀请端点(can=ent-admin)。第一个消费者=账户页/邀请 UI(低保真原型作 plan 早期任务) |
-| 3 | 数据模型 | **已决定**:enterprise_id=org-uuid(§1.4)、metalake 沿用 `replace("-","_")`、OSS 前缀换值、**group_id 全面清理**(Resource/审计/契约/测试);org 成员 managed/unmanaged、邀请/域状态机;企业 display_name |
+| 3 | 数据模型 | **已决定**:enterprise_id=**org 不透明 alias**(§1.4;探针实测 token 只带 alias)、metalake=`alias.replace("-","_")`、OSS 前缀换值、**group_id 全面清理**(Resource/审计/契约/测试);org 成员 unmanaged(存量)、邀请/域状态机;企业 display_name |
 | 4 | 外部依赖事实 | **✅ 已实测([RESULTS](./spikes/RESULTS.md))**:claim=alias 数组(不含 id)、默认进 access token、多-org 坑复现 + `organization:*` 缓解、成员 UNMANAGED、org id=UUID(不用)、邀请端点存在(需 SMTP)、注册归属机制就位。**剩 2 项 e2e**(自助注册按域归属 + 邀请接受流,需 dev SMTP/浏览器)→ **plan 早期 e2e 任务**(机制已实测,仅完整流验证) |
 | 5 | 行为·边界·并发·威胁 | **已决定**:无匹配域显式处理、多-org 二义显式失败、伪造 claim 防线、迁移幂等、域冲突拒重复 |
 | 6 | NFR | **已决定**:dev-prod parity(realm 单源)、隔离不变、secrets env、审计 |
