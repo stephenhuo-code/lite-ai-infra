@@ -28,7 +28,8 @@ def _downstream():
 
 
 def _claims(_token):
-    return {"sub": "u-alice", "groups": ["/e-0001/g-0001/members"],
+    return {"sub": "u-alice", "organization": ["ent-demo"],
+            "realm_access": {"roles": ["member"]},
             "preferred_username": "alice", "email": "alice@example.com"}
 
 
@@ -126,6 +127,7 @@ def test_auth_me_returns_user_and_csrf(monkeypatch):
     body = r.json()
     assert body["user"] == "u-alice" and body["is_platform_admin"] is False and body["csrf"] == "csrf-xyz"
     assert body["username"] == "alice" and body["email"] == "alice@example.com"  # 真实展示信息
+    assert body["enterprises"] == ["ent-demo"]  # 企业归属来自 organization claim(alias)
 
 
 def test_auth_me_no_session_401(monkeypatch):

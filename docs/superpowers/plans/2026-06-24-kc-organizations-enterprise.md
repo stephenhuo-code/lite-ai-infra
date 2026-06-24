@@ -128,16 +128,16 @@
 
 **Files:** Modify `services/_scaffold/auth.py`、`services/gateway/bff/oidc.py`、`services/gateway/bff/middleware.py`;Test `tests/services/scaffold/test_auth.py`、`tests/gateway/bff/test_session_mw.py`、`tests/gateway/bff/test_oidc.py`。
 
-- [ ] **Step 1: 改红测试(scaffold auth)**
+- [x] **Step 1: 改红测试(scaffold auth)**
   `tests/services/scaffold/test_auth.py`:x-test-claims seam 带 `{"sub","organization":["ent-demo"],"realm_roles":["enterprise-admin"]}` → `context_from_request` 产出 `role_in("ent-demo")=="enterprise-admin"`;真 JWT 路径 mock `verify_and_decode` 返回含 `organization`/`realm_access.roles` → 同。
-- [ ] **Step 2: 实现 `context_from_request`**
+- [x] **Step 2: 实现 `context_from_request`**
   改 `services/_scaffold/auth.py`:解出 `organization = claims.get("organization", [])`(KC `multivalued=true` 为 list;若为 str 包成 list)、`realm_roles = claims.get("realm_access",{}).get("roles",[])`;`return parse_context(sub=claims["sub"], organization=organization, realm_roles=realm_roles)`。x-test-claims 同形态。`enterprise_of` 不变(0/多企业显式拒)。
-- [ ] **Step 3: BFF authorize 带 organization:\* scope**
+- [x] **Step 3: BFF authorize 带 organization:\* scope**
   `services/gateway/bff/oidc.py:authorize_url`:`"scope": "openid organization:*"`(规避多-org claim 消失,RESULTS F3)。token 交换沿用。
-- [ ] **Step 4: `/auth/me` 加 organization + 企业 display_name**
+- [x] **Step 4: `/auth/me` 加 organization + 企业 display_name**
   `services/gateway/bff/middleware.py:auth_me`:从 claims 取 `organization`,返回 `enterprises`(alias 列表)+ 若 token 带 org display_name attribute 则带出(否则 alias);沿用 F2 在 access token。
-- [ ] **Step 5: 跑绿** `uv run pytest tests/services/scaffold tests/gateway/bff -q` → PASS。
-- [ ] **Step 6: Commit** `git commit -am "feat(bff): context_from_request 透传 organization;authorize 带 organization:* scope;/auth/me 加企业"`
+- [x] **Step 5: 跑绿** `uv run pytest tests/services/scaffold tests/gateway/bff -q` → PASS。
+- [x] **Step 6: Commit** `git commit -am "feat(bff): context_from_request 透传 organization;authorize 带 organization:* scope;/auth/me 加企业"`
 
 ---
 
