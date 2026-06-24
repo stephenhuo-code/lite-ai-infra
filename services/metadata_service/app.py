@@ -141,8 +141,12 @@ def build_app(gravitino):
             props["num_samples"] = str(body.num_samples)
         if body.size_bytes is not None:
             props["size_bytes"] = str(body.size_bytes)
+        # scheme 二元性:校验/客户端用 s3://(object_store/lance),但 Gravitino fileset catalog
+        # 是 HCFS(Hadoop S3A),只认 s3a://(s3:// → 400 Unsupported scheme)。故只在写 Gravitino
+        # 前把头一次 s3:// 换成 s3a://;隔离校验(allowed 前缀)已在转换前用 s3:// 完成,不受影响。
+        gravitino_location = location.replace("s3://", "s3a://", 1)
         try:
-            fs = gravitino.create_fileset(ml, catalog, schema, body.name, location,
+            fs = gravitino.create_fileset(ml, catalog, schema, body.name, gravitino_location,
                                           comment=body.comment or "", properties=props)
         except GravitinoError as e:
             if _is_conflict(e):            # 已存在 → 409 Conflict(不逃逸成 500)

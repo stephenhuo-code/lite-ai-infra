@@ -38,6 +38,25 @@ def test_source_location_fetches_from_oss_then_converts_local(tmp_path):
     assert out["lance_uri"].endswith("processed/coco.lance")
     assert json.loads(sink.items[0][1])["decision"] == "allow"
 
+def test_source_location_s3a_scheme_parsed(tmp_path):
+    # catalog-driven 读:source_location 来自 Gravitino = s3a://(HCFS),须 scheme 无关剥离
+    sink = MemoryAuditSink(); calls = []
+    fetch_seen = {}
+    def fake_fetch(s3, *, bucket, prefix, dest_dir):
+        fetch_seen.update(bucket=bucket, prefix=prefix, dest_dir=dest_dir)
+        return 2
+    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    req = _req(tmp_path, source_location="s3a://lite-ai/e-0001/u-x/raw/coco/")
+    run_prepare(
+        ctx, req, AuditWriter(sink),
+        convert_fn=lambda tar, o: calls.append(("convert", tar)) or 5,
+        dj_fn=lambda r, l: calls.append(("dj", r)) or 0,
+        lance_fn=lambda c, uri, opts, ep: calls.append(("lance", uri)) or 5,
+        fetch_fn=fake_fetch,
+        build_s3_fn=lambda *a, **k: object())
+    assert fetch_seen["bucket"] == "lite-ai"
+    assert fetch_seen["prefix"] == "e-0001/u-x/raw/coco/"
+
 def test_tar_dir_path_unchanged_when_no_source_location(tmp_path):
     sink = MemoryAuditSink(); calls = []
     fetched = {"called": False}

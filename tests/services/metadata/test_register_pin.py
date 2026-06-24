@@ -24,7 +24,9 @@ def test_raw_register_pins_location(monkeypatch):
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
                json={"name": "coco", "kind": "raw"}, headers=_hdr())
     assert r.status_code == 201, r.text
-    assert g.last["location"] == "s3://lite-ai/e-0001/u-alice/raw/coco/"     # 服务端钉死(owner 路径段=user,ADR-024)
+    # 服务端钉死(owner 路径段=user,ADR-024);Gravitino 边界用 s3a://(HCFS),
+    # 校验仍用 s3://(object_store),scheme 二元性。
+    assert g.last["location"] == "s3a://lite-ai/e-0001/u-alice/raw/coco/"
     assert g.last["props"]["kind"] == "raw" and g.last["props"]["format"] == "webdataset"
     assert g.last["props"]["owner_user"] == "u-alice" and "owner_group" not in g.last["props"]
 
@@ -53,4 +55,6 @@ def test_processed_register_accepts_own_location(monkeypatch):
                      "location": "s3://lite-ai/e-0001/u-alice/processed/coco-clean.lance"},
                headers=_hdr())
     assert r.status_code == 201, r.text
+    # 校验用 s3://(caller 自己前缀),转换后 Gravitino location 记 s3a://
+    assert g.last["location"] == "s3a://lite-ai/e-0001/u-alice/processed/coco-clean.lance"
     assert g.last["props"]["kind"] == "processed" and g.last["props"]["derived_from"] == "coco"

@@ -91,8 +91,9 @@ def run_prepare(ctx: Context, req: PrepareRequest, audit: AuditWriter, *,
     src_dir = req.tar_dir
     if req.source_location:                        # catalog-driven:从 OSS 前缀取 tar 到本地
         src_dir = str(Path(req.work_dir) / "tars")
-        # source_location 形如 s3://bucket/eid/gid/raw/ds/ → 拆出 bucket 与 key 前缀
-        rest = req.source_location.removeprefix("s3://")
+        # source_location 形如 s3://… 或 s3a://…(catalog 存的是 s3a:// HCFS)→ scheme 无关
+        # 剥离再拆 bucket 与 key 前缀(boto3 用 bucket+prefix,不关心 scheme)。
+        rest = req.source_location.split("://", 1)[-1]
         b, _, key_prefix = rest.partition("/")
         s3 = build_s3_fn(req.oss_endpoint, req.access_key, req.secret_key, req.session_token, req.region)
         n_tar = fetch_fn(s3, bucket=b, prefix=key_prefix, dest_dir=src_dir)
