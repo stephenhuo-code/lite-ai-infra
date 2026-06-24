@@ -66,6 +66,21 @@ def test_raw_source_resolves_location_into_spec(tmp_path):
     assert meta.calls[0][2] == "cc3m-raw"              # 按 source_dataset 名解析
 
 
+def test_inbound_bearer_forwarded_to_metadata(tmp_path):
+    # 承重墙(spike e72951d):prepare 必须把**入站 Authorization 头**原样转发给
+    # metadata.get_dataset(供其 can() 解析源数据集);worker detached 无 bearer,
+    # 故解析只能在此 submit 边界完成。回归若丢了该头,catalog-driven 读会越权/失败。
+    meta = _FakeMeta({"name": "cc3m-raw", "kind": "raw",
+                      "location": "s3://b/e-0001/g-0001/raw/cc3m-raw/"})
+    c, runner = _client(meta)
+    hdr = _hdr("u-a", ["/e-0001/g-0001/members"])
+    hdr["authorization"] = "Bearer caller-token-xyz"
+    r = c.post("/v1/data/prepare", headers=hdr,
+               json={"dataset": "cc3m", "source_dataset": "cc3m-raw"})
+    assert r.status_code == 202
+    assert meta.calls[0][3] == "Bearer caller-token-xyz"   # 入站 bearer 原样转发,非空/非丢
+
+
 def test_processed_source_rejected_400(tmp_path):
     meta = _FakeMeta({"name": "cc3m", "kind": "processed",
                       "location": "s3://b/e-0001/g-0001/processed/cc3m/"})

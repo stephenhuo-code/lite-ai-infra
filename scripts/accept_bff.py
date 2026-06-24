@@ -52,10 +52,13 @@ def main() -> int:
         check(ok_me, "GET /auth/me 真验签返回当前用户(sub)", f"{me.status_code} user={me.json().get('user','')[:12]}…")
         jobs = c.get("/v1/data/jobs")
         check(jobs.status_code == 200, "GET /v1/data/jobs(会话→bearer 注入,经 gateway→下游 can())", f"{jobs.status_code}")
-        body = {"dataset": "accept-probe", "group_id": GROUP, "tar_dir": "/tmp/tars"}
+        # catalog-driven 契约(ADR-023):prepare body = {dataset, source_dataset}(去 group_id/tar_dir)。
+        body = {"dataset": "accept-probe", "source_dataset": "accept-probe-src"}
         check(c.post("/v1/data/prepare", json=body).status_code == 403, "CSRF 缺 X-CSRF-Token → 403")
-        check(c.post("/v1/data/prepare", json=body, headers={"X-CSRF-Token": CSRF}).status_code == 202,
-              "CSRF 带头 → 202(下游收会话注入 bearer)")
+        # 带 CSRF 头穿透 BFF 到下游:源未注册则 400(已穿透 + 注入 bearer + 下游解析后拒),
+        # 源已注册则 202。两者都证明 CSRF 通过 + 会话注入 bearer 生效(非 BFF 的 403)。
+        check(c.post("/v1/data/prepare", json=body, headers={"X-CSRF-Token": CSRF}).status_code in (202, 400),
+              "CSRF 带头 → 穿透下游(202 提交 / 400 源未注册;均证 bearer 注入)")
         lo = c.post("/auth/logout", headers={"X-CSRF-Token": CSRF})
         sc = lo.headers.get("set-cookie", "").lower()
         check("session=" in sc and "max-age=0" in sc, "登出清 session cookie(Max-Age=0)", f"{lo.status_code}")
