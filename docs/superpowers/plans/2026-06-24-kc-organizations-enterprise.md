@@ -208,13 +208,13 @@
 
 **Files:** Modify `docs/constitution.md`、`CLAUDE.md`、`scripts/ci_guards.sh`。
 
-- [ ] **Step 1: 改宪法本体(照 ADR-025 草案)**
+- [x] **Step 1: 改宪法本体(照 ADR-025 草案)**
   `docs/constitution.md`:§1.1 四级→两级(平台/企业/用户,删"用户组");§1.2 删 `GroupId`;§1.3 `enterprise_id=不透明 org alias`、删 `group_id=g-XXXX`;§1.4 删"私有资源还须 group_id";§1.6 私有资源按 owner(删 group_id 匹配,衔接 ADR-024);§2.1 `Organizations(企业,不透明 alias)+ 注册/邀请;删 Group 子组`;§2.2 `角色=member/enterprise-admin,经 realm role/org 属性表达,随 organization claim;不再 group 路径编码`;§5.1 审计 label 删 `group_id`;§8 grep 项删 `group_id`。
-- [ ] **Step 2: 改 CLAUDE.md 引言指针**
+- [x] **Step 2: 改 CLAUDE.md 引言指针**
   "多企业租户与标识"指针更新为:企业=Organization 不透明 alias、两级、group→Cerbos。
-- [ ] **Step 3: ci_guards 去 group_id**
+- [x] **Step 3: ci_guards 去 group_id**
   `scripts/ci_guards.sh`:删/改 `group_id` 散落比较 grep 项。Run `bash scripts/ci_guards.sh` → 绿。
-- [ ] **Step 4: Commit** `git commit -am "docs(constitution): 同步 ADR-025(企业=org 不透明 alias、两级、删 group 维度)+ CLAUDE.md + ci_guards"`
+- [x] **Step 4: Commit** `git commit -am "docs(constitution): 同步 ADR-025(企业=org 不透明 alias、两级、删 group 维度)+ CLAUDE.md + ci_guards"`
 
 ---
 
