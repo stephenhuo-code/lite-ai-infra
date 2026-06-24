@@ -4,6 +4,13 @@
 - 状态:已与 owner 确认(brainstorming 逐节通过)
 - 相关:design spec §5.3 Sprint 1 / §8.8;ADR-014(S0 出口① 移交 S1 门禁);constitution 全文;S0 交付(`2026-06-10-s0-dod-status.md`)
 
+> **as-built 修订(2026-06-24,本文部分内容已被后续 ADR 取代,以 ADR 为准)**:
+> 本文写于 ADR-016/023/024 之前,其中**租户映射与路径**已演进,下文出现的旧写法按此更新理解:
+> - **Gravitino 映射**:不是 schema `e_0001_g_0001`,而是 **metalake=`e_XXXX`、catalog=`data`、schema=`datasets`**,每个 fileset = 一个一等数据集([ADR-016](../../adr/ADR-016-gravitino-tenancy-mapping.md))。
+> - **归属与 OSS 路径**:不再按 group。归属 = **owner(上传用户 sub)**,路径 **`e-XXXX/{user}/{raw,processed}/…`**(下文 `e-0001/g-0001/…` 已废);group 退为访问/审计维度,留 Cerbos v2([ADR-024](../../adr/ADR-024-owner-based-dataset-ownership.md))。
+> - **catalog-driven 读**:管线输入 = 按数据集名查 catalog 拿位置(非约定猜路径);Gravitino location 记 `s3a://`、lance 读写用 `s3://`([ADR-023](../../adr/ADR-023-catalog-driven-datasets.md))。
+> - **现状**:数据管线 + 元数据 + 前端控制台 + catalog-driven + owner 模型 **已实现并合并 main(2026-06-24)**,全链路 live 验收通过。
+
 ---
 
 ## 0. 修订前提(与原 spec S1 的差异及依据)

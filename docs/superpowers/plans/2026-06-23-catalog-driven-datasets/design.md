@@ -2,6 +2,8 @@
 
 > HOW。需求见 [spec.md](./spec.md)。地基决策落 **[ADR-023](../../../adr/ADR-023-catalog-driven-datasets.md)(Accepted)**(catalog-driven 数据集 + 血缘;扩展 [ADR-016](../../../adr/ADR-016-gravitino-tenancy-mapping.md) 的 fileset 语义;执行并改口径 [ADR-018](../../../adr/ADR-018-data-pipeline-job-scheduling.md) 的 S2a)。**引用既有家、不复制**。
 
+> **as-built(2026-06-24,已实现并合并 main)**:① 归属改 **owner 模型([ADR-024](../../../adr/ADR-024-owner-based-dataset-ownership.md))**——归属真相源 = `owner_user`(=上传用户 sub),**`owner_group` 不再参与归属/授权**(group 退为访问/审计维度,留 Cerbos v2);OSS 路径 `e-XXXX/{user}/{raw,processed}/…`(不再按 group)。② **scheme 二元性**:lance 读写 `s3://`、Gravitino fileset location 记 `s3a://`(HCFS),注册端点写 Gravitino 前转 scheme。本文下方旧"owner_group"表述以此为准更新。
+
 ## 架构与隔离
 
 ### 真相源:catalog(Gravitino fileset)
@@ -10,7 +12,7 @@
 - `format`:`webdataset` | `lance`(存储格式)
 - `derived_from`:来源数据集名(血缘;processed 必填,raw 无)
 
-既有 properties 保留:`owner_group`、`owner_user`、`scope`、`location`(fileset storageLocation)。
+既有 properties 保留:`owner_user`(**归属真相源**,=上传用户 sub)、`scope`、`location`(fileset storageLocation,记 `s3a://`)。`owner_group` 保留为审计属性、**不参与归属/授权**(group 访问 → Cerbos v2,ADR-024)。
 
 ### 三条关键路径
 ```
@@ -37,7 +39,8 @@ fileset(kind=raw)   (管线不再猜路径)                    fileset(kind=proc
 | `kind` | raw / processed | 必填;管线输入须 `kind=raw`(v1) |
 | `format` | webdataset / lance | 必填;raw→webdataset,processed→lance |
 | `derived_from` | 来源数据集名 | processed 必填,raw 不设 |
-| `owner_group`/`owner_user`/`scope`/`location` | 同 ADR-016 | location 服务端钉死 |
+| `owner_user`/`scope`/`location` | owner=上传用户(ADR-024)| location 服务端钉死,记 `s3a://`;`owner_user` 为归属真相源 |
+| `owner_group` | 审计属性 | 保留但**不参与归属/授权**(group 访问→Cerbos v2) |
 
 ### 对外契约(`contracts/openapi/metadata.yaml` + `data-pipeline.yaml`,契约先行 §3.0.2)
 - `RegisterDataset` 增 `kind`(必)、`format`、`derived_from`(processed 必);**`location` 改为服务端可省/校验**(raw:省略→服务端按身份算;processed:给 Lance URI,服务端校验前缀)。
