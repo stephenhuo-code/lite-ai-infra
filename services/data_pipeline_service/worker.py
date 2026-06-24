@@ -29,7 +29,7 @@ def run_job(job_dir: str) -> None:
     # owner 模型(ADR-024):重建 Context 用 sub(=owner)+ 企业级 membership(无组);
     # can() 复检按企业隔离 + owner==user(runner 把 resource.owner 钉成 ctx.user)。
     ctx = Context(user=spec.sub, memberships=[
-        Membership(EnterpriseId(spec.enterprise_id), None, spec.role)])
+        Membership(EnterpriseId(spec.enterprise_id), spec.role)])
     req = PrepareRequest(
         tar_dir="", source_location=spec.source_location,    # catalog-driven:从 OSS location 取 tar(tar_dir 旧本地路径已废)
         work_dir=str(store.job_dir(job_id) / "work"),

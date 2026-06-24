@@ -116,7 +116,7 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
         ctx = parse_context(sub=c["sub"], organization=organization, realm_roles=realm_roles)
         # 真实展示信息(来自 Keycloak token claims):用户名优先 preferred_username,回退 name;邮箱可空。
         # user(sub,§1.4 不透明)仍返回供前端内部使用;界面展示用 username/email。
-        # enterprises:企业归属(org alias);display_name 不在 token(F1),由 /v1/me/orgs 解析。
+        # enterprises:企业归属(org alias);企业显示名不在 token(F1),由 /v1/me/orgs 解析。
         return {"user": ctx.user, "is_platform_admin": ctx.is_platform_admin, "csrf": sd.csrf,
                 "username": c.get("preferred_username") or c.get("name") or ctx.user,
                 "email": c.get("email"),

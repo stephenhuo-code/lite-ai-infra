@@ -13,7 +13,7 @@ class _G:
 
 
 def _hdr():
-    return {"x-test-claims": '{"sub":"u-alice","groups":["/e-0001/g-0001/members"]}'}
+    return {"x-test-claims": '{"sub":"u-alice","organization":["e-0001"],"realm_roles":[]}'}
 
 
 def test_raw_register_pins_location(monkeypatch):

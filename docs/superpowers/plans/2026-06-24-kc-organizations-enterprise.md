@@ -149,15 +149,15 @@
   - `tests/services/data_pipeline/test_app.py`/`test_resolve.py`:审计断言去 `group_id`;`role_in(EnterpriseId(ent))` 单参。
   - `tests/services/identity/test_me_orgs.py`(或现有):`/v1/me/orgs` 返回项**无 `group_id`**、含 `enterprise_id`/`role`。
   - authz `tests/authz/test_can.py`:`Resource(...)` 构造去 `group_id`。
-- [ ] **Step 2: 实现清理**
+- [x] **Step 2: 实现清理**
   - `libs/authz/types.py`:`Resource` 删 `group_id` 字段。
   - `libs/audit/oss_audit.py`:`AuditEvent` 删 `group_id` 字段。
   - `services/data_pipeline_service/app.py`:**删 `_caller_group`**;`_audit` 去 `group_id=` 实参;所有 `role_in(EnterpriseId(ent))` 保持单参(已是);所有 `Resource(... group_id=None ...)` 去该参。
   - `services/identity_org_service/app.py:me_orgs`:投影去 `group_id`。
   - `pipelines/data_prep/runner.py`:`role_in` 调用去 gid 实参(若有)。
-- [ ] **Step 3: 跑绿** `uv run pytest -q` 全套(期望全绿;若个别测试仍引用 group_id 一并改)。
-- [ ] **Step 4: lint** `uv run lint-imports`(layering KEPT)。
-- [ ] **Step 5: Commit** `git commit -am "refactor(authz/audit): 全面清理 group_id(Resource/AuditEvent/_caller_group/me_orgs)"`
+- [x] **Step 3: 跑绿** `uv run pytest -q` 全套(期望全绿;若个别测试仍引用 group_id 一并改)。
+- [x] **Step 4: lint** `uv run lint-imports`(layering KEPT)。
+- [x] **Step 5: Commit** `git commit -am "refactor(authz/audit): 全面清理 group_id(Resource/AuditEvent/_caller_group/me_orgs)"`
 
 ---
 

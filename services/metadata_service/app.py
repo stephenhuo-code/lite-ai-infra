@@ -32,7 +32,7 @@ def _owner_user(fs: dict) -> str | None:
 def _resource(ent: str, fs: dict) -> Resource:
     p = fs.get("properties", {})
     return Resource(kind="dataset", enterprise_id=EnterpriseId(ent),
-                    group_id=None, scope=p.get("scope", "private"),
+                    scope=p.get("scope", "private"),
                     owner=p.get("owner_user"))
 
 
@@ -112,7 +112,7 @@ def build_app(gravitino):
         ml = _metalake(ent)
         scope = _scope_value(body.scope)
         res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent),
-                       group_id=None, scope=scope, owner=ctx.user)
+                       scope=scope, owner=ctx.user)
         d = can(ctx, "dataset.register", res)
         if not d.allow:
             return JSONResponse(status_code=403, content={"reason": d.reason})

@@ -124,11 +124,11 @@ def _client(tmp_path, s3, monkeypatch):
     runner = None   # 上传端点不依赖 runner
     return TestClient(build_app(runner=runner, audit=AuditWriter(sink), uploader=up)), up, sink
 
-def _hdr(sub, groups): return {"x-test-claims": json.dumps({"sub": sub, "groups": groups})}
+def _hdr(sub, organization, realm_roles=()): return {"x-test-claims": json.dumps({"sub": sub, "organization": list(organization), "realm_roles": list(realm_roles)})}
 
 def test_request_upload_returns_grant(tmp_path, monkeypatch):
     c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)
-    r = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+    r = c.post("/v1/data/raw", headers=_hdr("u-a", ["e-0001"]),
                json={"dataset": "cc3m", "filename": "part-0.tar"})
     assert r.status_code == 200
     g = r.json()
@@ -136,7 +136,7 @@ def test_request_upload_returns_grant(tmp_path, monkeypatch):
 
 def test_request_upload_allow_audit_carries_key_ttl_id(tmp_path, monkeypatch):
     c, up, sink = _client(tmp_path, FakeS3(), monkeypatch)
-    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["e-0001"]),
                json={"dataset": "cc3m", "filename": "part-0.tar"}).json()
     ev = json.loads(sink.items[-1][1])                          # presign allow 审计
     assert ev["decision"] == "allow"
@@ -147,7 +147,7 @@ def test_request_upload_any_enterprise_member_owns_own_upload(tmp_path, monkeypa
     # owner 模型(ADR-024):上传归上传用户(owner=self),group 不再设门。
     # 旧"跨组上传 403"已不成立——同企业任一成员都可为自己上传(路径段=自己的 user)。
     c, up, sink = _client(tmp_path, FakeS3(), monkeypatch)
-    r = c.post("/v1/data/raw", headers=_hdr("u-x", ["/e-0001/g-0002/members"]),
+    r = c.post("/v1/data/raw", headers=_hdr("u-x", ["e-0001"]),
                json={"dataset": "cc3m", "filename": "part-0.tar"})
     assert r.status_code == 200
     g = r.json()
@@ -156,46 +156,46 @@ def test_request_upload_any_enterprise_member_owns_own_upload(tmp_path, monkeypa
 
 def test_request_upload_bad_filename_400(tmp_path, monkeypatch):
     c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)
-    r = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+    r = c.post("/v1/data/raw", headers=_hdr("u-a", ["e-0001"]),
                json={"dataset": "cc3m", "filename": "../escape"})
     assert r.status_code == 400 and up.list_raw() == []
 
 def test_complete_only_by_id_marks_ready(tmp_path, monkeypatch):
     s3 = FakeS3(); c, up, _ = _client(tmp_path, s3, monkeypatch)
-    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["e-0001"]),
                json={"dataset": "cc3m", "filename": "part-0.tar"}).json()
     s3.existing[g["oss_key"]] = 4096                              # 模拟已直传
-    r = c.post(f"/v1/data/raw/{g['raw_id']}/complete", headers=_hdr("u-a", ["/e-0001/g-0001/members"]), json={})
+    r = c.post(f"/v1/data/raw/{g['raw_id']}/complete", headers=_hdr("u-a", ["e-0001"]), json={})
     assert r.status_code == 200 and r.json()["status"] == "ready" and r.json()["size"] == 4096
 
 def test_complete_non_owner_403(tmp_path, monkeypatch):
     # owner 模型(ADR-024):另一用户(非 owner)拿到 raw_id 也不能 complete 别人的上传 → 403。
     s3 = FakeS3(); c, up, _ = _client(tmp_path, s3, monkeypatch)
-    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["e-0001"]),
                json={"dataset": "cc3m", "filename": "part-0.tar"}).json()
     s3.existing[g["oss_key"]] = 4096
     r = c.post(f"/v1/data/raw/{g['raw_id']}/complete",        # u-b(非 owner)同企业拿到 id 也不行
-               headers=_hdr("u-b", ["/e-0001/g-0002/members"]), json={})
+               headers=_hdr("u-b", ["e-0001"]), json={})
     assert r.status_code == 403
 
 def test_complete_object_missing_409(tmp_path, monkeypatch):
     c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)        # 对象从未上传
-    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+    g = c.post("/v1/data/raw", headers=_hdr("u-a", ["e-0001"]),
                json={"dataset": "cc3m", "filename": "part-0.tar"}).json()
-    r = c.post(f"/v1/data/raw/{g['raw_id']}/complete", headers=_hdr("u-a", ["/e-0001/g-0001/members"]), json={})
+    r = c.post(f"/v1/data/raw/{g['raw_id']}/complete", headers=_hdr("u-a", ["e-0001"]), json={})
     assert r.status_code == 409
 
 def test_complete_unknown_id_404(tmp_path, monkeypatch):
     c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)
-    r = c.post("/v1/data/raw/nope/complete", headers=_hdr("u-a", ["/e-0001/g-0001/members"]), json={})
+    r = c.post("/v1/data/raw/nope/complete", headers=_hdr("u-a", ["e-0001"]), json={})
     assert r.status_code == 404
 
 def test_list_raw_can_filter_non_owner_hidden(tmp_path, monkeypatch):
     # owner 模型(ADR-024):列表只见自己 owner 的;他人的(同企业不同 owner)经 can() 过滤掉。
     c, up, _ = _client(tmp_path, FakeS3(), monkeypatch)
-    c.post("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"]),
+    c.post("/v1/data/raw", headers=_hdr("u-a", ["e-0001"]),
            json={"dataset": "cc3m", "filename": "a.tar"})
-    rows = c.get("/v1/data/raw", headers=_hdr("u-b", ["/e-0001/g-0002/members"])).json()
+    rows = c.get("/v1/data/raw", headers=_hdr("u-b", ["e-0001"])).json()
     assert rows["raw"] == [] and rows["total"] == 0             # 非 owner 不可见
-    own = c.get("/v1/data/raw", headers=_hdr("u-a", ["/e-0001/g-0001/members"])).json()
+    own = c.get("/v1/data/raw", headers=_hdr("u-a", ["e-0001"])).json()
     assert own["total"] == 1 and own["raw"][0]["owner_user"] == "u-a"

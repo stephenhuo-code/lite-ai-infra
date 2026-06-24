@@ -64,7 +64,7 @@ def test_real_gravitino_cross_group_isolation(gravitino_url, minio_s3, monkeypat
 
     client = TestClient(build_app(gravitino=g))
     base = "/v1/catalogs/data/schemas/datasets/datasets"
-    alice = {"x-test-claims": json.dumps({"sub": "u-alice", "groups": ["/e-0001/g-0001/members"]})}
+    alice = {"x-test-claims": json.dumps({"sub": "u-alice", "organization":["e-0001"],"realm_roles":[]})}
 
     listed = [d["name"] for d in client.get(base, headers=alice).json()["datasets"]]
     assert n not in listed  # can() 过滤掉跨组

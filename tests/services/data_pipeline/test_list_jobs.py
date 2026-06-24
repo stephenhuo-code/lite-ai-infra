@@ -34,8 +34,8 @@ def _client(tmp_path):
     return TestClient(build_app(runner=runner, audit=AuditWriter(MemSink()), metadata=_FakeMeta())), store
 
 
-def _hdr(sub, gid):
-    return {"x-test-claims": json.dumps({"sub": sub, "groups": [f"/e-0001/{gid}/members"]})}
+def _hdr(sub, gid="g-0001"):
+    return {"x-test-claims": json.dumps({"sub": sub, "organization": ["e-0001"], "realm_roles": []})}
 
 
 def _submit(c, sub, gid):

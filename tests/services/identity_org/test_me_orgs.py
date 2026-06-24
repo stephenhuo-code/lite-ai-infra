@@ -16,16 +16,18 @@ def _client():
     return TestClient(app)
 
 
-def _hdr(sub, groups):
-    return {"x-test-claims": json.dumps({"sub": sub, "groups": groups})}
+def _hdr(sub, organization, realm_roles=()):
+    return {"x-test-claims": json.dumps(
+        {"sub": sub, "organization": list(organization), "realm_roles": list(realm_roles)})}
 
 
 def test_me_orgs_contract_shape():
-    r = _client().get("/v1/me/orgs", headers=_hdr("u-alice", ["/e-0001/g-0001/members"]))
+    r = _client().get("/v1/me/orgs", headers=_hdr("u-alice", ["e-0001"]))
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {"user", "is_platform_admin", "memberships"}
-    assert body["memberships"][0] == {"enterprise_id": "e-0001", "group_id": "g-0001", "role": "member"}
+    # 身份降两级:投影只含 enterprise_id/role(无 group_id)
+    assert body["memberships"][0] == {"enterprise_id": "e-0001", "role": "member"}
 
 
 def test_me_orgs_unauthenticated_401(monkeypatch):

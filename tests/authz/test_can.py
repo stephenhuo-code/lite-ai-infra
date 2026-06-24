@@ -1,19 +1,20 @@
 # tests/authz/test_can.py
-# owner 模型(ADR-024):企业硬隔离 + owner-only;group 不参与 can() 决策。
+# owner 模型(ADR-024)+ 身份降两级(ADR-025):企业硬隔离 + owner-only;无用户组层。
 import pytest
 from libs.identity.context import parse_context
 from libs.authz.types import Resource
 from libs.authz.engine import can
 
-def ctx(groups, sub="u-alice"):
-    return parse_context(sub=sub, groups=groups)
+def ctx(spec, sub="u-alice"):
+    organization, realm_roles = spec
+    return parse_context(sub=sub, organization=list(organization), realm_roles=list(realm_roles))
 
-# alice/bob 同企业 e-0001 同组 g-0001(组在 owner 模型下不再影响 can 决策)
-ALICE  = ["/e-0001/g-0001/members"]
-EADMIN = ["/e-0001/admins"]          # 企业管理员(enterprise-admin)
-PADM   = ["/platform-admins"]
-JOB = lambda **k: Resource(kind="job", enterprise_id="e-0001", group_id="g-0001", **k)
-DATASET = lambda **k: Resource(kind="dataset", enterprise_id="e-0001", group_id="g-0001", **k)
+# 企业归属来自 organization claim(org alias);角色经 realm role(member / enterprise-admin)。
+ALICE  = (["e-0001"], [])                    # 普通成员
+EADMIN = (["e-0001"], ["enterprise-admin"])  # 企业管理员
+PADM   = ([], ["platform-admin"])            # 平台管理员(无企业)
+JOB = lambda **k: Resource(kind="job", enterprise_id="e-0001", **k)
+DATASET = lambda **k: Resource(kind="dataset", enterprise_id="e-0001", **k)
 
 @pytest.mark.parametrize("name,context,action,resource,expect_allow,reason_sub", [
   # 企业硬隔离:alice(e-0001) 访 e-0002 资源 → deny

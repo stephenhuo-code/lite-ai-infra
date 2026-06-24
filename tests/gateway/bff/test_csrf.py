@@ -37,7 +37,7 @@ def _app(monkeypatch):
     app = build_gateway(routes={
         "/v1/data": ("http://ds", lambda: httpx.AsyncClient(transport=transport, base_url="http://ds")),
     })
-    install_bff(app, refresh_fn=lambda rt: {}, claims_fn=lambda t: {"sub": "u-alice", "groups": []})
+    install_bff(app, refresh_fn=lambda rt: {}, claims_fn=lambda t: {"sub": "u-alice", "organization": [], "realm_roles": []})
     return app
 
 

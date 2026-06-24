@@ -11,7 +11,7 @@ class MemoryAuditSink:
 def _req(tmp_path, **kw):
     d = tmp_path / "tars"; d.mkdir(exist_ok=True)
     return PrepareRequest(tar_dir=str(d), work_dir=str(tmp_path / "work"),
-                          bucket="bkt", enterprise_id="e-0001", group_id="g-0001",
+                          bucket="bkt", enterprise_id="e-0001",
                           dataset="cc3m", np=3, oss_endpoint="http://localhost:9000",
                           access_key="ak", secret_key="sk", **kw)
 
@@ -23,7 +23,7 @@ def _ok_fakes(calls):
 
 def test_denied_caller_gets_no_side_effects(tmp_path):
     sink = MemoryAuditSink(); calls = []
-    ctx = parse_context("u-x", ["/e-0099/g-0001/members"])       # 跨企业
+    ctx = parse_context("u-x", ["e-0099"], [])       # 跨企业
     with pytest.raises(PermissionError):
         run_prepare(ctx, _req(tmp_path), AuditWriter(sink), **_ok_fakes(calls))
     assert calls == []                                            # 无任何副作用
@@ -32,7 +32,7 @@ def test_denied_caller_gets_no_side_effects(tmp_path):
 
 def test_happy_path_runs_stages_and_audits(tmp_path):
     sink = MemoryAuditSink(); calls = []
-    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    ctx = parse_context("u-alice", ["e-0001"], [])
     out = run_prepare(ctx, _req(tmp_path), AuditWriter(sink), **_ok_fakes(calls))
     assert [c[0] for c in calls] == ["convert", "dj", "lance"]
     assert out["rows_written"] == 5
@@ -41,7 +41,7 @@ def test_happy_path_runs_stages_and_audits(tmp_path):
 
 def test_dj_failure_audited_and_raises(tmp_path):
     sink = MemoryAuditSink(); calls = []
-    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    ctx = parse_context("u-alice", ["e-0001"], [])
     fakes = _ok_fakes(calls); fakes["dj_fn"] = lambda r, l: 1     # 非零退出
     with pytest.raises(RuntimeError):
         run_prepare(ctx, _req(tmp_path), AuditWriter(sink), **fakes)
@@ -53,7 +53,7 @@ def test_process_override_passed_to_recipe(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "build_recipe",
                         lambda inp, out, np, process=None: seen.update(process=process) or "x: 1")
     sink = MemoryAuditSink(); calls = []
-    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    ctx = parse_context("u-alice", ["e-0001"], [])
     req = _req(tmp_path, process=[{"text_length_filter": {"min_len": 9}}])
     run_prepare(ctx, req, AuditWriter(sink), **_ok_fakes(calls))
     assert seen["process"] == [{"text_length_filter": {"min_len": 9}}]
