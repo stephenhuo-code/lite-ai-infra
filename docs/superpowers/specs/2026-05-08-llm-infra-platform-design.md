@@ -4,7 +4,7 @@
 > **作者**：平台团队(原按 3 人编制;**2026-06 起实际为一人 + Claude**,见文末修订记录)
 > **日期**：2026-05-08(修订 2026-06-12)
 > **目标上线**：v1 原 ≈2026-07-11(**将后移**,S2 计划时走 ADR 重排,宪法 §7.4);GA 原 ≈2026-11-28
-> **执行现状**:S0 已关闭(ADR-014 carry-over);S1 进行中,出口①③ 已验收 —— 见 §5.3 各 sprint 内的修订块与文末"修订记录(2026-06-12)"
+> **执行现状**:S0 已关闭(ADR-014 carry-over);S1——出口①②③ 已验收,**出口⑤ 已关闭**(2026-06-24,真 GUI 经 BFF 全链路调通;Plan 8 前端 + catalog-driven + owner 模型合并 main)—— 见 §5.3 各 sprint 修订块、S1 design §9.3 计划序与文末"修订记录"
 
 > **as-built 修订(2026-06-24,以 ADR 为准)**:本文为全平台**愿景**(含 Workspace/配额/Cerbos/CLI 等尚未建部分),下述**已实现并合并 main**的部分,口径已被后续 ADR 收敛:
 > - **数据集归属 = owner(上传用户 sub),非 group**([ADR-024](../../adr/ADR-024-owner-based-dataset-ownership.md),amend ADR-010/011/016)。**数据集** OSS 路径 = `e-XXXX/{user}/{raw,processed}/…`(不再 `e-0001/g-0001/…`)。**group 退为访问/审计维度**(跨用户分享/group 访问 → Cerbos v2);企业仍硬隔离。
@@ -2066,7 +2066,7 @@ $ make prod-deploy TAG=v1.2.3   # 必须有 staging 通过的 commit
 | 团队 3 人 → 一人 + Claude;各 sprint 单线程重排 | S1 设计 spec §0 | 生效 |
 | S0 关闭(出口②③④ PASS;出口① carry-over → S1 门禁) | **ADR-014**(Accepted 06-11)+ `plans/2026-06-10-s0-dod-status.md` | 已关闭 |
 | S0 出口① 门禁关闭:数据 Spike 1/2 **GO(1GB 档)**;100GB+ 规模验证移 S2a | ADR-014 门禁关闭记录(06-12) | 已关闭 |
-| S1 重排:14 工作日(06-12→≈07-01)、1GB 档、服务化纳入、Dev Workspace 降级 | `specs/2026-06-11-s1-data-pipeline-design.md` | 进行中(D1 出口①③ 已验收) |
+| S1 重排:14 工作日(06-12→≈07-01)、1GB 档、服务化纳入、Dev Workspace 降级 | `specs/2026-06-11-s1-data-pipeline-design.md` | 出口①②③⑤ 已验收/关闭(2026-06-24);Plan 9 Dev Workspace 降级待做 |
 | 数据 Spike 工程结论:OSS 拒 path-style / boto3≥1.36 checksum / Lance 需 commit_lock+bucket-in-endpoint / 内网 endpoint 必须 | `spikes/*/RESULTS-aliyun.md`(已固化为库代码+回归测试) | 生效 |
 | Keycloak claims:多组全路径 ✓、变更对新 token ~100ms、stale 窗口=accessTokenLifespan(300s) | ADR-010 附录 C(本地+阿里云双验) | 生效 |
 | Cerbos seam:同 can() 签名零改 handler,v2 切换无架构风险 | ADR-011 附录 | 生效 |

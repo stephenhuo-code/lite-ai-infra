@@ -166,7 +166,7 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 | **Plan 5:data-pipeline-service** | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id + 查状态)+ 集成 | 服务化 | ✅ 已合并(异步作业薄壳,ADR-018;真 DJ 端到端 + dev/prod parity) |
 | **Plan 6:BFF 后端** | gateway OIDC 登录/会话/登出(无状态加密 cookie)+ CSRF + `GET /v1/data/jobs`(#1) | **出口⑤**(GUI 前置) | ✅ **已合并**(140u+11i 全绿 + 真 KC code+PKCE 全链路 + 一键验收 7/7 + 隔离评审 0 Crit;C-1 命门坐实) |
 | **Plan 7:数据上传后端**(presigned 直传 OSS) | 请求上传/complete/列原始数据三端点 + RawDataset 状态机 + can()+审计 + GC;契约冻结供前端消费(原型 #11) | **出口⑤** 前置 | ✅ **已合并**(2026-06-21;ADR-020;171u+2i 全绿 + lint KEPT + 隔离复审 0 Crit + 手动 runbook **真阿里云 OSS R1–R10 10/10**;含 prod parity virtual-hosted/ETag 复验) |
-| **Plan 8:React/Vite 前端**(原 Plan 7) | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户 + **数据集上传页**,消费 Plan 7 契约),调 BFF | **出口⑤**(关闭) | ⏳ spec/design 就绪、DoR 待 Plan 7 契约冻结(已满足);浏览器验 CORS(ADR-020 唯一剩项) |
+| **Plan 8:React/Vite 前端**(原 Plan 7) | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户 + **数据集上传页**,消费 Plan 7 契约),调 BFF | **出口⑤**(关闭) | ✅ **已完成并合并 main**(2026-06-24;实现为 `s1-plan8b-frontend`,7 任务 + 真浏览器 e2e;**出口⑤ 关闭**——真 GUI 经 BFF 全链路调通)。在其上**续做并一并合并**:catalog-driven 数据集(ADR-023)+ owner 模型(ADR-024)+ 注册/血缘 UI + 列表轮询 + 数据集去重 + 账户真实信息;全链路 live 验收通过 + 独立 4 维 review 闭合 |
 | **Plan 9:Dev Workspace docker**(原 Plan 8) | code-server 半天版 | ④降级 | ⏳ |
 | ~~Plan 6(原):SDK/CLI `laictl`~~ | ⏸ 推迟,**文档已删**(后续 ops 工具,日后重写;commit 9a70c18 留底) | — | ADR-019 |
 
