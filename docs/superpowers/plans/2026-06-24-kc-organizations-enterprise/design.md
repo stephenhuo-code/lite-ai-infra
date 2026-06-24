@@ -35,24 +35,26 @@ KC Organization  ──(成员关系 + domains + 邀请)──►  企业(enterp
 
 ## 数据模型 / 标识(不变量)
 
-### enterprise_id 改为不透明(owner 拍:全新不透明 org ID)
+### enterprise_id = org **alias**(设为不透明值)— 据 [探针 RESULTS](./spikes/RESULTS.md) F1
+> 探针实测:access token 的 `organization` claim **只带 org alias、不带 org id(UUID)**。故 **token 唯一可靠的企业标识 = alias**;owner 要"不透明"→ **把 alias 设为不透明值**(如 `ent-<随机>`,非人工 `e-XXXX`),即满足§1.4 又被 token 携带。**不用 KC org UUID**(不进 token)。
+
 | 项 | 现状 | 改为 | 不变量 |
 |---|---|---|---|
-| enterprise_id 值 | 人工编码 `e-XXXX` | **KC org `id`(不透明 UUID)** | §1.4 不透明;全局唯一;**界面绝不渲染** |
-| Gravitino metalake | `e_XXXX`(= `eid.replace("-","_")`)| **沿用 `eid.replace("-","_")`**(owner 决:不加 `org_` 前缀)。org id 若标准 UUID(`[0-9a-f-]`)则 replace 后已合法 `[a-z0-9_]` | 确定性单向映射(非可逆);**待探针确认 org id 真字符集**——若含其他字符再补 sanitization |
-| OSS 路径前缀 | `e-XXXX/{user}/…` | **`<org-uuid>/{user}/…`** | 仍 owner 路径(ADR-024),仅企业段换值 |
-| 契约 pattern | `^e-[0-9a-z]+$`(identity-org/metadata/data-pipeline 共 4 处)| **放宽为不透明 id pattern**(如 `^[0-9a-z-]{8,}$`,容 UUID)| `/v1/me/orgs` 的 `group_id`(`^g-` pattern)**删除**(无访问组层)|
-| fileset `enterprise_id` 属性 / 审计字段 | `e-XXXX` | org-uuid | 一致切换,无残留旧编码 |
+| enterprise_id 值 | 人工编码 `e-XXXX` | **org `alias`(设为不透明值,如 `ent-<随机>`)** | §1.4 不透明;realm 内唯一;**界面绝不渲染(用 display_name)** |
+| Gravitino metalake | `e_XXXX`(= `eid.replace("-","_")`)| **`alias.replace("-","_")`**(owner 决:不加前缀)| 确定性单向映射;alias 字符集自控(取 `[a-z0-9-]`)→ replace 后合法 `[a-z0-9_]` |
+| OSS 路径前缀 | `e-XXXX/{user}/…` | **`<alias>/{user}/…`** | 仍 owner 路径(ADR-024),仅企业段换不透明 alias |
+| 契约 pattern | `^e-[0-9a-z]+$`(identity-org/metadata/data-pipeline 共 4 处)| **放宽容不透明 alias**(如 `^[a-z][a-z0-9-]{3,}$`)| `/v1/me/orgs` 的 `group_id`(`^g-` pattern)**删除**(无访问组层)|
+| fileset `enterprise_id` 属性 / 审计字段 | `e-XXXX` | 不透明 alias | 一致切换,无残留旧编码 |
 
-> **承重墙**:enterprise_id 不透明化 = 跨契约 + Gravitino + OSS + 审计的一致改值。**v1 prod 无数据 → 清晰切换**(改 pattern + parse_context 产出 org-uuid + 重新 bootstrap);**dev 数据(coco/coco-1)可重建**,不做在线数据迁移。v1 **移除访问组层 / `g-YYYY` 子组**(group→Cerbos,与身份解耦)。
+> **承重墙**:enterprise_id 改值 = 跨契约 + Gravitino + OSS + 审计的一致改值。**v1 prod 无数据 → 清晰切换**(改 pattern + parse_context 产出 alias + 重新 bootstrap);**dev 数据(coco/coco-1)可重建**,不做在线数据迁移。v1 **移除访问组层 / `g-YYYY` 子组**(group→Cerbos,与身份解耦)。
 
-### token claim 形态(探查优先,实测钉死)
-- 预期(spike,KC docs):`organization` claim 是**以 alias 为 key 的对象**;org `id`/attributes **需 mapper 勾选**才进;**默认不进 access token** → 必须勾 "Add to access token"。
-- **probe(Plan 首任务)**:起真 KC 26.6.2 + 建 org + 配 mapper → 抓**真实 access token 的 `organization` claim 原文**(单 org / 多 org / 含 attributes / org id 字符集),记 `spikes/` 事实文档。
-- **决策门(if/then,探针结果机械触发,无需二次拍板)**:
-  - **若** 单 org 的 access token 稳定带"以 alias 为 key 的对象"且含 org id → **then** 固化 client scope(默认 `organization` mapper,Add-to-access-token 勾选),parse_context 直接读该对象。
-  - **若** 多 org 下 claim 复现"消失"(已知坑 #39402/#43635)→ **then** 强制 **identity-first 单 org 选择** + client scope `organization:*`,parse_context 只认选定 org;**多-org 二义** → `enterprise_of` 沿用"0/多企业显式拒"(不静默挑一个)。
-  - **若** org id 非标准 UUID 字符集 → **then** 补 metalake/路径 sanitization(见数据模型表);否则沿用 `replace("-","_")`。
+### token claim 形态(✅ 已实测钉死 — [RESULTS](./spikes/RESULTS.md))
+- **F1 claim = org alias 数组**:`"organization":["acme"]`(`multivalued=true` 默认);`multivalued=false`→`"acme"`。**不含 org id/attributes**。
+- **F2 默认进 access token**(mapper `access.token.claim=true`)——无需额外勾选(纠正 spike)。
+- **F3 多-org 坑实测复现 + 缓解钉死**:用户属 ≥2 org 且**无选择器** → `organization` claim = **`null`**(消失);**`scope=organization:*` → 带回全部 alias 数组**(实测 `["acme","beta"]`)。⇒ **BFF 认证请求 MUST 带动态 scope `organization:*`** 并在 client scope 固化。
+- **解析规则(已确定,无需二次拍板)**:`parse_context` 读 `organization`(list[alias]);**v1 单企业** → 取唯一 alias 作 enterprise_id;**多 alias** → `enterprise_of` 沿用"0/多企业显式拒"(不静默挑一个)。
+- **角色来源**:claim 不含角色 → **角色用 realm role / org attribute 表达**(member/enterprise-admin);其 token 形态(realm_access.roles 已在;org attribute 需 mapper)**作 plan 早期小探针二次确认**,decision:优先 realm role(`enterprise-admin`)+ 默认 member。
+- parse_context 新签名:`parse_context(sub, organization: list[str], roles)`;`Membership(enterprise_id=alias, role)` 去 group_id;返回 `Context` 形态收窄。`_scaffold/auth.py`/`bff` 透传 claim + 认证请求带 `organization:*`。
 - parse_context 新签名(seam 内):入参从 `groups: list[str]` 改为 **`organization`(dict)+(角色来源:org 属性/realm role)**;`Membership` 去 `group_id`;**返回类型 `Context` 形态收窄(去 group_id)**。`_scaffold/auth.py` / `bff/middleware.py` 透传该 claim。
 
 ### 状态机 / 实体
@@ -99,7 +101,7 @@ KC admin REST,**每步带幂等判据**:① 建 org(**by alias/name 查重**,存
 | 1 | 范围与出口 | **已决定**:企业=org(不透明 id)+ 注册/邀请;**v1 两级租户、无访问组层**(group→Cerbos);per-org SSO/org-groups/多企业 v-next(spec) |
 | 2 | 接口契约 | **已决定 + 部分待定**:下游 enterprise_id pattern 放宽(4 契约);`/v1/me/orgs` **删 group_id**、加 organization + 企业 display_name;BFF 邀请端点(can=ent-admin)。第一个消费者=账户页/邀请 UI(低保真原型作 plan 早期任务) |
 | 3 | 数据模型 | **已决定**:enterprise_id=org-uuid(§1.4)、metalake 沿用 `replace("-","_")`、OSS 前缀换值、**group_id 全面清理**(Resource/审计/契约/测试);org 成员 managed/unmanaged、邀请/域状态机;企业 display_name |
-| 4 | 外部依赖事实 | **待探查(探针优先,Plan 首任务)**:KC 26.6.2 `organization` claim 真形态 + 多-org 行为 + access-token 携带 + 注册自动归属 + 邀请 API;**决策规则已写**(上) |
+| 4 | 外部依赖事实 | **✅ 已实测([RESULTS](./spikes/RESULTS.md))**:claim=alias 数组(不含 id)、默认进 access token、多-org 坑复现 + `organization:*` 缓解、成员 UNMANAGED、org id=UUID(不用)、邀请端点存在(需 SMTP)、注册归属机制就位。**剩 2 项 e2e**(自助注册按域归属 + 邀请接受流,需 dev SMTP/浏览器)→ **plan 早期 e2e 任务**(机制已实测,仅完整流验证) |
 | 5 | 行为·边界·并发·威胁 | **已决定**:无匹配域显式处理、多-org 二义显式失败、伪造 claim 防线、迁移幂等、域冲突拒重复 |
 | 6 | NFR | **已决定**:dev-prod parity(realm 单源)、隔离不变、secrets env、审计 |
 | 7 | 验收与测试 | **已决定**:SC-001~007 + owner-readable runbook(建企业→注册/邀请→登录→全链路;**用真实会撞边界的数据**:跨企业越权、无匹配域注册、过期邀请,§3.4)+ 测试分层(parse_context 单元、authz seam、services、KC 集成)|
