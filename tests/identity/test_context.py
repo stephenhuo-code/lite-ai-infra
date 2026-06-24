@@ -1,31 +1,37 @@
 # tests/identity/test_context.py
-import pytest
+# 身份降两级(平台→企业→用户):parse_context 读 token 的 organization claim(org alias 数组),
+# Membership 去 group_id;角色由 realm role 表达(member / enterprise-admin)。
 from libs.identity.context import parse_context, Context, Membership
 
-def test_parse_member_single_group():
-    ctx = parse_context(sub="u-alice", groups=["/e-0001/g-0001/members"])
-    assert ctx == Context(user="u-alice",
-                          memberships=[Membership("e-0001", "g-0001", "member")])
 
-def test_parse_group_admin():
-    ctx = parse_context(sub="u-lead", groups=["/e-0001/g-0001/admins"])
-    assert ctx.memberships[0].role == "group-admin"
+def test_parse_org_claim_single():
+    ctx = parse_context(sub="u-1", organization=["ent-demo"], realm_roles=[])
+    assert ctx.memberships == [Membership(enterprise_id="ent-demo", role="member")]
+    assert not hasattr(ctx.memberships[0], "group_id")  # group 维度已删
 
-def test_parse_enterprise_admin_no_group():
-    ctx = parse_context(sub="u-ea", groups=["/e-0001/admins"])
-    assert ctx.memberships[0] == Membership("e-0001", None, "enterprise-admin")
+
+def test_parse_enterprise_admin_role():
+    ctx = parse_context(sub="u-1", organization=["ent-demo"], realm_roles=["enterprise-admin"])
+    assert ctx.memberships[0].role == "enterprise-admin"
+
+
+def test_parse_multi_org():
+    ctx = parse_context(sub="u-1", organization=["ent-demo", "ent-beta"], realm_roles=[])
+    assert [m.enterprise_id for m in ctx.memberships] == ["ent-demo", "ent-beta"]
+    assert all(m.role == "member" for m in ctx.memberships)
+
 
 def test_parse_platform_admin():
-    ctx = parse_context(sub="u-p", groups=["/platform-admins"])
-    assert ctx.is_platform_admin is True
+    ctx = parse_context(sub="u-1", organization=[], realm_roles=["platform-admin"])
+    assert ctx.is_platform_admin and ctx.memberships == []
 
-def test_role_in_resolves_active_membership():
-    ctx = parse_context(sub="u-x",
-                        groups=["/e-0001/g-0001/admins", "/e-0001/g-0002/members"])
-    assert ctx.role_in("e-0001", "g-0001") == "group-admin"
-    assert ctx.role_in("e-0001", "g-0002") == "member"
-    assert ctx.role_in("e-0099", "g-0001") is None
 
-def test_ignores_unparseable_groups():
-    ctx = parse_context(sub="u", groups=["/garbage", "/e-0001/g-0001/members"])
-    assert len(ctx.memberships) == 1
+def test_role_in_no_group_arg():
+    ctx = parse_context(sub="u-1", organization=["ent-demo"], realm_roles=["enterprise-admin"])
+    assert ctx.role_in("ent-demo") == "enterprise-admin"
+    assert ctx.role_in("ent-other") is None
+
+
+def test_parse_empty_org_no_memberships():
+    ctx = parse_context(sub="u-1", organization=[], realm_roles=[])
+    assert ctx == Context(user="u-1", memberships=[], is_platform_admin=False)

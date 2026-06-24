@@ -70,7 +70,7 @@
 
 **Files:** Modify `libs/identity/context.py`、`libs/identity/ids.py`;Test `tests/identity/test_context.py`。
 
-- [ ] **Step 1: 改红测试**
+- [x] **Step 1: 改红测试**
   `tests/identity/test_context.py` 改/加:
   ```python
   from libs.identity.context import parse_context, Membership
@@ -88,8 +88,8 @@
       ctx = parse_context(sub="u-1", organization=["ent-demo"], realm_roles=["enterprise-admin"])
       assert ctx.role_in("ent-demo") == "enterprise-admin"
   ```
-- [ ] **Step 2: 跑红** `uv run pytest tests/identity/test_context.py -q` → FAIL(签名/字段不符)。
-- [ ] **Step 3: 实现**
+- [x] **Step 2: 跑红** `uv run pytest tests/identity/test_context.py -q` → FAIL(签名/字段不符)。
+- [x] **Step 3: 实现**
   `libs/identity/context.py`:
   ```python
   @dataclass(frozen=True)
@@ -119,8 +119,8 @@
   ```
   `libs/identity/ids.py`:删 `GroupId`(只留 `EnterpriseId`)。
   > 注:role 暂用 realm role 全局判(v1 单企业够用;多企业 per-org 角色 = v-next)。删除旧 `_RE_GROUP`/`_RE_ENT_ADMIN`/`_PLATFORM` group 路径正则。
-- [ ] **Step 4: 跑绿** `uv run pytest tests/identity/test_context.py -q` → PASS。
-- [ ] **Step 5: Commit** `git commit -am "feat(identity): parse_context 读 organization claim;Membership 去 group_id;role_in 去 gid"`
+- [x] **Step 4: 跑绿** `uv run pytest tests/identity/test_context.py -q` → PASS.
+- [x] **Step 5: Commit** `git commit -am "feat(identity): parse_context 读 organization claim;Membership 去 group_id;role_in 去 gid"`
 
 ---
 
@@ -145,7 +145,7 @@
 
 **Files:** Modify `libs/authz/types.py`、`libs/audit/oss_audit.py`、`services/data_pipeline_service/app.py`、`services/identity_org_service/app.py`、`pipelines/data_prep/runner.py`;Test 相应。
 
-- [ ] **Step 1: 改红测试**
+- [x] **Step 1: 改红测试**
   - `tests/services/data_pipeline/test_app.py`/`test_resolve.py`:审计断言去 `group_id`;`role_in(EnterpriseId(ent))` 单参。
   - `tests/services/identity/test_me_orgs.py`(或现有):`/v1/me/orgs` 返回项**无 `group_id`**、含 `enterprise_id`/`role`。
   - authz `tests/authz/test_can.py`:`Resource(...)` 构造去 `group_id`。
