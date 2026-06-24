@@ -8,7 +8,7 @@ import type { Job } from '../api/jobs'
 // 列 = 作业ID/数据集/状态徽章/行数(出/入)/创建。状态筛选 全部/运行中/已完成/失败。
 // US5 可证伪:按「失败」筛选只剩 failed 那条;进 failed 详情显示其 error 文本。
 beforeEach(() => { vi.restoreAllMocks() })
-afterEach(() => { vi.restoreAllMocks() })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })  // useRealTimers 兜底:防 fake timers 泄漏到下个测试
 
 const FAILED: Job = {
   id: 'job-fail', status: 'failed', terminal: true, dataset: 'cc3m-bad',
@@ -119,6 +119,29 @@ it('succeeded 详情含二次处理占位(禁用,不给会失败入口 · US3-AC
 
   const btn = await screen.findByText(/再处理/)
   expect((btn as HTMLButtonElement).disabled).toBe(true)
+})
+
+it('列表自动轮询:运行中作业跑完后列表自动翻「已完成」(无需手刷)', async () => {
+  const runJob: Job = { ...RUNNING, id: 'job-poll', dataset: 'coco-poll' }
+  const doneJob: Job = { ...runJob, status: 'succeeded', terminal: true, rows_in: 64, rows_written: 64 }
+  let calls = 0
+  // 首拉返回运行中 → 列表起轮询;之后每次返回 succeeded → 行内徽章自动翻终态。
+  vi.spyOn(jobsApi, 'listJobs').mockImplementation(async () => {
+    calls++
+    return { jobs: [calls === 1 ? runJob : doneJob], total: 1 }
+  })
+  render(<Pipelines />)
+
+  // 初次:行内状态徽章=运行中(within 避开同名筛选按钮「运行中」)
+  await waitFor(() => expect(within(screen.getByText('coco-poll').closest('tr')!).getByText('运行中')).toBeTruthy())
+
+  // 一个 2.5s 轮询周期后自动重拉 → 行内徽章翻「已完成」(timeout 跨过周期)
+  await waitFor(
+    () => expect(within(screen.getByText('coco-poll').closest('tr')!).getByText('已完成')).toBeTruthy(),
+    { timeout: 4000 },
+  )
+  expect(within(screen.getByText('coco-poll').closest('tr')!).queryByText('运行中')).toBeNull()
+  expect(calls).toBeGreaterThanOrEqual(2)  // 确实重拉过(非一次性快照)
 })
 
 it('运行中作业进详情走 pollJob 轮询至终态', async () => {

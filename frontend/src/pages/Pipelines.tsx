@@ -215,6 +215,15 @@ export function Pipelines() {
 
   useEffect(() => { void load(filter) }, [load, filter])
 
+  // 列表自动轮询:有非终态作业(运行中/排队)时定时刷新,全部终态则停。
+  // 镜像详情抽屉的 pollJob —— 作业跑完列表自动从「运行中」翻「已完成」,无需手动刷新。
+  useEffect(() => {
+    const hasActive = jobs.some(j => j.status === 'running' || j.status === 'queued')
+    if (!hasActive) return
+    const t = setInterval(() => { void load(filter) }, 2500)
+    return () => clearInterval(t)
+  }, [jobs, filter, load])
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
