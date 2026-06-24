@@ -12,6 +12,8 @@
 
 **范围(spec):** 6 用户故事 US1 登录看数据(P1)/ US2 上传(P2)/ US3 浏览目录(P2)/ US4 提交+跟踪作业(P2)/ US5 排障(P2)/ US6 账户(P3)。**不做(v2/vN+,UI 不出现)**:SQL/另存为 · 删改/取消/重跑/注册/共享 · 下载导出 · 权限策略 Tab · 数据助手 · 模态/标签列 · 血缘 · 一键从数据集发起作业(S2a)。
 
+> **状态:✅ 已完成并合并 main(2026-06-24)。** 7 任务全部实现,关闭 S1 出口⑤(真 GUI 经 BFF 调通)。在 8b 基础上**续做并一并合并**:catalog-driven 数据集([`2026-06-23-catalog-driven-datasets.md`](./2026-06-23-catalog-driven-datasets.md))+ owner 模型(ADR-024)+ 注册/血缘 UI + 列表轮询 + 数据集去重 + 账户真实信息。全链路 live 验收通过,独立 4 维 review 关键项闭合。注:spec 原"不做"里的**注册**已在 catalog-driven 轮纳入(显式注册到目录)。下方 checkbox 反映实时完成态。
+
 ---
 
 ## File Structure(决策锁定)
@@ -34,7 +36,7 @@
 
 **Files:** Create `frontend/`(scaffold)、`frontend/vite.config.ts`、`frontend/tailwind.config.js`、`frontend/src/index.css`;Modify `Makefile`。
 
-- [ ] **Step 1: 脚手架 + 依赖**
+- [x] **Step 1: 脚手架 + 依赖**
 
 ```bash
 cd frontend 2>/dev/null || (cd /Users/yanwen/Documents/github/lite-ai-infra && npm create vite@latest frontend -- --template react-ts)
@@ -45,7 +47,7 @@ npm install react-router-dom
 ```
 期望:`frontend/` 生成、`npm install` 成功。
 
-- [ ] **Step 2: 写 `frontend/vite.config.ts`(同源 proxy + 构建产物目录)**
+- [x] **Step 2: 写 `frontend/vite.config.ts`(同源 proxy + 构建产物目录)**
 
 ```ts
 import { defineConfig } from 'vite'
@@ -66,7 +68,7 @@ export default defineConfig({
 ```
 `frontend/src/index.css` 顶部加 `@import "tailwindcss";`(Tailwind v4 Vite 插件用法)。
 
-- [ ] **Step 3: Makefile 加前端目标**
+- [x] **Step 3: Makefile 加前端目标**
 
 `Makefile` 末尾追加:
 ```makefile
@@ -78,19 +80,19 @@ fe-test:    ; cd frontend && npx vitest run
 fe-e2e:     ; cd frontend && npx playwright test
 ```
 
-- [ ] **Step 4: 生成类型 + 构建,确认 dist 产出**
+- [x] **Step 4: 生成类型 + 构建,确认 dist 产出**
 
 Run: `make fe-types && make fe-build`
 Expected: 生成 `frontend/src/api/types-*.ts`;`frontend/dist/`(含 `index.html` + `assets/`)产出,无报错。
 
-- [ ] **Step 5: 探针 B —— dev proxy 同源带会话调通 `/auth/me`**
+- [x] **Step 5: 探针 B —— dev proxy 同源带会话调通 `/auth/me`**
 
 > 验"前端经 vite proxy 调 `/auth/me` 能带 BFF 会话 cookie 拿到身份"。需 dev BFF 起着。
 Run(三终端/后台):`make dev-up` → 起 gateway(BFF):`make run-gateway`(或 `uv run uvicorn services.gateway.main:app --port 8090`)→ `cd frontend && npm run dev`。
 然后浏览器开 `http://localhost:5173`(未登录)→ 应 **302/跳到 `/auth/login`**(经 BFF→KC)。登录后回来,开发者工具 Network 里 `/auth/me` 经 5173 同源、**带 cookie、返回 200 + 身份**。
 **决策规则(DoR #4-B)**:`/auth/me` 经 proxy 带 cookie 通 → 采纳 vite proxy(预期通)。**期望:通过。**
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/ Makefile
@@ -103,7 +105,7 @@ git commit -m "feat(frontend): Vite+React 脚手架 + 同源 proxy(探针B)+ Tai
 
 **Files:** Create `services/gateway/static.py`;Modify `services/gateway/main.py`;Test `tests/gateway/test_static.py`。
 
-- [ ] **Step 1: 写失败测试 `tests/gateway/test_static.py`**
+- [x] **Step 1: 写失败测试 `tests/gateway/test_static.py`**
 
 ```python
 import pathlib
@@ -139,12 +141,12 @@ def test_asset_served(tmp_path, monkeypatch):
     assert c.get("/assets/x.js").status_code == 200
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/gateway/test_static.py -q`
 Expected: FAIL（`ModuleNotFoundError: services.gateway.static`）。
 
-- [ ] **Step 3: 实现 `services/gateway/static.py`**
+- [x] **Step 3: 实现 `services/gateway/static.py`**
 
 ```python
 from __future__ import annotations
@@ -171,12 +173,12 @@ def install_static(app: FastAPI, dist_dir: str) -> None:
         return FileResponse(index)
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/gateway/test_static.py -q`
 Expected: PASS（3 项）。
 
-- [ ] **Step 5: 接进 `services/gateway/main.py`(在 install_request_id 之后,最后挂 static)**
+- [x] **Step 5: 接进 `services/gateway/main.py`(在 install_request_id 之后,最后挂 static)**
 
 `main.py` 末尾 `install_request_id(app)` 之后追加:
 ```python
@@ -184,7 +186,7 @@ from services.gateway.static import install_static
 install_static(app, dist_dir=os.environ.get("FRONTEND_DIST", "frontend/dist"))
 ```
 
-- [ ] **Step 6: 探针 D 真验 + Commit**
+- [x] **Step 6: 探针 D 真验 + Commit**
 
 Run(dist 已构建 + gateway 起着):`curl -s -o /dev/null -w "%{http_code}\n" localhost:8090/auth/me`(应 401/200,**不是** index)、`curl -s localhost:8090/datasets | grep -o "<title>"`(应回 index)、`curl -s -o /dev/null -w "%{http_code}\n" localhost:8090/v1/data/jobs`(API 仍达)。
 ```bash
@@ -198,7 +200,7 @@ git commit -m "feat(gateway): serve frontend dist + SPA fallback(探针D,不吞 
 
 **Files:** Create `frontend/src/api/client.ts`、`frontend/src/auth/useMe.ts`、`frontend/src/app/Shell.tsx`、`frontend/src/pages/Account.tsx`、`frontend/src/main.tsx`(路由);Test `frontend/src/api/client.test.ts`、`frontend/src/app/Shell.test.tsx`。
 
-- [ ] **Step 1: 写 API 客户端失败测试 `frontend/src/api/client.test.ts`**
+- [x] **Step 1: 写 API 客户端失败测试 `frontend/src/api/client.test.ts`**
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -227,12 +229,12 @@ describe('api client', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `cd frontend && npx vitest run src/api/client.test.ts`
 Expected: FAIL（`./client` 不存在)。
 
-- [ ] **Step 3: 实现 `frontend/src/api/client.ts`**
+- [x] **Step 3: 实现 `frontend/src/api/client.ts`**
 
 ```ts
 export function csrfFromCookie(): string {
@@ -255,12 +257,12 @@ export const api = {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `cd frontend && npx vitest run src/api/client.test.ts`
 Expected: PASS（3 项）。
 
-- [ ] **Step 5: `useMe` hook + 外壳 + 账户页 + 路由(组件 + 测试)**
+- [x] **Step 5: `useMe` hook + 外壳 + 账户页 + 路由(组件 + 测试)**
 
 `frontend/src/auth/useMe.ts`:
 ```ts
@@ -340,7 +342,7 @@ it('侧栏可折叠', () => {
 ```
 `frontend/src/main.tsx` 配路由(BrowserRouter,Shell 套 6 屏)。装 `npm i -D @testing-library/react @testing-library/jest-dom jsdom` 并在 `vite.config.ts` 加 `test:{environment:'jsdom'}`。
 
-- [ ] **Step 6: 跑组件测试 + Commit**
+- [x] **Step 6: 跑组件测试 + Commit**
 
 Run: `cd frontend && npx vitest run`
 Expected: PASS(client + Shell)。
@@ -354,7 +356,7 @@ git add frontend/ && git commit -m "feat(frontend): API 客户端(CSRF/401)+ 可
 
 **Files:** Create `frontend/src/api/upload.ts`、`frontend/src/pages/Datasets.tsx`、`frontend/src/pages/UploadModal.tsx`;Test `frontend/src/api/upload.test.ts`、`frontend/src/pages/Datasets.test.tsx`。
 
-- [ ] **Step 1: 上传三段失败测试 `frontend/src/api/upload.test.ts`**
+- [x] **Step 1: 上传三段失败测试 `frontend/src/api/upload.test.ts`**
 
 ```ts
 import { describe, it, expect, vi } from 'vitest'
@@ -374,9 +376,9 @@ it('走 请求上传→PUT OSS(直连,非同源)→complete 三段', async () =>
 })
 ```
 
-- [ ] **Step 2: 跑确认失败** → Run `cd frontend && npx vitest run src/api/upload.test.ts` → FAIL(`./upload` 无)。
+- [x] **Step 2: 跑确认失败** → Run `cd frontend && npx vitest run src/api/upload.test.ts` → FAIL(`./upload` 无)。
 
-- [ ] **Step 3: 实现 `frontend/src/api/upload.ts`**
+- [x] **Step 3: 实现 `frontend/src/api/upload.ts`**
 
 ```ts
 import { api, csrfFromCookie } from './client'
@@ -397,14 +399,14 @@ export async function uploadDataset(r: UploadReq, onProgress: (pct: number) => v
 ```
 (大文件分片:本轮单 PUT;multipart 走 grant.part_urls,作 FR-008 增强,若 grant 返回 part_urls 则逐片 PUT——留实现期按 grant 形态分支。)
 
-- [ ] **Step 4: 跑确认通过** → PASS。
+- [x] **Step 4: 跑确认通过** → PASS。
 
-- [ ] **Step 5: 数据集页 + 上传弹窗(组件 + 测试)**
+- [x] **Step 5: 数据集页 + 上传弹窗(组件 + 测试)**
 
 `frontend/src/pages/Datasets.tsx`:列表合并 metadata `GET /v1/catalogs/data/schemas/datasets/datasets` + Plan7 `GET /v1/data/raw`;列 = 名称/描述/格式/样本数/大小/创建人/操作(详情);搜索按名称过滤;右上"上传数据集"开 `UploadModal`。**不渲染模态/标签列、不出现用户组**(spec FR-012/组织模型)。`UploadModal` 用 `uploadDataset` + 进度条 + 失败重试。
 `frontend/src/pages/Datasets.test.tsx`(用 msw 或 mock api):mock 列表返回两条 → 断言渲染名称/格式/样本数列、搜索过滤、缺值(num_samples=null)显示占位"—"不报错(FR-008)。
 
-- [ ] **Step 6: Commit** → `git add frontend/ && git commit -m "feat(frontend): 数据集页(列表+搜索)+ 上传弹窗三段直传 (US1/US2) (Plan 8b)"`
+- [x] **Step 6: Commit** → `git add frontend/ && git commit -m "feat(frontend): 数据集页(列表+搜索)+ 上传弹窗三段直传 (US1/US2) (Plan 8b)"`
 
 ---
 
@@ -412,15 +414,15 @@ export async function uploadDataset(r: UploadReq, onProgress: (pct: number) => v
 
 **Files:** Create `frontend/src/pages/Catalog.tsx`、`frontend/src/api/catalog.ts`;Test `frontend/src/pages/Catalog.test.tsx`。
 
-- [ ] **Step 1: 失败测试** `frontend/src/pages/Catalog.test.tsx`:mock `GET /v1/catalogs`→`["data"]`、`/v1/catalogs/data/schemas`→`["datasets"]`、`.../datasets`→两条 → 断言:左树渲染 企业/catalog/schema 三层、可展开折叠;点 schema → 右侧列出数据集(名/owner/格式/注册时间/scope);Tab 仅 概览/详情。
+- [x] **Step 1: 失败测试** `frontend/src/pages/Catalog.test.tsx`:mock `GET /v1/catalogs`→`["data"]`、`/v1/catalogs/data/schemas`→`["datasets"]`、`.../datasets`→两条 → 断言:左树渲染 企业/catalog/schema 三层、可展开折叠;点 schema → 右侧列出数据集(名/owner/格式/注册时间/scope);Tab 仅 概览/详情。
 
-- [ ] **Step 2: 跑确认失败。**
+- [x] **Step 2: 跑确认失败。**
 
-- [ ] **Step 3: 实现 `frontend/src/api/catalog.ts`**(`listCatalogs/listSchemas/listDatasets` 调对应端点)+ `Catalog.tsx`(左 `<aside>` 树:`企业(metalake)→catalog→schema→数据集`,折叠按钮;右详情:面包屑 + schema 标题 + 概览表 + "关于此 Schema";**层级标签对用户显示为 企业→catalog→schema→数据集**,对齐契约路径)。类名照原型 Catalog Explorer 段。**不做权限/策略 Tab、共享/注册/新建/加标签按钮**(spec Out)。
+- [x] **Step 3: 实现 `frontend/src/api/catalog.ts`**(`listCatalogs/listSchemas/listDatasets` 调对应端点)+ `Catalog.tsx`(左 `<aside>` 树:`企业(metalake)→catalog→schema→数据集`,折叠按钮;右详情:面包屑 + schema 标题 + 概览表 + "关于此 Schema";**层级标签对用户显示为 企业→catalog→schema→数据集**,对齐契约路径)。类名照原型 Catalog Explorer 段。**不做权限/策略 Tab、共享/注册/新建/加标签按钮**(spec Out)。
 
-- [ ] **Step 4: 跑确认通过。**
+- [x] **Step 4: 跑确认通过。**
 
-- [ ] **Step 5: Commit** → `git add frontend/ && git commit -m "feat(frontend): 数据目录 Catalog Explorer 两栏(树+详情) (US3) (Plan 8b)"`
+- [x] **Step 5: Commit** → `git add frontend/ && git commit -m "feat(frontend): 数据目录 Catalog Explorer 两栏(树+详情) (US3) (Plan 8b)"`
 
 ---
 
@@ -428,7 +430,7 @@ export async function uploadDataset(r: UploadReq, onProgress: (pct: number) => v
 
 **Files:** Create `frontend/src/pages/Pipelines.tsx`、`frontend/src/pages/CreateJob.tsx`、`frontend/src/api/jobs.ts`;Test `frontend/src/api/jobs.test.ts`、`frontend/src/pages/Pipelines.test.tsx`。
 
-- [ ] **Step 1: 轮询失败测试 `frontend/src/api/jobs.test.ts`**
+- [x] **Step 1: 轮询失败测试 `frontend/src/api/jobs.test.ts`**
 
 ```ts
 import { describe, it, expect, vi } from 'vitest'
@@ -442,9 +444,9 @@ it('按 terminal 轮询到终态(非状态串匹配)', async () => {
 })
 ```
 
-- [ ] **Step 2: 跑确认失败。**
+- [x] **Step 2: 跑确认失败。**
 
-- [ ] **Step 3: 实现 `frontend/src/api/jobs.ts`**
+- [x] **Step 3: 实现 `frontend/src/api/jobs.ts`**
 
 ```ts
 import { api } from './client'
@@ -464,12 +466,12 @@ export async function pollJob(id: string, opts: { intervalMs?: number } = {}) {
 }
 ```
 
-- [ ] **Step 4: 跑确认通过。**
+- [x] **Step 4: 跑确认通过。**
 
-- [ ] **Step 5: 数据管线页 + 创建作业页(组件 + 测试)**
+- [x] **Step 5: 数据管线页 + 创建作业页(组件 + 测试)**
 `Pipelines.tsx`:作业表(ID/数据集/状态徽章/行数/创建)+ 状态筛选(全部/运行中/已完成/**失败**)+ 行点开详情(用 `pollJob` 轮询运行中、终态展示产物 URI / `error`);**失败筛选 + 详情看失败原因 = US5**。`CreateJob.tsx`:表单(源=数据位置 `tar_dir`、产出名、并行度、算子)→ `createJob` → toast 202 → 跳数据管线。`Pipelines.test.tsx`:mock 列表含一条 failed → 按"失败"筛选只剩它 → 详情显示 error 文本(US5 可证伪)。
 
-- [ ] **Step 6: Commit** → `git add frontend/ && git commit -m "feat(frontend): 数据管线(轮询+失败排障)+ 创建作业 (US4/US5) (Plan 8b)"`
+- [x] **Step 6: Commit** → `git add frontend/ && git commit -m "feat(frontend): 数据管线(轮询+失败排障)+ 创建作业 (US4/US5) (Plan 8b)"`
 
 ---
 

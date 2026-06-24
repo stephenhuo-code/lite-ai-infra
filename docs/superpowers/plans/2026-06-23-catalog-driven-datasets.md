@@ -13,6 +13,8 @@
 **分支:** 从 `s1-plan8b-frontend` 拉 `catalog-driven-datasets`(前端在该分支)。
 **前置(e2e 前):** `make dj-setup`;`make deps-dev`;bootstrap(Task 2)。
 
+> **状态:✅ 已完成并合并 main(2026-06-24)。** 7 任务全部实现 + 两阶段审查通过;全链路 live 验收通过(上传→注册→建作业→管线从 catalog 读 `s3a://` 位置跑[64 进 64 出]→注册派生产物→数据集/目录可见);独立 4 维 code review 关键项闭合。**归属随本特性一并改为 owner 模型([ADR-024](../adr/ADR-024-owner-based-dataset-ownership.md),group→Cerbos v2)**;Gravitino location 用 `s3a://`(scheme 二元性)。**已知限制/v-next**:UI 算子中文标签未映射真实 DJ 算子(勾选会崩,用默认集);数据预览/列 schema 未做。下方 checkbox 反映实时完成态。
+
 ---
 
 ## File Structure
@@ -40,7 +42,7 @@
 
 **Files:** Create `docs/superpowers/plans/2026-06-23-catalog-driven-datasets/spikes/RESULTS.md`
 
-- [ ] **Step 1: 起栈 + bootstrap + 注册一个 raw 数据集(用 alice)**
+- [x] **Step 1: 起栈 + bootstrap + 注册一个 raw 数据集(用 alice)**
 
 Run(逐条):
 ```bash
@@ -51,7 +53,7 @@ TOK=$(curl -s -X POST http://localhost:8080/realms/lite-ai/protocol/openid-conne
 env $(uv run python scripts/load_env.py metadata) OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 DATA_BUCKET=lite-ai uv run uvicorn services.metadata_service.main:app --port 8002 & sleep 4
 ```
 
-- [ ] **Step 2: 探:带 bearer 直接 GET metadata 取数据集(模拟 pipeline→metadata)**
+- [x] **Step 2: 探:带 bearer 直接 GET metadata 取数据集(模拟 pipeline→metadata)**
 
 先 bootstrap + 注册(若 Task 2/3 未做,这里手工用 ensure + create):
 ```bash
@@ -60,7 +62,7 @@ curl -s -H "Authorization: Bearer $TOK" "http://localhost:8002/v1/catalogs/data/
 ```
 Expected:能凭 bearer 拿到数据集 JSON(含 location)或 404(若未注册)。**关键验证**:metadata 端点接受 Bearer、经 `can()`、返回 `_dataset`(含 `location`)。
 
-- [ ] **Step 3: 探:FastAPI handler 能否读到入站 Authorization 头**
+- [x] **Step 3: 探:FastAPI handler 能否读到入站 Authorization 头**
 
 ```bash
 uv run python -c "
@@ -78,7 +80,7 @@ print('BEARER_CAPTURE_OK')
 ```
 Expected: `BEARER_CAPTURE_OK` —— 证实 prepare handler 加 `request: Request` 即可捕获 bearer 转发。
 
-- [ ] **Step 4: 写 RESULTS + 应用决策规则**
+- [x] **Step 4: 写 RESULTS + 应用决策规则**
 
 决策规则:
 - 上面两步通 → 按设计实现(handler 读 `request.headers["authorization"]` → 转发 metadata client)。
@@ -96,7 +98,7 @@ git commit -m "spike(catalog): bearer 传播链实测(prepare→metadata 解析 
 
 **Files:** Create `scripts/bootstrap_catalog.py`;Modify `Makefile`、`services/metadata_service/app.py`、`libs/config/__init__.py`、`tests/config/test_loader.py`、`tests/services/metadata/`
 
-- [ ] **Step 1: 写失败测试 —— list_ds 404→空**
+- [x] **Step 1: 写失败测试 —— list_ds 404→空**
 
 `tests/services/metadata/test_list_empty.py`(照现有 metadata 测试的假 client 模式):
 ```python
@@ -118,9 +120,9 @@ def test_list_empty_on_missing_catalog(monkeypatch):
 ```
 (x-test-claims 格式以 `services/_scaffold/auth.py` 现有解析为准,执行时对齐。)
 
-- [ ] **Step 2: 运行→失败**;`uv run pytest tests/services/metadata/test_list_empty.py -q` → FAIL(500/抛错)。
+- [x] **Step 2: 运行→失败**;`uv run pytest tests/services/metadata/test_list_empty.py -q` → FAIL(500/抛错)。
 
-- [ ] **Step 3: 改 list_ds 容错 404**
+- [x] **Step 3: 改 list_ds 容错 404**
 
 `services/metadata_service/app.py` 的 list_ds,`for name in gravitino.list_filesets(...)` 改:
 ```python
@@ -140,7 +142,7 @@ def test_list_empty_on_missing_catalog(monkeypatch):
         return {"datasets": out}
 ```
 
-- [ ] **Step 4: bootstrap 脚本 + make 目标**
+- [x] **Step 4: bootstrap 脚本 + make 目标**
 
 `scripts/bootstrap_catalog.py`:
 ```python
@@ -170,11 +172,11 @@ bootstrap-catalog: ; env $$($(LOAD) metadata) OSS_ENDPOINT=http://localhost:9000
 ```
 (`EID ?= e-0001`;加进 `.PHONY`。)
 
-- [ ] **Step 5: metadata 纳入 OSS env(单一源)**
+- [x] **Step 5: metadata 纳入 OSS env(单一源)**
 
 `libs/config/__init__.py:SERVICE_ENV_KEYS["metadata"]` 加 `OSS_ENDPOINT, OSS_ACCESS_KEY, OSS_SECRET_KEY, DATA_BUCKET`(值已在 configs/local.yaml)。更新 `tests/config/test_loader.py` 的 metadata 基线键集断言(原 `{LITEAI_JWKS_URL, GRAVITINO_URL}` → 加这 4 个)。
 
-- [ ] **Step 6: 运行 + Commit**
+- [x] **Step 6: 运行 + Commit**
 
 `uv run pytest tests/services/metadata/test_list_empty.py tests/config/ -q` → PASS。
 ```bash
@@ -188,14 +190,14 @@ git commit -m "feat(metadata): 空企业 list 404→空 + catalog bootstrap 脚�
 
 **Files:** Modify `contracts/openapi/metadata.yaml`、`services/metadata_service/app.py`;Test `tests/services/metadata/test_register_pin.py`
 
-- [ ] **Step 1: 改契约**
+- [x] **Step 1: 改契约**
 
 `contracts/openapi/metadata.yaml`:
 - `RegisterDataset`:`required` 去掉 `location`;加 `kind: {type: string, enum: [raw, processed]}`(必,加进 required)、`format: {type: [string,'null']}`、`derived_from: {type: [string,'null']}`。
 - `Dataset`(读模型):加 `kind: {type: [string,'null']}`、`derived_from: {type: [string,'null']}`。
 - `make gen` 重生成。
 
-- [ ] **Step 2: 写失败测试(raw 钉死 + processed 前缀校验 + kind 写入 + 隔离负例)**
+- [x] **Step 2: 写失败测试(raw 钉死 + processed 前缀校验 + kind 写入 + 隔离负例)**
 
 `tests/services/metadata/test_register_pin.py`:
 ```python
@@ -230,9 +232,9 @@ def test_processed_register_rejects_foreign_location(monkeypatch):
     assert r.status_code==403   # 越权位置被拒
 ```
 
-- [ ] **Step 3: 运行→失败**;`uv run pytest tests/services/metadata/test_register_pin.py -q` → FAIL。
+- [x] **Step 3: 运行→失败**;`uv run pytest tests/services/metadata/test_register_pin.py -q` → FAIL。
 
-- [ ] **Step 4: 改 register 端点**
+- [x] **Step 4: 改 register 端点**
 
 `services/metadata_service/app.py` register,在 can() 通过后、建 props 处改为:
 ```python
@@ -257,7 +259,7 @@ def test_processed_register_rejects_foreign_location(monkeypatch):
 (顶部 `import os`;`paths._base` = `{eid}/{gid}`。注:raw 的 location 用 `raw_prefix`(`{eid}/{gid}/raw/{name}/`)拼成 `s3://bucket/<prefix>`。)
 `_dataset` 加输出:`"kind": p.get("kind"), "derived_from": p.get("derived_from")`(`kind=None` → 前端显未知,不臆断)。
 
-- [ ] **Step 5: 运行 + Commit**
+- [x] **Step 5: 运行 + Commit**
 
 `uv run pytest tests/services/metadata/ -q && make gen && uv run lint-imports` → PASS/KEPT。
 ```bash
@@ -273,7 +275,7 @@ git commit -m "feat(metadata): 注册 location 服务端钉死 + kind/format/der
 
 > `fetch_oss_tars` 代码 + 测试 = 取自被取代的 `oss-raw-to-prepare.md` Task 1/2(原样并入)。
 
-- [ ] **Step 1: `fetch_oss_tars`(同 oss-raw-to-prepare Task 1 的实现 + 测试)**
+- [x] **Step 1: `fetch_oss_tars`(同 oss-raw-to-prepare Task 1 的实现 + 测试)**
 
 Create `pipelines/data_prep/oss_fetch.py`:
 ```python
@@ -299,11 +301,11 @@ def fetch_oss_tars(s3, *, bucket: str, prefix: str, dest_dir: str) -> int:
 ```
 Test `tests/pipelines/test_oss_fetch.py`(用假 s3:list_objects_v2 paginator + download_file,断言只下该前缀 *.tar、返回数 = tar 个数)。运行 red→green。
 
-- [ ] **Step 2: run_prepare 用解析到的 OSS location**
+- [x] **Step 2: run_prepare 用解析到的 OSS location**
 
 run_prepare 现签名:`req.tar_dir` 是本地路径。改:`req` 增 `source_location`(OSS `s3://bucket/eid/gid/raw/ds/` 前缀,由服务层从 catalog 解析后传入)。run_prepare:若 `source_location` 给定 → `build_s3` + `fetch_oss_tars(prefix=去掉 s3://bucket/ 的 key 前缀, dest=work/tars)` → 用该本地目录喂 `convert_fn`。加 `fetch_fn=fetch_oss_tars` seam 便于测试。测试 `tests/pipelines/test_runner_oss.py`:注入 fake fetch,断言用 source_location 解析出的前缀、convert 收到本地 dest。(细节同被取代计划 Task 2,signature 用 `source_location` 替 `tar_dir` 缺省逻辑。)
 
-- [ ] **Step 3: 运行 + Commit**
+- [x] **Step 3: 运行 + Commit**
 
 `uv run pytest tests/pipelines/ -q` → PASS。
 ```bash
@@ -317,7 +319,7 @@ git commit -m "feat(pipeline): fetch_oss_tars + run_prepare 用 source_location 
 
 **Files:** Create `services/data_pipeline_service/metadata_client.py`、`tests/services/data_pipeline/test_resolve.py`;Modify `contracts/openapi/data-pipeline.yaml`、`services/data_pipeline_service/app.py`、`worker.py`、JobSpec、`tests/services/data_pipeline/`
 
-- [ ] **Step 1: metadata 只读客户端**
+- [x] **Step 1: metadata 只读客户端**
 
 `services/data_pipeline_service/metadata_client.py`:
 ```python
@@ -338,15 +340,15 @@ class MetadataClient:
 ```
 (`METADATA_URL` 需进 data-pipeline 的 `SERVICE_ENV_KEYS`——加之 + 基线测试。)
 
-- [ ] **Step 2: 改契约 tar_dir→source_dataset**
+- [x] **Step 2: 改契约 tar_dir→source_dataset**
 
 `contracts/openapi/data-pipeline.yaml` PrepareJobRequest:`required: [dataset, group_id, source_dataset]`(去 tar_dir);加 `source_dataset: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}`;删 `tar_dir`。`make gen`。**更新 oasdiff 基线**(本轮破坏性,owner 已拍)。
 
-- [ ] **Step 3: 写失败测试(prepare 解析 location;须 kind=raw;不存在→错)**
+- [x] **Step 3: 写失败测试(prepare 解析 location;须 kind=raw;不存在→错)**
 
 `tests/services/data_pipeline/test_resolve.py`:注入 fake MetadataClient(get_dataset 返 `{kind:"raw", location:"s3://lite-ai/e-0001/g-0001/raw/coco/"}`),断言 prepare 把 source_location 写进 JobSpec;再注入返回 `kind:"processed"` → prepare 拒(400 "源须为原始数据集");注入抛 404 → prepare 400 "源数据集不存在/不可读"。
 
-- [ ] **Step 4: 改 prepare handler(捕获 bearer + 解析)**
+- [x] **Step 4: 改 prepare handler(捕获 bearer + 解析)**
 
 `services/data_pipeline_service/app.py` prepare:加 `request: Request`;在 can() 后:
 ```python
@@ -362,7 +364,7 @@ class MetadataClient:
 ```
 (`metadata` = build_app 注入的 MetadataClient,默认 `MetadataClient()`;测试注入 fake。)`JobSpec` 加 `source_location`、去 `tar_dir`;`worker.py` 构造 `PrepareRequest(source_location=spec.source_location, ...)`(去 tar_dir)。
 
-- [ ] **Step 5: 运行 + Commit**
+- [x] **Step 5: 运行 + Commit**
 
 `uv run pytest tests/services/data_pipeline/ -q && make gen && uv run lint-imports` → PASS/KEPT。
 ```bash
@@ -376,23 +378,23 @@ git commit -m "feat(data-pipeline): catalog-driven —— source_dataset + metad
 
 **Files:** Modify `frontend/src/pages/{Datasets,CreateJob}.tsx`、`frontend/src/api/{datasets,jobs}.ts`;Test 对应 `.test.tsx`
 
-- [ ] **Step 1: datasets API:注册 + 列表带 kind/血缘**
+- [x] **Step 1: datasets API:注册 + 列表带 kind/血缘**
 
 `frontend/src/api/datasets.ts`:`registerDataset(body)` = `api.post('/v1/catalogs/data/schemas/datasets/datasets', body)`;类型从生成的 metadata 类型取(含 kind/derived_from)。
 
-- [ ] **Step 2: Datasets 页:原始数据「注册」按钮 + 显示 kind/格式**
+- [x] **Step 2: Datasets 页:原始数据「注册」按钮 + 显示 kind/格式**
 
 原始上传(`/v1/data/raw` 的 ready 项)行加「注册到目录」按钮 → `registerDataset({name, group_id, kind:"raw"})`(无 location);注册成功刷新。列显示 kind(原始/已处理)、format;已处理显示 `derived_from`(来源)。测试:点注册 → POST body 含 `kind:"raw"` 无 location。
 
-- [ ] **Step 3: CreateJob 源下拉(catalog 里 kind=raw 的数据集)**
+- [x] **Step 3: CreateJob 源下拉(catalog 里 kind=raw 的数据集)**
 
 源改 `<select>`:`api.get('/v1/catalogs/data/schemas/datasets/datasets')` → 过滤 `kind==='raw'` → option;提交 `createJob({dataset(产出名), group_id, source_dataset:选中名, np?, process?})`(去 tar_dir)。测试:下拉只列 kind=raw;提交 body 含 source_dataset、无 tar_dir。
 
-- [ ] **Step 4: 作业成功「注册产物」(num_samples 取自 job,只读)**
+- [x] **Step 4: 作业成功「注册产物」(num_samples 取自 job,只读)**
 
 Pipelines 页作业详情:succeeded 作业加「注册产物」→ `registerDataset({name(产出名), group_id, kind:"processed", format:"lance", location:job.lance_uri, derived_from:source, num_samples:job.rows_written})`。num_samples 字段**只读自 job**(用户不可编辑,FR-010)。二次处理已处理数据集的入口显「暂未提供(v-next)」(US3-AC3)。
 
-- [ ] **Step 5: 运行前端测试 + 构建 + Commit**
+- [x] **Step 5: 运行前端测试 + 构建 + Commit**
 
 `cd frontend && npx vitest run && npm run build` → PASS。
 ```bash
@@ -406,13 +408,13 @@ git commit -m "feat(frontend): 注册按钮(raw/processed)+ CreateJob 源下拉 
 
 **Files:** Create `scripts/make_coco_smoke_tar.py`;Modify 本计划(嵌 runbook)
 
-- [ ] **Step 1: coco webdataset tar 夹具**(同 oss-raw-to-prepare Task 6 的脚本:取 coco-30-val ~64 条 → `{key}.jpg`+`{key}.txt` tar)。Commit。
+- [x] **Step 1: coco webdataset tar 夹具**(同 oss-raw-to-prepare Task 6 的脚本:取 coco-30-val ~64 条 → `{key}.jpg`+`{key}.txt` tar)。Commit。
 
-- [ ] **Step 2: 全绿门禁**
+- [x] **Step 2: 全绿门禁**
 
 `make gen && make lint && uv run pytest -q` 全绿;`cd frontend && npx vitest run` 绿;oasdiff 基线已更新(破坏性变更预期内)。
 
-- [ ] **Step 3: runbook 写入本文件 + Commit**
+- [x] **Step 3: runbook 写入本文件 + Commit**
 
 ---
 
@@ -420,30 +422,30 @@ git commit -m "feat(frontend): 注册按钮(raw/processed)+ CreateJob 源下拉 
 
 > 仓库根目录、终端逐条。前置:Docker 在跑;已 `make dj-setup`。
 
-- [ ] **1. 起栈 + 建目录骨架**
+- [x] **1. 起栈 + 建目录骨架**
   - 跑:`make up`(等 ~40 秒)
   - 跑:`make bootstrap-catalog`
   - 应看到:`bootstrapped e_0001/data/datasets`。
-- [ ] **2. 造夹具 tar(本地)**
+- [x] **2. 造夹具 tar(本地)**
   - 跑:`uv run --with datasets --with pillow python scripts/make_coco_smoke_tar.py`(产出 `./.smoke/coco-smoke.tar`;`datasets`/`pillow` 是夹具专用依赖,`--with` 临时带,不进项目 deps)
   - **国内网络连不上 HuggingFace** 时,前面加镜像:`HF_ENDPOINT=https://hf-mirror.com uv run --with datasets --with pillow python scripts/make_coco_smoke_tar.py`
   - 应看到:`./.smoke/coco-smoke.tar` 生成。
   - 注:**不再手工 `mc cp` 到固定路径**——owner 模型下数据落点 `e-0001/{你的用户}/raw/...` 由服务端按你的身份钉死,手工拷到 `g-0001` 路径反而对不上。改走下一步**网页上传**(这也是本轮修 422 的验证点)。
-- [ ] **3. 浏览器:上传原始数据集(验 422 已修)**
+- [x] **3. 浏览器:上传原始数据集(验 422 已修)**
   - `http://localhost:8090` 登录(alice/alice)→ 数据集页 →「上传数据集」→ 数据集名 `coco`、选 `./.smoke/coco-smoke.tar` → 上传。
   - 应看到:**上传成功(不再 422)**,进度走完;数据落到 `e-0001/{你的用户 sub}/raw/coco/`(服务端钉死,你无需也无法指定路径)。
-- [ ] **4. 浏览器:注册原始数据集**
+- [x] **4. 浏览器:注册原始数据集**
   - 对刚上传的 `coco` 点「注册到目录」(不需要填组)。
   - 应看到:`coco` 作为**原始**数据集出现在数据目录,**归属显示 owner=你(创建人)**、带格式;重复注册被拒。
-- [ ] **5. 创建作业(从目录选源,不填路径/不选组)**
+- [x] **5. 创建作业(从目录选源,不填路径/不选组)**
   - 「创建作业」→ 源下拉选 **coco** → 产出名填 `coco-clean` → 提交(**已无「组」字段**)。
   - 应看到:作业提交,跳数据管线页。
-- [ ] **6. 等作业成功**
+- [x] **6. 等作业成功**
   - 数据管线页那条作业 处理中 → **成功**(几十秒)= **管线真的从目录解析到 coco 的 OSS 位置、读取并清洗、写回了 Lance**。
-- [ ] **7. 注册产物**
+- [x] **7. 注册产物**
   - 作业详情点「注册产物」(样本数已自动填好,不用改)。
   - 应看到:`coco-clean` 作为**已处理**数据集出现,**显示派生自 coco**、归属 owner=你。
-- [ ] **8. 看血缘 + 位置(可选)**
+- [x] **8. 看血缘 + 位置(可选)**
   - 数据目录里 `coco`(原始)与 `coco-clean`(已处理,来源=coco)两条都在,两条归属都显示 owner=你。
 
 > 任何一步对不上贴输出给我。全过 = catalog-driven 全链路通(下载→上传→注册→管线从目录读→处理→注册派生)。
