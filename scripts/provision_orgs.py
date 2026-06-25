@@ -129,6 +129,20 @@ class KCAdmin:
                 return True
         return False
 
+    # --- ⑤ 禁用 Organizations 自带 identity-first 登录步(回到用户名+密码同页)---
+    def disable_org_identity_first(self, flow: str = "browser") -> bool:
+        # organizationsEnabled 后 KC 内置 browser flow 会加 "Organization Identity-First Login"
+        # (先输用户名的两步式)。v1 不用 per-org IdP,禁它 → 落到 Username Password Form(同页)。
+        # 幂等:已 DISABLED 则跳过。dev-reset 重导后由本脚本恢复。
+        for e in self._get(self._r(f"/authentication/flows/{flow}/executions")).json():
+            if (e.get("displayName") or "").strip() == "Organization Identity-First Login":
+                if e.get("requirement") == "DISABLED":
+                    return False
+                self._ok(self._c.put(self._r(f"/authentication/flows/{flow}/executions"),
+                                     json={"id": e["id"], "requirement": "DISABLED"}))
+                return True
+        return False
+
 
 def admin_token(base_url: str, user: str, password: str) -> str:
     r = httpx.post(f"{base_url.rstrip('/')}/realms/master/protocol/openid-connect/token",
@@ -144,7 +158,9 @@ def provision(kc: KCAdmin) -> dict:
     added = [u for u in MEMBER_USERNAMES if kc.ensure_member(org_id, u)]
     scoped = [c for c in SCOPE_CLIENTS if kc.ensure_default_scope(c)]
     removed = [g for g in LEGACY_ENTERPRISE_GROUPS if kc.remove_legacy_group(g)]
-    return {"org_id": org_id, "members_added": added, "scoped_clients": scoped, "legacy_groups_removed": removed}
+    idf_disabled = kc.disable_org_identity_first()
+    return {"org_id": org_id, "members_added": added, "scoped_clients": scoped,
+            "legacy_groups_removed": removed, "identity_first_disabled": idf_disabled}
 
 
 def main() -> int:

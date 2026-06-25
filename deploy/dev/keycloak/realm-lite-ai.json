@@ -1,6 +1,7 @@
 {
   "realm": "lite-ai", "enabled": true,
   "internationalizationEnabled": true, "supportedLocales": ["zh-CN"], "defaultLocale": "zh-CN",
+  "loginTheme": "lite-ai",
   "organizationsEnabled": true,
   "registrationAllowed": true,
   "registrationEmailAsUsername": false,

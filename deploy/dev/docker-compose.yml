@@ -25,6 +25,7 @@ services:
     ports: ["8080:8080"]
     volumes:
       - ./keycloak:/opt/keycloak/data/import:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro   # Lite-AI 登录主题(start-dev 默认不缓存主题)
     depends_on:
       postgres:
         condition: service_healthy

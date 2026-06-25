@@ -1,0 +1,101 @@
+/* Lite-AI 登录主题:贴合应用控制台风格(浅色 + 靛蓝 #6366F1,圆角白卡)。
+   覆盖经典 keycloak 登录主题的关键类(PatternFly/Bootstrap)。*/
+
+:root {
+  --liteai-indigo: #6366F1;
+  --liteai-indigo-dark: #4F46E5;
+  --liteai-fuchsia: #d946ef;
+  --liteai-slate-50: #f8fafc;
+  --liteai-slate-200: #e2e8f0;
+  --liteai-slate-500: #64748b;
+  --liteai-slate-900: #0f172a;
+}
+
+/* 背景:浅色,替换深色多边形图 */
+.login-pf body,
+body.login-pf,
+.login-pf-page {
+  background: linear-gradient(160deg, #eef0ff 0%, #f8fafc 60%) !important;
+  background-image: none !important;
+  color: var(--liteai-slate-900);
+}
+
+/* 顶部品牌名 "Lite-AI" */
+#kc-header,
+#kc-header-wrapper {
+  color: var(--liteai-indigo-dark) !important;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  text-transform: none;
+  background: none;
+}
+
+/* 登录卡片:白底圆角阴影 */
+.login-pf-page .card-pf,
+.card-pf {
+  background: #ffffff !important;
+  border: 1px solid var(--liteai-slate-200) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 30px -12px rgba(15, 23, 42, 0.18) !important;
+  padding: 2rem 2.25rem !important;
+}
+
+/* 标题文字 */
+#kc-page-title {
+  color: var(--liteai-slate-900);
+  font-weight: 600;
+}
+
+/* 表单标签 */
+.login-pf .control-label,
+label {
+  color: var(--liteai-slate-500) !important;
+  font-weight: 500;
+}
+
+/* 输入框:浅色 + 圆角 + 聚焦靛蓝 */
+input.form-control,
+.pf-c-form-control,
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  background: #ffffff !important;
+  border: 1px solid var(--liteai-slate-200) !important;
+  border-radius: 10px !important;
+  color: var(--liteai-slate-900) !important;
+  height: 42px;
+}
+input.form-control:focus,
+.pf-c-form-control:focus,
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: var(--liteai-indigo) !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
+  outline: none !important;
+}
+
+/* 主按钮:靛蓝(hover 加深) */
+.btn-primary,
+input[type="submit"].btn-primary,
+.pf-c-button.pf-m-primary,
+button.pf-m-primary {
+  background: var(--liteai-indigo) !important;
+  border-color: var(--liteai-indigo) !important;
+  color: #ffffff !important;
+  border-radius: 10px !important;
+  font-weight: 600;
+  height: 44px;
+  box-shadow: none !important;
+}
+.btn-primary:hover,
+input[type="submit"].btn-primary:hover,
+.pf-c-button.pf-m-primary:hover {
+  background: var(--liteai-indigo-dark) !important;
+  border-color: var(--liteai-indigo-dark) !important;
+}
+
+/* 链接(注册/忘记密码) */
+a, #kc-registration a, #kc-info a {
+  color: var(--liteai-indigo-dark) !important;
+}
+a:hover { color: var(--liteai-indigo) !important; }
