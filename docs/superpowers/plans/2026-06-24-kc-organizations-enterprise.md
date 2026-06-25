@@ -12,6 +12,8 @@
 **分支:** 从 `main` 拉 `kc-organizations-enterprise`。
 **宪法同步:** 本计划**与代码同批**改 `docs/constitution.md` §1.1/1.2/1.3/1.4/1.6/2.1/2.2/5.1/8 + `CLAUDE.md`(ADR-025 §0 硬纪律;Task 8),保持宪法 ≡ 实现。
 
+> **状态:✅ 开发完成 + 图形化验收通过(2026-06-26)。** 10 task 全实现(parse_context 读 org claim、group_id 全清、契约/metalake/OSS 按不透明 alias、宪法同步、前端企业 display_name + 无企业待分配态);后端 239 / 前端 36 测试绿、4 维独立 code review 无 Critical/Important;live 验收:登录(同页/仅中文/Lite-AI 主题)→ 账户显企业 → 上传→注册→建作业→管线→目录全链路在 `ent-demo` 下不回归 → 无企业账号显待分配。**v-next(owner 拍)**:① 注册按域自动归属(与同页登录冲突,需后端自建,见 ADR-025 修订)② 邀请完整流(需 prod 真 SMTP;端点已建)③ 火山式"对象存储选 bucket / 多 catalog-schema / 多模态类型"(分别等 Cerbos·STS / 数据域 / 多模态管线)。**待合并 main。**
+
 ---
 
 ## File Structure
@@ -246,29 +248,29 @@
 > 三个图形界面:**应用控制台 `localhost:8090`**、**Keycloak 控制台 `localhost:8080`(admin/admin)**、**mailpit 收件箱 `localhost:8025`**。
 > **一次性前置(仅这步用命令,无法 GUI)**:`make dev-reset && make deps-dev`(重导含 Organizations 的 realm,清旧卷)→ `uv run python scripts/provision_orgs.py`(置备 org+成员)→ **`make bootstrap-catalog`(建 `lite-ai` 桶 + metalake `ent_demo`;dev-reset 清了 MinIO/Gravitino,必须重建,否则上传 OSS PUT 404)** → `make up`(起服务)。其余全部在浏览器完成。
 
-- [ ] **0.(KC 控制台)确认企业实体建好**
+- [x] **0.(KC 控制台)确认企业实体建好**
   - 开 `localhost:8080` → admin/admin → 左上切到 **`lite-ai` realm** → 左侧 **Organizations**。
   - 看到:组织 **Demo**(alias `ent-demo`,域 `acme.test`);点进 **Members** 看到 alice(类型 **Unmanaged**);**Groups 菜单下已无** `/e-0001/g-0001`(旧组已清)。
 
-- [ ] **1.(应用)登录看企业 — US1/US2**
+- [x] **1.(应用)登录看企业 — US1/US2**
   - `localhost:8090` 登录 alice → 左栏「**我的账户**」。
   - 看到:**企业显示「Demo 企业」**(显示名,**不是** `ent-demo` alias、不是 UUID);角色显示「成员/企业管理员」;**页面没有"用户组"维度**、不出现 `e-`/`g-` 原始 ID。
 
-- [ ] **2.(应用)注册建账号 + 待分配态 — US3(v1:管理员授予加入,域自动归属 v-next)**
+- [x] **2.(应用)注册建账号 + 待分配态 — US3(v1:管理员授予加入,域自动归属 v-next)**
   - 右上「登出」→ 登录页点「**注册**」→ 用任意邮箱注册并登录。
   - 看到:账号建好但**尚未归属企业** → 进业务显示**明确"暂无企业/待分配"提示**(不静默到处撞 403)。
   - 「加入企业」由**企业管理员授予**:KC 控制台(`:8080`)→ lite-ai → Organizations → Demo → Members → Add member 选该用户(或 prod 用邀请)→ 该用户重新登录后即为 Demo 企业成员、可用。
   - (注:**按邮箱域自助注册自动归属 = v-next**,与"同页登录"冲突,见 ADR-025 修订。)
 
-- [ ] **3.(应用 + mailpit)邀请加入 — US4**
+- [~] **3.(应用 + mailpit)邀请加入 — US4** — 延后(完整流需 prod 真 SMTP;dev 端点/inviter 已契约级锁定,mailpit 可验)
   - 用 **enterprise-admin** 账户登录 → 「我的账户」→「**邀请成员**」入口(普通成员看不到此入口)→ 填 `newhire@partner.com` → 提交,界面提示"已发送邀请"。
   - 开 `localhost:8025`(mailpit)→ 收件箱看到发给 `newhire@partner.com` 的**邀请邮件** → 点邮件里的接受链接 → 完成 → 该用户成为 Demo 企业成员(可回 KC 控制台 Organizations→Members 复核)。
 
-- [ ] **4.(应用)企业全链路不回归 — US2-AC3**
+- [x] **4.(应用)企业全链路不回归 — US2-AC3**
   - 用 alice → 「数据集」**上传 coco** → 「数据目录」点 coco「**注册到目录**」→ 「创建作业」选源 coco 跑 → 「数据管线」看作业**已完成** → 「数据目录」点 coco 看详情。
   - 看到:全程正常(企业隔离 + owner 不变);数据目录详情/位置在新企业标识 **`ent-demo`** 下(`s3a://.../ent-demo/{你}/...`),界面只显企业名不显 alias。
 
-- [ ] **5.(应用)隔离负例(图形可见)**
+- [x] **5.(应用)隔离负例(图形可见)**
   - 另一个**别的企业**用户登录 → 看不到 Demo 企业的数据(数据集/目录为空或仅自己企业)。
   - 平台管理员账户(无企业)登录 → **不被卷进"待分配"流程**(按特权账户处理);走普通业务页应被挡(符合"只能走 /admin/*")。
 
