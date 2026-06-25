@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development(推荐)或 superpowers:executing-plans 逐 task 实现。步骤用 checkbox(`- [ ]`)跟踪。
 
-**Goal:** 把「企业」从 KC realm group 路径约定升级为 **KC Organization**(不透明 alias 作 enterprise_id),身份降两级(平台→企业→用户)、`group_id` 全面清理,并打通**自助注册按邮箱域自动归企业 + 邀请**;企业硬隔离与 owner 授权不回归。
+**Goal:** 把「企业」从 KC realm group 路径约定升级为 **KC Organization**(不透明 alias 作 enterprise_id),身份降两级(平台→企业→用户)、`group_id` 全面清理;**注册建账号 + 企业管理员授予加入**(自助注册按域自动归属 / 邀请完整流 = v-next,见 ADR-025 修订);企业硬隔离与 owner 授权不回归。
 
 **Architecture:** 唯一改变点 = token 的 `organization` claim(KC Organization Membership mapper,**已实测**=org alias 数组,默认进 access token)→ `libs/identity/context.py:parse_context` 读它产出 `Membership(enterprise_id=alias, role)`(去 group_id)→ 下游 `can()`/Gravitino/OSS 隔离判定零改(can() 实测不读 group_id)。BFF 认证请求带 `scope=organization:*`(规避多-org claim 消失坑)。enterprise_id 改不透明 alias → 契约 pattern/Gravitino metalake/OSS 前缀一致换值(v1 prod 无数据=清晰切换,dev 重建)。
 
@@ -254,10 +254,11 @@
   - `localhost:8090` 登录 alice → 左栏「**我的账户**」。
   - 看到:**企业显示「Demo 企业」**(显示名,**不是** `ent-demo` alias、不是 UUID);角色显示「成员/企业管理员」;**页面没有"用户组"维度**、不出现 `e-`/`g-` 原始 ID。
 
-- [ ] **2.(应用)注册按邮箱域自动归企业 — US3**
-  - 右上「登出」→ 登录页点「**注册**」→ 用 `someone@acme.test`(已登记域)注册并登录。
-  - 看到:登录后**直接是 Demo 企业成员**,能进「数据集/上传」,**不撞"无企业"报错**;「我的账户」企业=Demo 企业。
-  - 再登出 → 用 `x@nodomain.test`(**无匹配域**)注册 → 看到:**明确提示"暂无企业/待分配"**(不是静默进去后到处 403)。
+- [ ] **2.(应用)注册建账号 + 待分配态 — US3(v1:管理员授予加入,域自动归属 v-next)**
+  - 右上「登出」→ 登录页点「**注册**」→ 用任意邮箱注册并登录。
+  - 看到:账号建好但**尚未归属企业** → 进业务显示**明确"暂无企业/待分配"提示**(不静默到处撞 403)。
+  - 「加入企业」由**企业管理员授予**:KC 控制台(`:8080`)→ lite-ai → Organizations → Demo → Members → Add member 选该用户(或 prod 用邀请)→ 该用户重新登录后即为 Demo 企业成员、可用。
+  - (注:**按邮箱域自助注册自动归属 = v-next**,与"同页登录"冲突,见 ADR-025 修订。)
 
 - [ ] **3.(应用 + mailpit)邀请加入 — US4**
   - 用 **enterprise-admin** 账户登录 → 「我的账户」→「**邀请成员**」入口(普通成员看不到此入口)→ 填 `newhire@partner.com` → 提交,界面提示"已发送邀请"。
