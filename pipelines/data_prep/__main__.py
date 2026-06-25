@@ -23,7 +23,7 @@ def main() -> int:
     ap.add_argument("--tar-dir", required=True)
     ap.add_argument("--work-dir", default="./.dataprep")
     ap.add_argument("--dataset", required=True)
-    ap.add_argument("--enterprise", default="e-0001")
+    ap.add_argument("--enterprise", default="ent-demo")
     ap.add_argument("--np", type=int, default=int(os.getenv("DJ_NP", (os.cpu_count() or 2) + 1)))
     a = ap.parse_args()
 

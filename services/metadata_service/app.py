@@ -16,6 +16,11 @@ from services.metadata_service.gravitino import GravitinoError, _is_conflict
 
 
 def _metalake(ent: str) -> str:
+    # enterprise_id(org alias)→ Gravitino metalake 名。**不变式**:映射须单射,
+    # 依赖 alias 字符集**不含 `_`**(契约 pattern `^[a-z][a-z0-9-]{3,}$` 保证)——
+    # 否则 `a_b` 与 `a-b` 会塌成同一 metalake → 跨租户串号。若将来放宽 pattern 允许 `_`,
+    # 必须改这里的映射(加前缀/编码),勿静默破隔离。
+    assert "_" not in ent, f"enterprise alias 不应含 '_'(会破 metalake 单射隔离): {ent!r}"
     return ent.replace("-", "_")
 
 

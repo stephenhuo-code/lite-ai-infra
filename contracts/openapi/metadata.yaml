@@ -17,7 +17,7 @@ paths:
       - {name: catalog, in: path, required: true, schema: {type: string}}
       - {name: schema, in: path, required: true, schema: {type: string}}
     get:
-      summary: 列出数据集(can() 按 group 过滤)
+      summary: 列出数据集(can() 按企业+owner 过滤)
       responses:
         '200': {description: datasets, content: {application/json: {schema: {$ref: '#/components/schemas/DatasetList'}}}}
     post:

@@ -10,6 +10,17 @@ it('侧栏可折叠', () => {
   expect(aside.className).toContain('w-16')
 })
 
+it('无企业账号在数据页显示「待分配」引导,而非 403(FR-003)', async () => {
+  // /v1/me/orgs 返回空 memberships(注册了但未被企业授予)→ 数据路由显友好引导
+  vi.stubGlobal('fetch', vi.fn(async (url: any) =>
+    String(url).includes('/v1/me/orgs')
+      ? { ok: true, status: 200, json: async () => ({ user: 'u', is_platform_admin: false, memberships: [], enterprises: [] }) }
+      : { ok: true, status: 200, json: async () => ({}) },
+  ))
+  render(<MemoryRouter initialEntries={['/datasets']}><Shell /></MemoryRouter>)
+  await waitFor(() => expect(screen.getByText('你还未加入任何企业')).toBeTruthy())
+})
+
 const realLocation = window.location
 function mockAssign() {
   // jsdom 的 location.assign 不可单独 redefine,整体替换 window.location(configurable)

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { api } from '../api/client'
+import { useOrgs } from '../auth/useOrgs'
 
 // 可折叠应用外壳(US1 鉴权壳):侧栏 w-64↔w-16、顶栏(登出)、<Outlet/>。
 // 视觉照高保真原型 docs/superpowers/prototypes/2026-06-22-data-domain-hifi.html(靛蓝 #6366F1)。
@@ -38,9 +39,34 @@ async function logout() {
   window.location.assign('/auth/login')
 }
 
+// 无企业(待分配)友好态:注册了但未被任何企业授予成员(C 方案,加入企业由管理员授予)。
+// 数据页改显此引导,而非数据请求 403 的红色"加载失败"(FR-003 显式可理解提示)。
+function NoEnterpriseNotice() {
+  return (
+    <div className="grid place-items-center" style={{ minHeight: '60vh' }}>
+      <div className="text-center max-w-md px-6">
+        <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-[#EEF0FF] grid place-items-center" style={{ color: '#6366F1' }}>
+          <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /><path d="M9 14h6" /></svg>
+        </div>
+        <h2 className="text-lg font-semibold text-slate-800">你还未加入任何企业</h2>
+        <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+          你的账号已创建,但尚未归属企业。请联系<b>企业管理员</b>将你加入企业后,再使用数据集 / 数据目录 / 作业等功能。
+        </p>
+        <NavLink to="/account" className="inline-block mt-5 text-sm font-medium px-4 py-2 rounded-xl text-white" style={{ background: '#6366F1' }}>
+          去「我的账户」查看
+        </NavLink>
+      </div>
+    </div>
+  )
+}
+
 export function Shell() {
   const [collapsed, setCollapsed] = useState(false)
   const asideWidth = collapsed ? 'w-16' : 'w-64'
+  const { orgs, loading } = useOrgs()
+  const location = useLocation()
+  // 已加载且无企业成员且非平台管理员 → 待分配态(数据页拦截,/account 放行)。
+  const noEnterprise = !loading && !!orgs && (orgs.memberships?.length ?? 0) === 0 && !orgs.is_platform_admin
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800">
@@ -107,7 +133,9 @@ export function Shell() {
         </header>
 
         <div className="p-7">
-          <Outlet />
+          {noEnterprise && location.pathname !== '/account'
+            ? <NoEnterpriseNotice />
+            : <Outlet />}
         </div>
       </main>
     </div>
