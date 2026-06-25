@@ -241,26 +241,37 @@
 
 ---
 
-## 手动验收 Runbook(owner 逐步跑,白话)
+## 图形化验收 Runbook(owner 在界面上点,全程看屏)
 
-> 仓库根、终端逐条。前置:Docker 在跑。
+> 三个图形界面:**应用控制台 `localhost:8090`**、**Keycloak 控制台 `localhost:8080`(admin/admin)**、**mailpit 收件箱 `localhost:8025`**。
+> **一次性前置(仅这步用命令,无法 GUI)**:`make dev-reset && make deps-dev`(重导含 Organizations 的 realm,清旧卷)→ `uv run python scripts/provision_orgs.py`(置备 org+成员)→ `make up`(起服务)。其余全部在浏览器完成。
 
-- [ ] **1. 起栈(含 KC organizations + mailpit)+ 置备 org**
-  - `make deps-dev`(等 KC 起)→ `uv run python scripts/provision_orgs.py`
-  - 应看到:org `ent-demo` 建好、alice 以 unmanaged 加入、旧 g- 子组已移除。
-- [ ] **2. 登录看企业(US1/US2)**
-  - `make up` → `localhost:8090` 登录 alice → 「我的账户」显示企业 **"Demo 企业"**(显示名,非 alias/UUID)、角色;跨企业不可见他企业数据。
-- [ ] **3. 注册按域自动归属(US3)**
-  - 登出 → 注册页用 `someone@acme.test` 注册 → 登录后**已是 Demo 企业成员**,直接能上传/见数据(**不撞无企业 403**)。
-  - 再用 `x@nodomain.test` 注册 → **显式提示待分配/拒绝**,不悬空。
-- [ ] **4. 邀请(US4)**
-  - 用 enterprise-admin 账户 → 账户页「邀请成员」填 `newhire@x.com` → `localhost:8025`(mailpit)收到邀请邮件 → 接受 → 成 Demo 企业成员。
-- [ ] **5. 全链路不回归(US2-AC3)**
-  - 上传 coco → 注册到目录 → 建作业 → 管线跑通 → 数据目录可见(全程在 **`ent-demo`** 不透明 alias 下,企业隔离 + owner 不变)。
-- [ ] **6. 隔离负例**
-  - 跨企业访问被拒;平台管理员(无企业)直达 /admin/*、不被"待分配"误伤。
+- [ ] **0.(KC 控制台)确认企业实体建好**
+  - 开 `localhost:8080` → admin/admin → 左上切到 **`lite-ai` realm** → 左侧 **Organizations**。
+  - 看到:组织 **Demo**(alias `ent-demo`,域 `acme.test`);点进 **Members** 看到 alice(类型 **Unmanaged**);**Groups 菜单下已无** `/e-0001/g-0001`(旧组已清)。
 
-> 任一步对不上贴输出。全过 = 企业=org 全链路通(建企业→注册按域归属/邀请→登录→数据全链路),企业硬隔离 + owner 不回归。
+- [ ] **1.(应用)登录看企业 — US1/US2**
+  - `localhost:8090` 登录 alice → 左栏「**我的账户**」。
+  - 看到:**企业显示「Demo 企业」**(显示名,**不是** `ent-demo` alias、不是 UUID);角色显示「成员/企业管理员」;**页面没有"用户组"维度**、不出现 `e-`/`g-` 原始 ID。
+
+- [ ] **2.(应用)注册按邮箱域自动归企业 — US3**
+  - 右上「登出」→ 登录页点「**注册**」→ 用 `someone@acme.test`(已登记域)注册并登录。
+  - 看到:登录后**直接是 Demo 企业成员**,能进「数据集/上传」,**不撞"无企业"报错**;「我的账户」企业=Demo 企业。
+  - 再登出 → 用 `x@nodomain.test`(**无匹配域**)注册 → 看到:**明确提示"暂无企业/待分配"**(不是静默进去后到处 403)。
+
+- [ ] **3.(应用 + mailpit)邀请加入 — US4**
+  - 用 **enterprise-admin** 账户登录 → 「我的账户」→「**邀请成员**」入口(普通成员看不到此入口)→ 填 `newhire@partner.com` → 提交,界面提示"已发送邀请"。
+  - 开 `localhost:8025`(mailpit)→ 收件箱看到发给 `newhire@partner.com` 的**邀请邮件** → 点邮件里的接受链接 → 完成 → 该用户成为 Demo 企业成员(可回 KC 控制台 Organizations→Members 复核)。
+
+- [ ] **4.(应用)企业全链路不回归 — US2-AC3**
+  - 用 alice → 「数据集」**上传 coco** → 「数据目录」点 coco「**注册到目录**」→ 「创建作业」选源 coco 跑 → 「数据管线」看作业**已完成** → 「数据目录」点 coco 看详情。
+  - 看到:全程正常(企业隔离 + owner 不变);数据目录详情/位置在新企业标识 **`ent-demo`** 下(`s3a://.../ent-demo/{你}/...`),界面只显企业名不显 alias。
+
+- [ ] **5.(应用)隔离负例(图形可见)**
+  - 另一个**别的企业**用户登录 → 看不到 Demo 企业的数据(数据集/目录为空或仅自己企业)。
+  - 平台管理员账户(无企业)登录 → **不被卷进"待分配"流程**(按特权账户处理);走普通业务页应被挡(符合"只能走 /admin/*")。
+
+> 每步以**界面看到的为准**,对不上截图给我。全过 = 企业=KC Organization 全链路在界面上通(建企业→注册按域归属/邀请→登录→数据全链路),企业硬隔离 + owner 不回归。
 
 ---
 
