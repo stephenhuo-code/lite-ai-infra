@@ -56,7 +56,10 @@ class KCAdmin:
 
     # --- ① org ---
     def find_org(self, alias: str) -> dict | None:
-        orgs = self._get(self._r("/organizations"), params={"search": alias}).json()
+        # KC `/organizations?search=` 按 name/domain 匹配,**不匹配 alias** → 用 alias 搜会漏掉
+        # name 不同的已存在 org(如 realm 导入的 alias=ent-demo/name=Demo)→ 误判不存在 → 重建 409。
+        # 故列全量(dev 规模可忽略分页)按 alias 精确过滤。
+        orgs = self._get(self._r("/organizations"), params={"first": 0, "max": 1000}).json()
         for o in orgs:
             if o.get("alias") == alias:
                 return o

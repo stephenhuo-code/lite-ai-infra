@@ -29,6 +29,27 @@ def test_ensure_org_exists_no_post():
     assert posts == []  # 已存在 → 不建
 
 
+def test_ensure_org_found_via_list_not_search():
+    # 回归:KC 真实语义 `/organizations?search=<alias>` 只匹配 name/domain、**不匹配 alias** → 返回空;
+    # 必须列全量(无 search)才能按 alias 找到 realm 导入的 org(name=Demo/alias=ent-demo)。
+    # 守护 find_org 不靠 search 匹配 alias(否则误判不存在 → 重建 → 真 KC 409)。
+    posts = []
+
+    def h(req):
+        if req.method == "GET" and req.url.path.endswith("/organizations"):
+            if "search" in req.url.params:
+                return httpx.Response(200, json=[])  # KC search 漏掉 alias
+            return httpx.Response(200, json=[{"id": "org-1", "alias": "ent-demo", "name": "Demo"}])
+        if req.method == "POST":
+            posts.append(str(req.url))
+            return httpx.Response(409, json={"errorMessage": "A organization with the same name already exists."})
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    oid = _admin(h).ensure_org(alias="ent-demo", name="Demo", domains=["acme.test"], display_name="Demo 企业")
+    assert oid == "org-1"
+    assert posts == []  # 靠列全量找到 → 不重建、不触 409
+
+
 def test_ensure_org_missing_creates():
     state = {"created": False}
     posts = []
