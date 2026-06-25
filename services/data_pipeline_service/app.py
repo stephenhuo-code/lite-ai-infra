@@ -16,17 +16,9 @@ from services.data_pipeline_service.jobs import JobSpec
 from services.data_pipeline_service.metadata_client import MetadataClient
 from services.data_pipeline_service.upload import ObjectMissing
 
-def _caller_group(ctx: Context, ent: str) -> str | None:
-    """owner 模型(ADR-024):授权不按组,但审计 label 仍记调用者在该企业的组(取首个,可缺)。"""
-    for m in ctx.memberships:
-        if str(m.enterprise_id) == ent and m.group_id is not None:
-            return str(m.group_id)
-    return None
-
 def _audit(audit: AuditWriter, ctx: Context, ent: str, resource_uri: str,
            action: str, decision: str, reason: str, metadata: dict | None = None) -> None:
     audit.write(AuditEvent(ts=datetime.now(timezone.utc).isoformat(), enterprise_id=ent,
-                           group_id=_caller_group(ctx, ent),
                            actor_user=ctx.user, actor_role=ctx.role_in(EnterpriseId(ent)) or "none",
                            action=action, resource_uri=resource_uri, decision=decision,
                            override=False, reason=reason, metadata=metadata or {}))
@@ -40,7 +32,7 @@ def build_app(runner, audit: AuditWriter, uploader=None, metadata=None):
                 ctx: Context = Depends(context_from_request)):
         ent = enterprise_of(ctx)
         # owner 模型(ADR-024):产出归提交用户(owner=ctx.user);can() 按企业隔离 + owner 判
-        res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), group_id=None, owner=ctx.user)
+        res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), owner=ctx.user)
         d = can(ctx, "data.prepare", res)
         if not d.allow:                       # deny → 零副作用 + 审计
             _audit(audit, ctx, ent, f"dataset/{body.dataset}", "data.prepare", "deny", d.reason)
@@ -74,7 +66,7 @@ def build_app(runner, audit: AuditWriter, uploader=None, metadata=None):
             je, jo = j.get("enterprise_id"), j.get("owner_user")
             if je is None or je != ent:                    # I-2 fail-closed:spec 缺失/跨企业 → 跳过
                 continue
-            res = Resource(kind="job", enterprise_id=EnterpriseId(ent), group_id=None, owner=jo)
+            res = Resource(kind="job", enterprise_id=EnterpriseId(ent), owner=jo)
             if not can(ctx, "data.read", res).allow:       # owner 模型:必经 can() 按 owner 过滤(非 owner 不可见)
                 continue
             if status and j.get("status") != status:       # status 过滤
@@ -89,7 +81,7 @@ def build_app(runner, audit: AuditWriter, uploader=None, metadata=None):
         job = runner.get(job_id)
         if job is None or job["enterprise_id"] != ent:
             raise HTTPException(status_code=404, detail="not found")   # 跨企业=不存在(不泄漏)
-        res = Resource(kind="job", enterprise_id=EnterpriseId(ent), group_id=None, owner=job.get("owner_user"))
+        res = Resource(kind="job", enterprise_id=EnterpriseId(ent), owner=job.get("owner_user"))
         d = can(ctx, "data.read", res)
         if not d.allow:                                               # 非 owner → 403(owner 模型)
             return JSONResponse(status_code=403, content={"reason": d.reason})
@@ -101,7 +93,7 @@ def build_app(runner, audit: AuditWriter, uploader=None, metadata=None):
             raise HTTPException(status_code=503, detail="upload not configured")
         ent = enterprise_of(ctx)
         # owner 模型(ADR-024):上传数据归上传用户(owner=ctx.user);can() 按企业隔离 + owner 判
-        res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), group_id=None, owner=ctx.user)
+        res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), owner=ctx.user)
         d = can(ctx, "data.upload", res)
         if not d.allow:                                       # deny → 零副作用 + 审计
             _audit(audit, ctx, ent, f"raw/{body.dataset}", "data.upload", "deny", d.reason)
@@ -127,7 +119,7 @@ def build_app(runner, audit: AuditWriter, uploader=None, metadata=None):
         rec = uploader.get_record(raw_id)
         if rec is None or rec["enterprise_id"] != ent:        # 跨企业=不存在(不泄漏)
             raise HTTPException(status_code=404, detail="not found")
-        res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), group_id=None, owner=rec.get("owner_user"))
+        res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), owner=rec.get("owner_user"))
         d = can(ctx, "data.upload", res)
         if not d.allow:                                       # 按记录 eid/owner 再 can()(C-2;owner 模型)
             return JSONResponse(status_code=403, content={"reason": d.reason})
@@ -153,7 +145,7 @@ def build_app(runner, audit: AuditWriter, uploader=None, metadata=None):
             re_, ro = r.get("enterprise_id"), r.get("owner_user")
             if re_ is None or re_ != ent:                     # fail-closed:缺失/跨企业 → 跳过
                 continue
-            res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), group_id=None, owner=ro)
+            res = Resource(kind="dataset", enterprise_id=EnterpriseId(ent), owner=ro)
             if not can(ctx, "data.read", res).allow:          # owner 模型:必经 can() 按 owner 过滤
                 continue
             if status and r.get("status") != status:

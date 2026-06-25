@@ -7,8 +7,7 @@ def can(ctx: Context, action: str, resource: Resource) -> Decision:
     """v1 薄 PolicyEngine。授权的唯一出入口（宪法 §2.4）。owner 模型(ADR-024)。
     强制：认证(=有 ctx) + 企业硬隔离 + owner-only(owner==user 或 enterprise-admin)。
     GPU>4 配额门槛 = enterprise-admin。
-    group 访问(scope / 跨用户共享)属 v2(Cerbos),v1 can() 不按 group 判隔离——签名不变。
-    resource.group_id 保留为属性(audit / Cerbos v2),不参与本决策。"""
+    身份降两级(ADR-025):已无用户组层;group 访问(scope / 跨用户共享)属 v2(Cerbos)。"""
     # platform-admin 只能走 /admin/* 特权路径；普通业务路径不允许
     if ctx.is_platform_admin:
         return Decision(False, "platform-admin must use /admin/* privileged API")

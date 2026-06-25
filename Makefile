@@ -1,5 +1,5 @@
 .PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog
-EID ?= e-0001
+EID ?= ent-demo
 sync:             ; uv sync --extra dev
 # dev/prod parity:建独立 .dj-venv(同云上 Data-Juicer+Ray);本地真跑数据管线前先 `make dj-setup` 一次
 dj-setup:         ; bash scripts/dj_setup.sh

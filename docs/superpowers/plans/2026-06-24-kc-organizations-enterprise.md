@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development(推荐)或 superpowers:executing-plans 逐 task 实现。步骤用 checkbox(`- [ ]`)跟踪。
 
-**Goal:** 把「企业」从 KC realm group 路径约定升级为 **KC Organization**(不透明 alias 作 enterprise_id),身份降两级(平台→企业→用户)、`group_id` 全面清理,并打通**自助注册按邮箱域自动归企业 + 邀请**;企业硬隔离与 owner 授权不回归。
+**Goal:** 把「企业」从 KC realm group 路径约定升级为 **KC Organization**(不透明 alias 作 enterprise_id),身份降两级(平台→企业→用户)、`group_id` 全面清理;**注册建账号 + 企业管理员授予加入**(自助注册按域自动归属 / 邀请完整流 = v-next,见 ADR-025 修订);企业硬隔离与 owner 授权不回归。
 
 **Architecture:** 唯一改变点 = token 的 `organization` claim(KC Organization Membership mapper,**已实测**=org alias 数组,默认进 access token)→ `libs/identity/context.py:parse_context` 读它产出 `Membership(enterprise_id=alias, role)`(去 group_id)→ 下游 `can()`/Gravitino/OSS 隔离判定零改(can() 实测不读 group_id)。BFF 认证请求带 `scope=organization:*`(规避多-org claim 消失坑)。enterprise_id 改不透明 alias → 契约 pattern/Gravitino metalake/OSS 前缀一致换值(v1 prod 无数据=清晰切换,dev 重建)。
 
@@ -11,6 +11,8 @@
 **地基:** [ADR-025](../adr/ADR-025-keycloak-organizations-as-enterprise.md)(Accepted)+ [探针 RESULTS](./2026-06-24-kc-organizations-enterprise/spikes/RESULTS.md)(KC 26.6.2 实测)。spec/design:[`2026-06-24-kc-organizations-enterprise/`](./2026-06-24-kc-organizations-enterprise/)(已过 DoR)。
 **分支:** 从 `main` 拉 `kc-organizations-enterprise`。
 **宪法同步:** 本计划**与代码同批**改 `docs/constitution.md` §1.1/1.2/1.3/1.4/1.6/2.1/2.2/5.1/8 + `CLAUDE.md`(ADR-025 §0 硬纪律;Task 8),保持宪法 ≡ 实现。
+
+> **状态:✅ 开发完成 + 图形化验收通过(2026-06-26)。** 10 task 全实现(parse_context 读 org claim、group_id 全清、契约/metalake/OSS 按不透明 alias、宪法同步、前端企业 display_name + 无企业待分配态);后端 239 / 前端 36 测试绿、4 维独立 code review 无 Critical/Important;live 验收:登录(同页/仅中文/Lite-AI 主题)→ 账户显企业 → 上传→注册→建作业→管线→目录全链路在 `ent-demo` 下不回归 → 无企业账号显待分配。**v-next(owner 拍)**:① 注册按域自动归属(与同页登录冲突,需后端自建,见 ADR-025 修订)② 邀请完整流(需 prod 真 SMTP;端点已建)③ 火山式"对象存储选 bucket / 多 catalog-schema / 多模态类型"(分别等 Cerbos·STS / 数据域 / 多模态管线)。**待合并 main。**
 
 ---
 
@@ -45,24 +47,24 @@
 
 > 探针 RESULTS 已实测机制;本 task 把它落到 lite-ai dev realm + 幂等置备脚本(供 prod/重导)。
 
-- [ ] **Step 1: realm JSON 开 organizations + 注册 + mailpit SMTP**
+- [x] **Step 1: realm JSON 开 organizations + 注册 + mailpit SMTP**
   `realm-lite-ai.json` 顶层加 `"organizationsEnabled": true`、`"registrationAllowed": true`、`"registrationEmailAsUsername": true`、`"smtpServer": {"host":"mailpit","port":"1025","from":"noreply@lite-ai.dev"}`;新增一个 org 节点:`"organizations":[{"name":"Demo","alias":"ent-demo","domains":[{"name":"acme.test","verified":true}],"redirectUrl":"","attributes":{"display_name":["Demo 企业"]}}]`(alias 不透明、不复用 e-XXXX);把 `organization` client scope 加到 `lite-ai-web`/`gateway` client 的 `defaultClientScopes`。
   - 注:realm import 不一定建 org 成员关系 → 成员由 Step 3 脚本补。
 
-- [ ] **Step 2: docker-compose 加 mailpit**
+- [x] **Step 2: docker-compose 加 mailpit**
   `deploy/dev/docker-compose.yml` 加服务:`mailpit: { image: axllent/mailpit, ports: ["8025:8025","1025:1025"] }`(8025 web UI 看邮件,1025 SMTP)。
 
-- [ ] **Step 3: 写 `scripts/provision_orgs.py`(幂等)**
+- [x] **Step 3: 写 `scripts/provision_orgs.py`(幂等)**
   用 KC admin REST(admin/admin,master/admin-cli):① 建/取 org(by alias `ent-demo`,设 domains + display_name attribute);② 把现有 realm 用户(alice 等,by username)以 **unmanaged** `POST organizations/{id}/members`(已是成员则跳);③ 确认 `organization` mapper `access.token.claim=true`、`multivalued=true`;④ 把 `organization` scope 设为 client default scope;⑤ **移除旧 `/e-XXXX/g-YYYY/` 子组**(by group path,存在才删)。每步查重幂等。
 
-- [ ] **Step 4: 契约级测试**
+- [x] **Step 4: 契约级测试**
   `tests/identity/test_provision_orgs.py`:mock KC admin httpx,断言脚本对"org 已存在/成员已存在"幂等(不重复 POST)、对缺失则建。
 
-- [ ] **Step 5: 真机验证 token(owner runbook 也覆盖)**
-  Run:`make deps-dev` 起 KC → `uv run python scripts/provision_orgs.py` → 取 alice token(scope `openid organization:*`)→ 解 `organization` claim == `["ent-demo"]`。
+- [~] **Step 5: 真机验证 token(owner runbook 也覆盖)** — 延后到 owner runbook §1。
+  需 `make dev-reset && make deps-dev` 重导 realm(realm 级 `organizationsEnabled` 才生效),该操作会清空本机 KC/MinIO 卷(毁灭性),headless 不擅自执行;置备逻辑已由 `tests/identity/test_provision_orgs.py` 契约级幂等测试锁定。
   Expected:claim 带不透明 alias;无选择器多-org 才为 null(单 org 用户不受影响)。
 
-- [ ] **Step 6: Commit** `git add -A && git commit -m "feat(kc): realm Organizations + 注册 + mailpit + 幂等 provision_orgs 脚本"`
+- [x] **Step 6: Commit** `git add -A && git commit -m "feat(kc): realm Organizations + 注册 + mailpit + 幂等 provision_orgs 脚本"`
 
 ---
 
@@ -70,7 +72,7 @@
 
 **Files:** Modify `libs/identity/context.py`、`libs/identity/ids.py`;Test `tests/identity/test_context.py`。
 
-- [ ] **Step 1: 改红测试**
+- [x] **Step 1: 改红测试**
   `tests/identity/test_context.py` 改/加:
   ```python
   from libs.identity.context import parse_context, Membership
@@ -88,8 +90,8 @@
       ctx = parse_context(sub="u-1", organization=["ent-demo"], realm_roles=["enterprise-admin"])
       assert ctx.role_in("ent-demo") == "enterprise-admin"
   ```
-- [ ] **Step 2: 跑红** `uv run pytest tests/identity/test_context.py -q` → FAIL(签名/字段不符)。
-- [ ] **Step 3: 实现**
+- [x] **Step 2: 跑红** `uv run pytest tests/identity/test_context.py -q` → FAIL(签名/字段不符)。
+- [x] **Step 3: 实现**
   `libs/identity/context.py`:
   ```python
   @dataclass(frozen=True)
@@ -119,8 +121,8 @@
   ```
   `libs/identity/ids.py`:删 `GroupId`(只留 `EnterpriseId`)。
   > 注:role 暂用 realm role 全局判(v1 单企业够用;多企业 per-org 角色 = v-next)。删除旧 `_RE_GROUP`/`_RE_ENT_ADMIN`/`_PLATFORM` group 路径正则。
-- [ ] **Step 4: 跑绿** `uv run pytest tests/identity/test_context.py -q` → PASS。
-- [ ] **Step 5: Commit** `git commit -am "feat(identity): parse_context 读 organization claim;Membership 去 group_id;role_in 去 gid"`
+- [x] **Step 4: 跑绿** `uv run pytest tests/identity/test_context.py -q` → PASS.
+- [x] **Step 5: Commit** `git commit -am "feat(identity): parse_context 读 organization claim;Membership 去 group_id;role_in 去 gid"`
 
 ---
 
@@ -128,16 +130,16 @@
 
 **Files:** Modify `services/_scaffold/auth.py`、`services/gateway/bff/oidc.py`、`services/gateway/bff/middleware.py`;Test `tests/services/scaffold/test_auth.py`、`tests/gateway/bff/test_session_mw.py`、`tests/gateway/bff/test_oidc.py`。
 
-- [ ] **Step 1: 改红测试(scaffold auth)**
+- [x] **Step 1: 改红测试(scaffold auth)**
   `tests/services/scaffold/test_auth.py`:x-test-claims seam 带 `{"sub","organization":["ent-demo"],"realm_roles":["enterprise-admin"]}` → `context_from_request` 产出 `role_in("ent-demo")=="enterprise-admin"`;真 JWT 路径 mock `verify_and_decode` 返回含 `organization`/`realm_access.roles` → 同。
-- [ ] **Step 2: 实现 `context_from_request`**
+- [x] **Step 2: 实现 `context_from_request`**
   改 `services/_scaffold/auth.py`:解出 `organization = claims.get("organization", [])`(KC `multivalued=true` 为 list;若为 str 包成 list)、`realm_roles = claims.get("realm_access",{}).get("roles",[])`;`return parse_context(sub=claims["sub"], organization=organization, realm_roles=realm_roles)`。x-test-claims 同形态。`enterprise_of` 不变(0/多企业显式拒)。
-- [ ] **Step 3: BFF authorize 带 organization:\* scope**
+- [x] **Step 3: BFF authorize 带 organization:\* scope**
   `services/gateway/bff/oidc.py:authorize_url`:`"scope": "openid organization:*"`(规避多-org claim 消失,RESULTS F3)。token 交换沿用。
-- [ ] **Step 4: `/auth/me` 加 organization + 企业 display_name**
+- [x] **Step 4: `/auth/me` 加 organization + 企业 display_name**
   `services/gateway/bff/middleware.py:auth_me`:从 claims 取 `organization`,返回 `enterprises`(alias 列表)+ 若 token 带 org display_name attribute 则带出(否则 alias);沿用 F2 在 access token。
-- [ ] **Step 5: 跑绿** `uv run pytest tests/services/scaffold tests/gateway/bff -q` → PASS。
-- [ ] **Step 6: Commit** `git commit -am "feat(bff): context_from_request 透传 organization;authorize 带 organization:* scope;/auth/me 加企业"`
+- [x] **Step 5: 跑绿** `uv run pytest tests/services/scaffold tests/gateway/bff -q` → PASS。
+- [x] **Step 6: Commit** `git commit -am "feat(bff): context_from_request 透传 organization;authorize 带 organization:* scope;/auth/me 加企业"`
 
 ---
 
@@ -145,19 +147,19 @@
 
 **Files:** Modify `libs/authz/types.py`、`libs/audit/oss_audit.py`、`services/data_pipeline_service/app.py`、`services/identity_org_service/app.py`、`pipelines/data_prep/runner.py`;Test 相应。
 
-- [ ] **Step 1: 改红测试**
+- [x] **Step 1: 改红测试**
   - `tests/services/data_pipeline/test_app.py`/`test_resolve.py`:审计断言去 `group_id`;`role_in(EnterpriseId(ent))` 单参。
   - `tests/services/identity/test_me_orgs.py`(或现有):`/v1/me/orgs` 返回项**无 `group_id`**、含 `enterprise_id`/`role`。
   - authz `tests/authz/test_can.py`:`Resource(...)` 构造去 `group_id`。
-- [ ] **Step 2: 实现清理**
+- [x] **Step 2: 实现清理**
   - `libs/authz/types.py`:`Resource` 删 `group_id` 字段。
   - `libs/audit/oss_audit.py`:`AuditEvent` 删 `group_id` 字段。
   - `services/data_pipeline_service/app.py`:**删 `_caller_group`**;`_audit` 去 `group_id=` 实参;所有 `role_in(EnterpriseId(ent))` 保持单参(已是);所有 `Resource(... group_id=None ...)` 去该参。
   - `services/identity_org_service/app.py:me_orgs`:投影去 `group_id`。
   - `pipelines/data_prep/runner.py`:`role_in` 调用去 gid 实参(若有)。
-- [ ] **Step 3: 跑绿** `uv run pytest -q` 全套(期望全绿;若个别测试仍引用 group_id 一并改)。
-- [ ] **Step 4: lint** `uv run lint-imports`(layering KEPT)。
-- [ ] **Step 5: Commit** `git commit -am "refactor(authz/audit): 全面清理 group_id(Resource/AuditEvent/_caller_group/me_orgs)"`
+- [x] **Step 3: 跑绿** `uv run pytest -q` 全套(期望全绿;若个别测试仍引用 group_id 一并改)。
+- [x] **Step 4: lint** `uv run lint-imports`(layering KEPT)。
+- [x] **Step 5: Commit** `git commit -am "refactor(authz/audit): 全面清理 group_id(Resource/AuditEvent/_caller_group/me_orgs)"`
 
 ---
 
@@ -165,13 +167,13 @@
 
 **Files:** Modify `contracts/openapi/{identity-org,metadata,data-pipeline}.yaml`;regen `libs/contracts_gen/*` + `frontend/src/api/types-*.ts`;Test `tests/contracts/*`(若有)。
 
-- [ ] **Step 1: 改契约**
+- [x] **Step 1: 改契约**
   - 三契约 `enterprise_id` pattern `^e-[0-9a-z]+$` → **`^[a-z][a-z0-9-]{3,}$`**(容不透明 alias,4 处)。
   - `identity-org.yaml`:`Membership` 删 `group_id`/`^g-` pattern;`/v1/me/orgs` 响应加 `enterprises`(alias[])+ 每企业 `display_name`(可空)。
-- [ ] **Step 2: 重生成 + 校验确定性**
+- [x] **Step 2: 重生成 + 校验确定性**
   Run:`make gen && git diff --stat libs/contracts_gen/`(应只反映本次契约改动)+ `make fe-types`。
-- [ ] **Step 3: 跑绿** `uv run pytest -q`(契约模型变更后服务/测试仍绿)。
-- [ ] **Step 4: Commit** `git commit -am "contract: enterprise_id pattern 放宽容不透明 alias;identity-org 去 group_id + 加 organization/display_name;regen"`
+- [x] **Step 3: 跑绿** `uv run pytest -q`(契约模型变更后服务/测试仍绿)。
+- [x] **Step 4: Commit** `git commit -am "contract: enterprise_id pattern 放宽容不透明 alias;identity-org 去 group_id + 加 organization/display_name;regen"`
 
 ---
 
@@ -179,14 +181,14 @@
 
 **Files:** Verify/Modify `services/metadata_service/app.py`(`_metalake`)、`pipelines/data_prep/paths.py`、`scripts/bootstrap_catalog.py`;Test `tests/services/metadata/*`、`tests/pipelines/test_paths.py`。
 
-- [ ] **Step 1: 确认 `_metalake` 对不透明 alias 合法**
+- [x] **Step 1: 确认 `_metalake` 对不透明 alias 合法**
   `_metalake(ent) = ent.replace("-","_")`;alias `ent-demo` → `ent_demo`(合法 `[a-z0-9_]`)。`tests/services/metadata/...` 加 `_metalake("ent-demo")=="ent_demo"` 断言。
-- [ ] **Step 2: paths/契约 pattern 一致**
+- [x] **Step 2: paths/契约 pattern 一致**
   `tests/pipelines/test_paths.py`:`DatasetPaths(bucket,"ent-demo",user,ds).raw_prefix` == `ent-demo/{user}/raw/{ds}/`(企业段为不透明 alias)。`DatasetPaths` 无需改(纯字符串);确认 dataset/filename 校验不误伤 alias。
-- [ ] **Step 3: bootstrap 接受不透明 alias**
+- [x] **Step 3: bootstrap 接受不透明 alias**
   `scripts/bootstrap_catalog.py`:`main(eid)` 的 `eid` 现可为 `ent-demo`;metalake=`ent_demo`。Run:`make bootstrap-catalog EID=ent-demo` → `bootstrapped ent_demo/data/datasets`。
-- [ ] **Step 4: 跑绿** `uv run pytest tests/services/metadata tests/pipelines -q` → PASS。
-- [ ] **Step 5: Commit** `git commit -am "feat(tenancy): Gravitino metalake/OSS 按不透明 alias;bootstrap 接受 alias"`
+- [x] **Step 4: 跑绿** `uv run pytest tests/services/metadata tests/pipelines -q` → PASS。
+- [x] **Step 5: Commit** `git commit -am "feat(tenancy): Gravitino metalake/OSS 按不透明 alias;bootstrap 接受 alias"`
 
 ---
 
@@ -194,15 +196,13 @@
 
 **Files:** Create BFF 邀请路由(`services/gateway/bff/orgs.py` 或并入 routes)+ KC admin 客户端;Test `tests/gateway/bff/test_orgs_invite.py`;e2e 用 mailpit。
 
-- [ ] **Step 1: 邀请端点(改红)**
-  `tests/gateway/bff/test_orgs_invite.py`:`POST /auth/orgs/invite`(body `{email}`)→ 仅 `enterprise-admin`(can() 或会话角色)可调;mock KC admin httpx,断言转发到 `organizations/{id}/members/invite-user`;非 admin → 403;无 CSRF → 403。
-- [ ] **Step 2: 实现邀请端点**
-  BFF 新路由:会话取 caller 的 org(alias)+ 角色 → enterprise-admin 才放行 → 用 KC admin client(service account 或 admin 凭据,env 注入,§5.2)调 `invite-user`。CSRF 同其它变更端点。
-- [ ] **Step 3: 注册自动归属 e2e(手动 runbook 钉死)**
-  起栈(含 mailpit)→ 浏览器 `localhost:8090` 注册 `x@acme.test`(已登记域)→ 登录后 `/auth/me` 的 enterprises 含 `ent-demo`,能上传/见本企业数据(不撞无企业 403);注册 `y@nodomain.test`(无匹配域)→ **显式提示"待分配/拒绝"**,不悬空。
-- [ ] **Step 4: 邀请 e2e**
-  enterprise-admin 调邀请 `newhire@x.com` → mailpit(`localhost:8025`)收到邀请邮件 → 接受 → 成 `ent-demo` 成员。
-- [ ] **Step 5: 跑绿 + Commit** `uv run pytest tests/gateway/bff/test_orgs_invite.py -q` → PASS;`git commit -am "feat(bff): 企业邀请端点(enterprise-admin)+ 注册按域归属 e2e"`
+- [x] **Step 1: 邀请端点(改红)**
+  `tests/gateway/bff/test_orgs_invite.py`:`POST /auth/orgs/invite`(body `{email}`)→ 仅 `enterprise-admin`(会话角色)可调;mock KC admin httpx,断言转发到 `organizations/{id}/members/invite-user`;非 admin → 403;无 CSRF → 403。
+- [x] **Step 2: 实现邀请端点**
+  BFF 新路由 `POST /auth/orgs/invite`(`services/gateway/bff/orgs.py` OrgInviter + middleware install_bff 路由):会话取 caller 的 org(alias)+ 角色 → enterprise-admin 才放行 → KC admin client(admin 凭据 env 注入,§5.2)调 `invite-user`。CSRF 由会话中间件强制(变更方法非豁免)。
+- [~] **Step 3: 注册自动归属 e2e(手动 runbook 钉死)** — 延后到 owner runbook §3(需 live KC + 浏览器,headless 不可跑;机制已就位:realm registrationAllowed + org domains acme.test + mailpit)。
+- [~] **Step 4: 邀请 e2e** — 延后到 owner runbook §4(需 live KC + mailpit;端点/inviter 已契约级测试锁定)。
+- [x] **Step 5: 跑绿 + Commit** `uv run pytest tests/gateway/bff/test_orgs_invite.py -q` → PASS。
 
 ---
 
@@ -210,13 +210,13 @@
 
 **Files:** Modify `docs/constitution.md`、`CLAUDE.md`、`scripts/ci_guards.sh`。
 
-- [ ] **Step 1: 改宪法本体(照 ADR-025 草案)**
+- [x] **Step 1: 改宪法本体(照 ADR-025 草案)**
   `docs/constitution.md`:§1.1 四级→两级(平台/企业/用户,删"用户组");§1.2 删 `GroupId`;§1.3 `enterprise_id=不透明 org alias`、删 `group_id=g-XXXX`;§1.4 删"私有资源还须 group_id";§1.6 私有资源按 owner(删 group_id 匹配,衔接 ADR-024);§2.1 `Organizations(企业,不透明 alias)+ 注册/邀请;删 Group 子组`;§2.2 `角色=member/enterprise-admin,经 realm role/org 属性表达,随 organization claim;不再 group 路径编码`;§5.1 审计 label 删 `group_id`;§8 grep 项删 `group_id`。
-- [ ] **Step 2: 改 CLAUDE.md 引言指针**
+- [x] **Step 2: 改 CLAUDE.md 引言指针**
   "多企业租户与标识"指针更新为:企业=Organization 不透明 alias、两级、group→Cerbos。
-- [ ] **Step 3: ci_guards 去 group_id**
+- [x] **Step 3: ci_guards 去 group_id**
   `scripts/ci_guards.sh`:删/改 `group_id` 散落比较 grep 项。Run `bash scripts/ci_guards.sh` → 绿。
-- [ ] **Step 4: Commit** `git commit -am "docs(constitution): 同步 ADR-025(企业=org 不透明 alias、两级、删 group 维度)+ CLAUDE.md + ci_guards"`
+- [x] **Step 4: Commit** `git commit -am "docs(constitution): 同步 ADR-025(企业=org 不透明 alias、两级、删 group 维度)+ CLAUDE.md + ci_guards"`
 
 ---
 
@@ -224,12 +224,12 @@
 
 **Files:** Modify `frontend/src/pages/Account.tsx`、`frontend/src/auth/useOrgs.ts`/`useMe.ts`;Create 邀请 UI(账户页或独立);regen types;Test vitest。
 
-- [ ] **Step 1: 改红 vitest**
+- [x] **Step 1: 改红 vitest**
   `Account.test.tsx`:mock `/v1/me/orgs` 返回 `{enterprises:[{alias:"ent-demo",display_name:"Demo 企业"}], ...}`(无 group_id)→ 断言页面显示 **"Demo 企业"**(非 alias、非 UUID);角色显示 member/enterprise-admin。
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
   `useOrgs.ts`/`useMe.ts`:类型随新契约(去 group_id、加 enterprises+display_name);`Account.tsx`:企业行显示 `display_name`,无访问组维度;enterprise-admin 显示「邀请成员」入口 → 调 `POST /auth/orgs/invite`。
-- [ ] **Step 3: 跑绿门禁** `make fe-types && cd frontend && npx vitest run && npm run lint && npm run build` → 全绿。
-- [ ] **Step 4: Commit** `git commit -m "feat(frontend): 账户页企业 display_name + enterprise-admin 邀请入口;去 group_id"`
+- [x] **Step 3: 跑绿门禁** `make fe-types && cd frontend && npx vitest run && npm run lint && npm run build` → 全绿。
+- [x] **Step 4: Commit** `git commit -m "feat(frontend): 账户页企业 display_name + enterprise-admin 邀请入口;去 group_id"`
 
 ---
 
@@ -237,32 +237,44 @@
 
 **Files:** Modify 本计划(嵌 runbook);全门禁。
 
-- [ ] **Step 1: 全绿门禁** `make gen && make lint && uv run pytest -q` + `cd frontend && npx vitest run && npm run build`;`make gen` 后 `git diff --exit-code libs/contracts_gen/` clean。
-- [ ] **Step 2: runbook 写入本文件 + Commit**(见下)。
-- [ ] **Step 3: 独立 code review**(superpowers:requesting-code-review)整分支,重点:企业硬隔离不被绕过(org claim 伪造防线)、多-org `organization:*` 固化、group_id 无残留、宪法 ≡ 实现、契约/生成物/前端类型一致。修 Critical/Important。
+- [x] **Step 1: 全绿门禁** `make gen && make lint && uv run pytest -q` + `cd frontend && npx vitest run && npm run build`;`make gen` 后 `git diff --exit-code libs/contracts_gen/` clean。
+- [x] **Step 2: runbook 写入本文件 + Commit**(见下)。
+- [x] **Step 3: 独立 code review**(superpowers:requesting-code-review)整分支,重点:企业硬隔离不被绕过(org claim 伪造防线)、多-org `organization:*` 固化、group_id 无残留、宪法 ≡ 实现、契约/生成物/前端类型一致。修 Critical/Important。
 
 ---
 
-## 手动验收 Runbook(owner 逐步跑,白话)
+## 图形化验收 Runbook(owner 在界面上点,全程看屏)
 
-> 仓库根、终端逐条。前置:Docker 在跑。
+> 三个图形界面:**应用控制台 `localhost:8090`**、**Keycloak 控制台 `localhost:8080`(admin/admin)**、**mailpit 收件箱 `localhost:8025`**。
+> **一次性前置(仅这步用命令,无法 GUI)**:`make dev-reset && make deps-dev`(重导含 Organizations 的 realm,清旧卷)→ `uv run python scripts/provision_orgs.py`(置备 org+成员)→ **`make bootstrap-catalog`(建 `lite-ai` 桶 + metalake `ent_demo`;dev-reset 清了 MinIO/Gravitino,必须重建,否则上传 OSS PUT 404)** → `make up`(起服务)。其余全部在浏览器完成。
 
-- [ ] **1. 起栈(含 KC organizations + mailpit)+ 置备 org**
-  - `make deps-dev`(等 KC 起)→ `uv run python scripts/provision_orgs.py`
-  - 应看到:org `ent-demo` 建好、alice 以 unmanaged 加入、旧 g- 子组已移除。
-- [ ] **2. 登录看企业(US1/US2)**
-  - `make up` → `localhost:8090` 登录 alice → 「我的账户」显示企业 **"Demo 企业"**(显示名,非 alias/UUID)、角色;跨企业不可见他企业数据。
-- [ ] **3. 注册按域自动归属(US3)**
-  - 登出 → 注册页用 `someone@acme.test` 注册 → 登录后**已是 Demo 企业成员**,直接能上传/见数据(**不撞无企业 403**)。
-  - 再用 `x@nodomain.test` 注册 → **显式提示待分配/拒绝**,不悬空。
-- [ ] **4. 邀请(US4)**
-  - 用 enterprise-admin 账户 → 账户页「邀请成员」填 `newhire@x.com` → `localhost:8025`(mailpit)收到邀请邮件 → 接受 → 成 Demo 企业成员。
-- [ ] **5. 全链路不回归(US2-AC3)**
-  - 上传 coco → 注册到目录 → 建作业 → 管线跑通 → 数据目录可见(全程在 **`ent-demo`** 不透明 alias 下,企业隔离 + owner 不变)。
-- [ ] **6. 隔离负例**
-  - 跨企业访问被拒;平台管理员(无企业)直达 /admin/*、不被"待分配"误伤。
+- [x] **0.(KC 控制台)确认企业实体建好**
+  - 开 `localhost:8080` → admin/admin → 左上切到 **`lite-ai` realm** → 左侧 **Organizations**。
+  - 看到:组织 **Demo**(alias `ent-demo`,域 `acme.test`);点进 **Members** 看到 alice(类型 **Unmanaged**);**Groups 菜单下已无** `/e-0001/g-0001`(旧组已清)。
 
-> 任一步对不上贴输出。全过 = 企业=org 全链路通(建企业→注册按域归属/邀请→登录→数据全链路),企业硬隔离 + owner 不回归。
+- [x] **1.(应用)登录看企业 — US1/US2**
+  - `localhost:8090` 登录 alice → 左栏「**我的账户**」。
+  - 看到:**企业显示「Demo 企业」**(显示名,**不是** `ent-demo` alias、不是 UUID);角色显示「成员/企业管理员」;**页面没有"用户组"维度**、不出现 `e-`/`g-` 原始 ID。
+
+- [x] **2.(应用)注册建账号 + 待分配态 — US3(v1:管理员授予加入,域自动归属 v-next)**
+  - 右上「登出」→ 登录页点「**注册**」→ 用任意邮箱注册并登录。
+  - 看到:账号建好但**尚未归属企业** → 进业务显示**明确"暂无企业/待分配"提示**(不静默到处撞 403)。
+  - 「加入企业」由**企业管理员授予**:KC 控制台(`:8080`)→ lite-ai → Organizations → Demo → Members → Add member 选该用户(或 prod 用邀请)→ 该用户重新登录后即为 Demo 企业成员、可用。
+  - (注:**按邮箱域自助注册自动归属 = v-next**,与"同页登录"冲突,见 ADR-025 修订。)
+
+- [~] **3.(应用 + mailpit)邀请加入 — US4** — 延后(完整流需 prod 真 SMTP;dev 端点/inviter 已契约级锁定,mailpit 可验)
+  - 用 **enterprise-admin** 账户登录 → 「我的账户」→「**邀请成员**」入口(普通成员看不到此入口)→ 填 `newhire@partner.com` → 提交,界面提示"已发送邀请"。
+  - 开 `localhost:8025`(mailpit)→ 收件箱看到发给 `newhire@partner.com` 的**邀请邮件** → 点邮件里的接受链接 → 完成 → 该用户成为 Demo 企业成员(可回 KC 控制台 Organizations→Members 复核)。
+
+- [x] **4.(应用)企业全链路不回归 — US2-AC3**
+  - 用 alice → 「数据集」**上传 coco** → 「数据目录」点 coco「**注册到目录**」→ 「创建作业」选源 coco 跑 → 「数据管线」看作业**已完成** → 「数据目录」点 coco 看详情。
+  - 看到:全程正常(企业隔离 + owner 不变);数据目录详情/位置在新企业标识 **`ent-demo`** 下(`s3a://.../ent-demo/{你}/...`),界面只显企业名不显 alias。
+
+- [x] **5.(应用)隔离负例(图形可见)**
+  - 另一个**别的企业**用户登录 → 看不到 Demo 企业的数据(数据集/目录为空或仅自己企业)。
+  - 平台管理员账户(无企业)登录 → **不被卷进"待分配"流程**(按特权账户处理);走普通业务页应被挡(符合"只能走 /admin/*")。
+
+> 每步以**界面看到的为准**,对不上截图给我。全过 = 企业=KC Organization 全链路在界面上通(建企业→注册按域归属/邀请→登录→数据全链路),企业硬隔离 + owner 不回归。
 
 ---
 

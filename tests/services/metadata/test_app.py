@@ -52,11 +52,11 @@ def _client(g=None):
     return TestClient(build_app(gravitino=g or FakeG()))
 
 
-def _h(sub, groups):
-    return {"x-test-claims": json.dumps({"sub": sub, "groups": groups})}
+def _h(sub, organization, realm_roles=()):
+    return {"x-test-claims": json.dumps({"sub": sub, "organization": list(organization), "realm_roles": list(realm_roles)})}
 
 
-_ALICE = _h("u-alice", ["/e-0001/g-0001/members"])
+_ALICE = _h("u-alice", ["e-0001"])
 _DS = "/v1/catalogs/data/schemas/datasets/datasets"
 
 
@@ -148,7 +148,7 @@ def test_register_invalid_name_422():
 
 def test_ambiguous_enterprise_400():
     # v1 单企业:同时属多个企业 → 拒绝(不静默挑第一个,宪法 §3.7)
-    h = _h("u-multi", ["/e-0001/g-0001/members", "/e-0002/g-0002/members"])
+    h = _h("u-multi", ["e-0001", "e-0002"])
     assert _client().get("/v1/catalogs", headers=h).status_code == 400
 
 
@@ -167,7 +167,7 @@ def test_docs_and_contract():
 def test_register_persists_and_returns_three_fields():
     c = _client()
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
-               headers=_h("u-alice", ["/e-0001/g-0001/members"]),
+               headers=_h("u-alice", ["e-0001"]),
                json={"name": "cc3m_clean", "kind": "processed",
                      "location": "s3://b/e-0001/u-alice/processed/cc3m_clean.lance",
                      "format": "Lance", "num_samples": 300, "size_bytes": 67891})
@@ -176,7 +176,7 @@ def test_register_persists_and_returns_three_fields():
     assert body["format"] == "Lance" and body["num_samples"] == 300 and body["size_bytes"] == 67891
     # 读取也带回(类型为 int,非字符串)
     g = c.get("/v1/catalogs/data/schemas/datasets/datasets/cc3m_clean",
-              headers=_h("u-alice", ["/e-0001/g-0001/members"])).json()
+              headers=_h("u-alice", ["e-0001"])).json()
     assert g["num_samples"] == 300 and isinstance(g["num_samples"], int)
     assert g["size_bytes"] == 67891 and g["format"] == "Lance"
 
@@ -184,7 +184,7 @@ def test_register_persists_and_returns_three_fields():
 def test_register_without_three_fields_returns_null():
     c = _client()
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
-               headers=_h("u-alice", ["/e-0001/g-0001/members"]),
+               headers=_h("u-alice", ["e-0001"]),
                json={"name": "plain_ds", "kind": "processed",
                      "location": "s3://b/e-0001/u-alice/processed/plain_ds.lance"})
     assert r.status_code == 201
@@ -197,7 +197,7 @@ def test_existing_dataset_projection_has_null_three_fields():
     # FakeG 预置的 cc3m(无这 3 个 property)→ 投影出 None,不报错
     c = _client()
     g = c.get("/v1/catalogs/data/schemas/datasets/datasets/cc3m",
-              headers=_h("u-alice", ["/e-0001/g-0001/members"])).json()
+              headers=_h("u-alice", ["e-0001"])).json()
     assert g["format"] is None and g["num_samples"] is None and g["size_bytes"] is None
 
 
@@ -205,13 +205,13 @@ def test_register_zero_counts_roundtrip_as_zero_not_null():
     # num_samples/size_bytes = 0 是合法值(minimum:0),必须按 0 存取回,不能被当 falsy 折成 null
     c = _client()
     r = c.post("/v1/catalogs/data/schemas/datasets/datasets",
-               headers=_h("u-alice", ["/e-0001/g-0001/members"]),
+               headers=_h("u-alice", ["e-0001"]),
                json={"name": "empty_ds", "kind": "processed",
                      "location": "s3://b/e-0001/u-alice/processed/empty_ds.lance",
                      "num_samples": 0, "size_bytes": 0})
     assert r.status_code == 201
     g = c.get("/v1/catalogs/data/schemas/datasets/datasets/empty_ds",
-              headers=_h("u-alice", ["/e-0001/g-0001/members"])).json()
+              headers=_h("u-alice", ["e-0001"])).json()
     assert g["num_samples"] == 0 and g["size_bytes"] == 0
 
 

@@ -9,7 +9,7 @@ class MemoryAuditSink:
 
 def _req(tmp_path, **kw):
     return PrepareRequest(tar_dir=str(tmp_path / "tars"), work_dir=str(tmp_path / "work"),
-                          bucket="bkt", enterprise_id="e-0001", group_id="g-0001",
+                          bucket="bkt", enterprise_id="e-0001",
                           dataset="coco", np=3, oss_endpoint="http://localhost:9000",
                           access_key="ak", secret_key="sk", **kw)
 
@@ -19,7 +19,7 @@ def test_source_location_fetches_from_oss_then_converts_local(tmp_path):
     def fake_fetch(s3, *, bucket, prefix, dest_dir):
         fetch_seen.update(bucket=bucket, prefix=prefix, dest_dir=dest_dir)
         return 2
-    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    ctx = parse_context("u-alice", ["e-0001"], [])
     req = _req(tmp_path, source_location="s3://lite-ai/e-0001/g-0001/raw/coco/")
     out = run_prepare(
         ctx, req, AuditWriter(sink),
@@ -45,7 +45,7 @@ def test_source_location_s3a_scheme_parsed(tmp_path):
     def fake_fetch(s3, *, bucket, prefix, dest_dir):
         fetch_seen.update(bucket=bucket, prefix=prefix, dest_dir=dest_dir)
         return 2
-    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    ctx = parse_context("u-alice", ["e-0001"], [])
     req = _req(tmp_path, source_location="s3a://lite-ai/e-0001/u-x/raw/coco/")
     run_prepare(
         ctx, req, AuditWriter(sink),
@@ -63,7 +63,7 @@ def test_tar_dir_path_unchanged_when_no_source_location(tmp_path):
     def fake_fetch(s3, *, bucket, prefix, dest_dir):
         fetched["called"] = True
         return 0
-    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    ctx = parse_context("u-alice", ["e-0001"], [])
     req = _req(tmp_path)  # no source_location → 旧行为
     out = run_prepare(
         ctx, req, AuditWriter(sink),
@@ -78,7 +78,7 @@ def test_tar_dir_path_unchanged_when_no_source_location(tmp_path):
 def test_source_location_zero_tars_raises(tmp_path):
     import pytest
     sink = MemoryAuditSink()
-    ctx = parse_context("u-alice", ["/e-0001/g-0001/members"])
+    ctx = parse_context("u-alice", ["e-0001"], [])
     req = _req(tmp_path, source_location="s3://lite-ai/e-0001/g-0001/raw/coco/")
     with pytest.raises(RuntimeError, match="no .tar"):
         run_prepare(

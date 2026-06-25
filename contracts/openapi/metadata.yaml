@@ -17,7 +17,7 @@ paths:
       - {name: catalog, in: path, required: true, schema: {type: string}}
       - {name: schema, in: path, required: true, schema: {type: string}}
     get:
-      summary: 列出数据集(can() 按 group 过滤)
+      summary: 列出数据集(can() 按企业+owner 过滤)
       responses:
         '200': {description: datasets, content: {application/json: {schema: {$ref: '#/components/schemas/DatasetList'}}}}
     post:
@@ -47,7 +47,7 @@ components:
       required: [name, enterprise_id, owner, scope, location]               # owner 模型(ADR-024):去 group_id required,owner 必填
       properties:
         name: {type: string}
-        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        enterprise_id: {type: string, pattern: '^[a-z][a-z0-9-]{3,}$'}
         owner: {type: [string, 'null']}    # owner(ADR-024):上传/注册用户(sub,§1.4 不透明)
         scope: {type: string, enum: [private, shared]}
         location: {type: string}

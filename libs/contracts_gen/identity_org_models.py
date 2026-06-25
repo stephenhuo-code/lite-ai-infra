@@ -10,17 +10,21 @@ from pydantic import BaseModel, constr
 
 class Role(Enum):
     member = 'member'
-    group_admin = 'group-admin'
     enterprise_admin = 'enterprise-admin'
 
 
 class Membership(BaseModel):
-    enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
-    group_id: constr(pattern=r'^g-[0-9a-z]+$') | None = None
+    enterprise_id: constr(pattern=r'^[a-z][a-z0-9-]{3,}$')
     role: Role
+
+
+class Enterprise(BaseModel):
+    alias: constr(pattern=r'^[a-z][a-z0-9-]{3,}$')
+    display_name: str | None = None
 
 
 class Memberships(BaseModel):
     user: str | None = None
     is_platform_admin: bool | None = None
     memberships: list[Membership] | None = None
+    enterprises: list[Enterprise] | None = None

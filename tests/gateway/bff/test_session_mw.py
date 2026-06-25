@@ -28,7 +28,8 @@ def _downstream():
 
 
 def _claims(_token):
-    return {"sub": "u-alice", "groups": ["/e-0001/g-0001/members"],
+    return {"sub": "u-alice", "organization": ["ent-demo"],
+            "realm_access": {"roles": ["member"]},
             "preferred_username": "alice", "email": "alice@example.com"}
 
 
@@ -126,6 +127,7 @@ def test_auth_me_returns_user_and_csrf(monkeypatch):
     body = r.json()
     assert body["user"] == "u-alice" and body["is_platform_admin"] is False and body["csrf"] == "csrf-xyz"
     assert body["username"] == "alice" and body["email"] == "alice@example.com"  # 真实展示信息
+    assert body["enterprises"] == ["ent-demo"]  # 企业归属来自 organization claim(alias)
 
 
 def test_auth_me_no_session_401(monkeypatch):
@@ -174,3 +176,15 @@ def test_refresh_coordinator_failure_clears_lock_and_allows_retry():
 
     r = asyncio.run(go())
     assert r["access_token"] == "ok" and len(attempts) == 2
+
+
+# ---- _claim_org_roles 归一(含 RESULTS F3 多-org null 守卫)----
+
+def test_claim_org_roles_normalizes_null_and_str(monkeypatch):
+    _env(monkeypatch)   # OidcConfig 读 env(import 期不需,但保持一致)
+    from services.gateway.bff.middleware import _claim_org_roles
+    assert _claim_org_roles({"organization": None}) == ([], [])          # 多-org bug 发 null → 空,不产 [None]
+    assert _claim_org_roles({"organization": "ent-demo"}) == (["ent-demo"], [])  # 单字符串归一
+    assert _claim_org_roles({"organization": ["a", "b"], "realm_access": {"roles": ["enterprise-admin"]}}) \
+        == (["a", "b"], ["enterprise-admin"])
+    assert _claim_org_roles({}) == ([], [])                              # 缺省

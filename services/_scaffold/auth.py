@@ -7,6 +7,13 @@ from libs.identity.context import parse_context, Context
 from libs.identity.tokens import verify_and_decode
 
 
+def _as_list(v) -> list[str]:
+    """KC organization claim:multivalued=true 为 list、=false 为单字符串 → 统一成 list。"""
+    if v is None:
+        return []
+    return list(v) if isinstance(v, list) else [v]
+
+
 def enterprise_of(ctx: Context) -> str:
     """v1 单企业:从 token 推导调用者企业;属 0/多个企业显式拒(宪法 §3.7,不静默挑第一个)。"""
     ents = []
@@ -30,7 +37,9 @@ def context_from_request(request: Request) -> Context:
             c = json.loads(raw)
         except ValueError:
             raise HTTPException(status_code=401, detail="invalid test claims")
-        return parse_context(sub=c["sub"], groups=c.get("groups", []))
+        # 测试 seam:扁平 organization(alias 数组)+ realm_roles
+        return parse_context(sub=c["sub"], organization=_as_list(c.get("organization")),
+                             realm_roles=_as_list(c.get("realm_roles")))
     authz = request.headers.get("authorization", "")
     if not authz.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="unauthenticated")
@@ -40,4 +49,6 @@ def context_from_request(request: Request) -> Context:
                                    issuer=os.getenv("LITEAI_TOKEN_ISSUER"))
     except Exception:
         raise HTTPException(status_code=401, detail="invalid token")
-    return parse_context(sub=claims["sub"], groups=claims.get("groups", []))
+    # KC token:organization claim 在顶层(org alias 数组),角色在 realm_access.roles
+    return parse_context(sub=claims["sub"], organization=_as_list(claims.get("organization")),
+                         realm_roles=(claims.get("realm_access") or {}).get("roles", []))

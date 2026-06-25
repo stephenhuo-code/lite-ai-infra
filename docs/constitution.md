@@ -1,7 +1,7 @@
 # Lite AI Infra — 架构宪法（Constitution）
 
-> **状态**：Active（v1 起生效）｜**最后更新**：2026-06-14
-> **来源**：ADR-002 / ADR-010 / ADR-011 / ADR-012 / ADR-015 / ADR-016 / ADR-017 + design `docs/superpowers/specs/2026-05-08-llm-infra-platform-design.md`（§3.0 / §3.2）
+> **状态**：Active（v1 起生效）｜**最后更新**：2026-06-25
+> **来源**：ADR-002 / ADR-010 / ADR-011 / ADR-012 / ADR-015 / ADR-016 / ADR-017 / ADR-024 / **ADR-025（企业=KC Organization 不透明 alias、身份降两级、注册/邀请）** + design `docs/superpowers/specs/2026-05-08-llm-infra-platform-design.md`（§3.0 / §3.2）
 > **配套**：AI 开发流程图文说明见 `docs/bestpractise/ai-dev-workflow.html`；通用版宪法模板见 `docs/bestpractise/constitution.template.md`
 > **性质**：**不可违反的硬纪律**。代码、计划、PR 与本文件冲突时，以本文件为准。
 
@@ -12,18 +12,18 @@
 
 ---
 
-## 1. 多企业租户与标识（ADR-010）
-1. 层级固定为 **平台 → 企业(enterprise) → 用户组(group) → 用户**。
-2. **`EnterpriseId` / `GroupId` 是独立类型**（Types 层），不与 `string` 互转；任何资源标识构造函数**只接收对应类型**。
-3. 标识符：`enterprise_id = e-XXXX`（全局唯一）、`group_id = g-XXXX`（企业内唯一）。
-4. **资源命名必须含 `enterprise_id`**（私有资源还须 `group_id`）；**`display_name` 严禁**出现在资源名 / 路径 / schema / index / label。
+## 1. 多企业租户与标识（ADR-010 / ADR-025）
+1. 层级固定为 **平台 → 企业(enterprise) → 用户**（**身份降两级，ADR-025**：v1 移除用户组层）。
+2. **`EnterpriseId` 是独立类型**（Types 层），不与 `string` 互转；任何资源标识构造函数**只接收对应类型**。（`GroupId` 已随用户组层移除。）
+3. 标识符：`enterprise_id = KC Organization 的不透明 alias`（全局唯一，realm 内唯一；如 `ent-<随机>`，**非语义编码** `e-XXXX`）。
+4. **资源命名必须含 `enterprise_id`**；**`display_name` 严禁**出现在资源名 / 路径 / schema / index / label（**界面渲染/展示用途例外**：§1.4 允许显示名作展示，FR-002b——展示场景的代码须标注 `display-name-ok` 经评审豁免）。
 5. **资源归属编码在资源自身**（OSS 路径 / K8s label / MLflow tag / Gravitino schema 名），授权与过滤据此读取。
-6. **硬隔离不变式**：非 admin 路径必须 `resource.enterprise_id == ctx.enterprise_id`；私有资源还须 `group_id` 匹配或 `enterprise-admin`；**跨企业仅 `platform-admin` 走显式特权 API**。
+6. **硬隔离不变式**：非 admin 路径必须 `resource.enterprise_id` 命中 `ctx` 的某条 membership（`any(m.enterprise_id == resource.enterprise_id)`）；私有资源按 **owner**（owner==user 或 `enterprise-admin`，衔接 ADR-024 owner 模型，不再按 group_id 匹配）；**跨企业仅 `platform-admin` 走显式特权 API**。
 
-## 2. 身份与授权（ADR-002 / ADR-010 / ADR-011 / ADR-012）
-1. 身份：**Keycloak 26.6.2**，**单一 realm + Organizations（企业）+ Group 子组（用户组+角色）**，**HA 双副本 + RDS 主备**。
-2. **角色经 Group 子组路径编码**（`/e-x/g-y/{admins|members}`），随 token 的 `groups` claim 带出；**不用 Keycloak realm role 表达 scope**。
-3. **token 仅认证**（user + 活跃企业 + groups）；**不承载授权决策**；角色/成员/资源属性由服务端解析/查取。
+## 2. 身份与授权（ADR-002 / ADR-010 / ADR-011 / ADR-012 / ADR-025）
+1. 身份：**Keycloak 26.6.2**，**单一 realm + Organizations（企业，不透明 alias）+ 自助注册（按邮箱域自动归企业）/ 邀请**，**HA 双副本 + RDS 主备**。**v1 移除 Group 子组层**（身份降两级）。
+2. **企业归属随 token 的 `organization` claim**（KC Organization Membership mapper = org alias 数组）带出；**角色 = `member` / `enterprise-admin`，经 realm role / org 属性表达**（不再用 Group 子组路径编码）。
+3. **token 仅认证**（user + 所属企业 alias + 角色）；**不承载授权决策**；角色/成员/资源属性由服务端解析/查取。
 4. **授权唯一出入口：`PolicyEngine.can(ctx, action, resource)`**；**禁止散落 `if enterprise_id == ...`**。
 5. 授权实现分期：**v1 薄 `can()`**（认证 + 企业隔离硬检查 + 基本角色门槛，in-code）→ **v2 Cerbos PDP**（ABAC / derived role，策略 in git）。`can()` 是 seam，替换 PDP **零改 handler**。
 6. **Keycloak 不做授权**（不用 Authorization Services）。
@@ -56,7 +56,7 @@
 5. 3 人团队纪律：服务虽全拆，**共享统一脚手架**（FastAPI 模板 / CI / 可观测埋点）。
 
 ## 5. 运行时与交付纪律
-1. **可观测性 by default**：每服务输出结构化日志 + 指标 + trace，**统一携带 `enterprise_id` / `group_id` label**；**无观测不上线**。
+1. **可观测性 by default**：每服务输出结构化日志 + 指标 + trace，**统一携带 `enterprise_id` label**；**无观测不上线**。
 2. **安全 / 最小权限**：**密钥不进代码 / 仓库**（用 KMS / secret 管理）；RAM / STS **最小权限 + 短期凭证**；授权 **default-deny**（未明确允许即拒）。
 3. **配置外置 + 环境对等**：所有配置经 env / ConfigMap，禁硬编码；**dev(docker-compose) / staging / prod 同构**（mock 仅替换本地不可得的依赖）。
 4. **错误显式可解释**：决策 / 失败返回可解释 `reason`（进 4xx body + audit）；**fail fast**，不静默吞错。
@@ -77,8 +77,8 @@
 
 ## 8. CI 防线（机器强制）
 - **import-linter / dependency-cruiser**：依赖方向（分层不被破坏）。
-- **grep**：`display_name` 不得出现在资源命名。
-- **grep**：无散落的 `enterprise_id` / `group_id` 直接比较（必须经 `can()`）。
+- **grep**：`display_name` 不得出现在资源命名（界面渲染/展示用途须标注 `display-name-ok` 经评审豁免）。
+- **grep**：无散落的 `enterprise_id` 直接比较（必须经 `can()`）。
 - **契约 breaking-change 校验**（`oasdiff` / `buf breaking`）。
 
 ---

@@ -45,4 +45,4 @@ def main(eid: str) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1] if len(sys.argv) > 1 else "e-0001"))
+    raise SystemExit(main(sys.argv[1] if len(sys.argv) > 1 else "ent-demo"))

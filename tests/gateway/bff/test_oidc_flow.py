@@ -27,6 +27,9 @@ def test_login_redirects_to_authorize_with_pkce(monkeypatch):
     loc = r.headers["location"]
     assert "response_type=code" in loc and "code_challenge=" in loc and "state=" in loc
     assert "code_challenge_method=S256" in loc
+    # 多-org 坑缓解(RESULTS F3):认证请求带动态 scope organization:*,否则多企业用户 claim 消失
+    assert "organization:*" in urllib.parse.unquote(loc)
+    assert "openid" in urllib.parse.unquote(loc)
     assert "oidc_state" in r.cookies      # 临时 state/verifier cookie 已下发
 
 

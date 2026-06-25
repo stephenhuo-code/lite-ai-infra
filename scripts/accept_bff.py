@@ -7,7 +7,7 @@ CSRF 缺头 403/带头 202、登出清 cookie。打印 PASS/FAIL,全过退出码
 
 前置:make up(realm 含 lite-ai-web + gateway 带 BFF env)。
 注:浏览器视觉登录(/auth/login→Keycloak→回调)是 owner 单独的视觉签认;本脚本覆盖后端实质行为。
-env:GW、KC、BFF_SESSION_KEY(默认 = dev_services.sh 的 dev 值)、KC_USER/KC_PASS、GROUP
+env:GW、KC、BFF_SESSION_KEY(默认 = dev_services.sh 的 dev 值)、KC_USER/KC_PASS
 """
 from __future__ import annotations
 import os, sys, time
@@ -19,7 +19,6 @@ GW = os.getenv("GW", "http://localhost:8090")
 KC = os.getenv("KC", "http://localhost:8080/realms/lite-ai")
 KEY = os.getenv("BFF_SESSION_KEY", "5SetoEInIYji6K_tuQEB8pJ8NCaoC5yi2vNAxtPi7gg=")
 USER, PASS = os.getenv("KC_USER", "alice"), os.getenv("KC_PASS", "alice")
-GROUP = os.getenv("GROUP", "g-0001")
 CSRF = "csrf-accept"
 
 _results: list[tuple[bool, str]] = []
@@ -38,7 +37,7 @@ def _session_cookies() -> dict:
     return {SESSION_COOKIE: SessionCodec(KEY.encode()).encode(sd), "csrf_token": CSRF}
 
 def main() -> int:
-    print(f"BFF 验收 @ {GW}(user={USER}, group={GROUP})\n")
+    print(f"BFF 验收 @ {GW}(user={USER})\n")
     try:
         cookies = _session_cookies()
     except Exception as e:

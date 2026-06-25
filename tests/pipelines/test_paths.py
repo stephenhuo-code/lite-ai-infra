@@ -26,6 +26,13 @@ def _p(dataset="cc3m"):
 def test_raw_object_key_builds_isolated_path():
     assert _p().raw_object_key("part-0.tar") == "e-0001/u-alice/raw/cc3m/part-0.tar"
 
+def test_opaque_alias_enterprise_segment():
+    # enterprise_id 改不透明 org alias(ADR-025):路径段照原样带 alias,不误伤(企业段非校验目标)
+    p = DatasetPaths(bucket="b", enterprise_id=EnterpriseId("ent-demo"), user_id="u-alice", dataset="cc3m")
+    assert p.raw_prefix == "ent-demo/u-alice/raw/cc3m/"
+    assert p.processed_uri == "s3://b/ent-demo/u-alice/processed/cc3m.lance"
+    assert p.raw_object_key("part-0.tar") == "ent-demo/u-alice/raw/cc3m/part-0.tar"
+
 @pytest.mark.parametrize("bad", ["../x", "a/b", "/etc/passwd", "..", ".hidden", ""])
 def test_raw_object_key_rejects_traversal(bad):
     with pytest.raises(ValueError):

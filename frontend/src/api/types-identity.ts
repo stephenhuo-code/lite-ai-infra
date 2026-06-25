@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 从 token 解析调用者的 企业/组/角色 成员关系 */
+        /** 从 token 解析调用者的 企业/角色 成员关系(身份降两级:无访问组) */
         get: {
             parameters: {
                 query?: never;
@@ -53,14 +53,18 @@ export interface components {
     schemas: {
         Membership: {
             enterprise_id: string;
-            group_id?: string | null;
             /** @enum {string} */
-            role: "member" | "group-admin" | "enterprise-admin";
+            role: "member" | "enterprise-admin";
+        };
+        Enterprise: {
+            alias: string;
+            display_name?: string | null;
         };
         Memberships: {
             user?: string;
             is_platform_admin?: boolean;
             memberships?: components["schemas"]["Membership"][];
+            enterprises?: components["schemas"]["Enterprise"][];
         };
     };
     responses: never;

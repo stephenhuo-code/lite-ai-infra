@@ -23,14 +23,15 @@ def main() -> int:
     ap.add_argument("--tar-dir", required=True)
     ap.add_argument("--work-dir", default="./.dataprep")
     ap.add_argument("--dataset", required=True)
-    ap.add_argument("--enterprise", default="e-0001")
-    ap.add_argument("--group", default="g-0001")
+    ap.add_argument("--enterprise", default="ent-demo")
     ap.add_argument("--np", type=int, default=int(os.getenv("DJ_NP", (os.cpu_count() or 2) + 1)))
     a = ap.parse_args()
 
+    # 身份降两级(ADR-025):CLI 态调用者身份走 LITEAI_SUB + LITEAI_ORGANIZATION(org alias 数组)
+    # / LITEAI_REALM_ROLES;默认归属 --enterprise(单企业 member,无用户组层)。
     ctx = parse_context(sub=os.getenv("LITEAI_SUB", "cli-user"),
-                        groups=json.loads(os.getenv("LITEAI_GROUPS",
-                            f'["/{a.enterprise}/{a.group}/members"]')))
+                        organization=json.loads(os.getenv("LITEAI_ORGANIZATION", f'["{a.enterprise}"]')),
+                        realm_roles=json.loads(os.getenv("LITEAI_REALM_ROLES", "[]")))
     endpoint = os.environ["OSS_ENDPOINT"]
     s3 = boto3.client("s3", endpoint_url=endpoint,
                       aws_access_key_id=os.environ["OSS_ACCESS_KEY"],
@@ -40,7 +41,7 @@ def main() -> int:
                       config=oss_boto3_config(endpoint))
     audit = AuditWriter(OssAuditSink(bucket=os.environ["AUDIT_BUCKET"], client=s3))
     req = PrepareRequest(tar_dir=a.tar_dir, work_dir=a.work_dir, bucket=os.environ["DATA_BUCKET"],
-                         enterprise_id=a.enterprise, group_id=a.group, dataset=a.dataset,
+                         enterprise_id=a.enterprise, dataset=a.dataset,
                          np=a.np, oss_endpoint=endpoint,
                          access_key=os.environ["OSS_ACCESS_KEY"],
                          secret_key=os.environ["OSS_SECRET_KEY"],

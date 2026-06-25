@@ -73,7 +73,7 @@ components:
         status: {type: string, enum: [queued, running, succeeded, failed]}
         terminal: {type: boolean}     # 派生:status∈{succeeded,failed}。客户端按此判终态(ADR-018 不变量 4;S2a 加新终态如 cancelled 不破坏轮询)
         dataset: {type: string}
-        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        enterprise_id: {type: string, pattern: '^[a-z][a-z0-9-]{3,}$'}
         owner_user: {type: [string, 'null']}   # owner(ADR-024):提交作业的用户(sub,§1.4 不透明)
         source_dataset: {type: [string, 'null']}   # 血缘:真实来源 raw 数据集名(US3-AC1/SC-003);前端注册产物 derived_from 取它。非 required(旧 job 无则 null)
         rows_in: {type: [integer, 'null']}
@@ -122,7 +122,7 @@ components:
       properties:
         id: {type: string}
         name: {type: string}
-        enterprise_id: {type: string, pattern: '^e-[0-9a-z]+$'}
+        enterprise_id: {type: string, pattern: '^[a-z][a-z0-9-]{3,}$'}
         owner_user: {type: [string, 'null']}   # owner(ADR-024):上传用户(sub,§1.4 不透明)
         oss_key: {type: string}
         status: {type: string, enum: [pending, ready, failed]}

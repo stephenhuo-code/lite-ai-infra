@@ -79,7 +79,7 @@ def test_gateway_strips_client_x_test_claims(monkeypatch):
         pytest.skip("Keycloak 未启动(先 `make up`)")
     c = _with_session(_gw_with_identity(monkeypatch, allow_test_claims=True))
     r = c.get("/v1/me/orgs",
-              headers={"x-test-claims": '{"sub":"evil","groups":["/e-9999/g-0001/members"]}'})
+              headers={"x-test-claims": '{"sub":"evil","organization":["e-9999"],"realm_roles":[]}'})
     assert r.status_code == 200
     assert r.json()["memberships"][0]["enterprise_id"] == "e-0001"     # 真 token,非伪造
     assert all(m["enterprise_id"] != "e-9999" for m in r.json()["memberships"])

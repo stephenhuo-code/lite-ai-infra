@@ -47,7 +47,7 @@ def test_lance_create_then_register(minio_s3, minio_bucket, gravitino_url, monke
     _ensure_tree(g, minio_s3)
     client = TestClient(build_app(gravitino=g))
     base = "/v1/catalogs/data/schemas/datasets/datasets"
-    hdr = {"x-test-claims": json.dumps({"sub": "u-alice", "groups": ["/e-0001/g-0001/members"]})}
+    hdr = {"x-test-claims": json.dumps({"sub": "u-alice", "organization":["e-0001"],"realm_roles":[]})}
     expect_loc = f"s3a://{minio_bucket}/e-0001/u-alice/processed/{n}.lance"   # Gravitino 存 s3a://
 
     assert client.post(base, headers=hdr,

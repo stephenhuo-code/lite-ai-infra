@@ -13,5 +13,5 @@ def test_list_empty_on_missing_catalog(monkeypatch):
     monkeypatch.setenv("LITEAI_ALLOW_TEST_CLAIMS", "1")
     c = TestClient(build_app(_G()))
     r = c.get("/v1/catalogs/data/schemas/datasets/datasets",
-              headers={"x-test-claims": '{"sub":"u-alice","groups":["/e-0001/g-0001/members"]}'})
+              headers={"x-test-claims": '{"sub":"u-alice","organization":["e-0001"],"realm_roles":[]}'})
     assert r.status_code == 200 and r.json() == {"datasets": []}

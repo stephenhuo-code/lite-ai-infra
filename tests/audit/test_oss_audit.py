@@ -2,7 +2,7 @@
 import json
 from libs.audit.oss_audit import AuditWriter, AuditEvent, _audit_key
 
-EV = AuditEvent(ts="2026-06-08T00:00:00Z", enterprise_id="e-0001", group_id="g-0001",
+EV = AuditEvent(ts="2026-06-08T00:00:00Z", enterprise_id="e-0001",
                 actor_user="u-alice", actor_role="member", action="job.cancel",
                 resource_uri="job/abc", decision="allow", override=False, reason="", metadata={})
 

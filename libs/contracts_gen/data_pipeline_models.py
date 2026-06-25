@@ -28,7 +28,7 @@ class Job(BaseModel):
     status: Status
     terminal: bool
     dataset: str
-    enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
+    enterprise_id: constr(pattern=r'^[a-z][a-z0-9-]{3,}$')
     owner_user: str | None = None
     source_dataset: str | None = None
     rows_in: int | None = None
@@ -78,7 +78,7 @@ class Status1(Enum):
 class RawDataset(BaseModel):
     id: str
     name: str
-    enterprise_id: constr(pattern=r'^e-[0-9a-z]+$')
+    enterprise_id: constr(pattern=r'^[a-z][a-z0-9-]{3,}$')
     owner_user: str | None = None
     oss_key: str
     status: Status1

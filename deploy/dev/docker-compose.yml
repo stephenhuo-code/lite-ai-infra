@@ -25,6 +25,7 @@ services:
     ports: ["8080:8080"]
     volumes:
       - ./keycloak:/opt/keycloak/data/import:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro   # Lite-AI 登录主题(start-dev 默认不缓存主题)
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,6 +38,10 @@ services:
     ports: ["9000:9000", "9001:9001"]
     volumes:
       - minio-data:/data
+  # dev SMTP:KC 注册/邀请邮件落到 mailpit(8025 web UI 查看,1025 SMTP 收件)。非真服务,无持久卷。
+  mailpit:
+    image: axllent/mailpit
+    ports: ["8025:8025", "1025:1025"]
 volumes:
   kc-pgdata:
   minio-data:

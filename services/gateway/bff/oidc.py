@@ -65,7 +65,8 @@ def authorize_url(cfg: OidcConfig, state: str, code_challenge: str) -> str:
     q = urllib.parse.urlencode({
         "client_id": cfg.client_id,
         "response_type": "code",
-        "scope": "openid",
+        # 动态 scope organization:* —— 多-org 用户必须带选择器,否则 organization claim 消失(RESULTS F3)。
+        "scope": "openid organization:*",
         "redirect_uri": cfg.redirect_uri,
         "state": state,
         "code_challenge": code_challenge,

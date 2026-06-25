@@ -10,7 +10,6 @@ log = logging.getLogger("audit")
 class AuditEvent:
     ts: str
     enterprise_id: str
-    group_id: str | None
     actor_user: str
     actor_role: str
     action: str

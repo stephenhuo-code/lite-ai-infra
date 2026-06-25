@@ -94,7 +94,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 列出数据集(can() 按 group 过滤) */
+        /** 列出数据集(can() 按企业+owner 过滤) */
         get: {
             parameters: {
                 query?: never;

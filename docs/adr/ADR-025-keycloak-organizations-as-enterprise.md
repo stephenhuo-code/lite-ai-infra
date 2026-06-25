@@ -32,10 +32,12 @@ KC 26.6.2 的 Organizations(核心 GA 26.0)能干净表达"企业"一级实体,�
 - 企业内**角色仅 `member` / `enterprise-admin`**(`group-admin` 随访问组层移除);角色用 **org 属性 / realm role 表达**,**不再经 group 子组路径编码**。
 - **"按 group 授权资源"= Cerbos(v-next)**:未来对 OSS/数据集可按 **user(owner)或 group** 授权,届时 group 是 **Cerbos 的授权主体集合**(可由 KC group / Organization Groups / Cerbos 自管),**与身份层级解耦、用到再引入**。原 `group-admin` 的细粒度能力随 Cerbos 回归。
 
-### 3. 注册(邮箱域自动归属)+ 邀请
+### 3. 注册 + 加入企业(企业管理员授予)
 
-- 自助注册 + identity-first:已登记企业邮箱域的邮箱注册 → **自动成为对应企业成员**;**无匹配域** → 显式处理(拒绝/待分配),**不产生无企业悬空账户**。
+- 自助注册创建账号;**加入企业 = 企业管理员授予成员关系**(或邀请,prod SMTP 后)。注册后未归属企业的账号进入"待分配"显式状态(`enterprise_of` 缺企业 → 显式拒 + 可理解提示,不悬空)。
 - 企业管理员可**邀请**用户加入(KC org 邀请);受邀者接受成成员;过期/撤销邀请被拒。
+
+> **修订(2026-06-26,live 验收发现 + owner 拍 C 方案)**:原案"自助注册按邮箱域 identity-first 自动归属"**显式推迟 v-next**。实测发现 KC 26.6.2 的"按域自动归属"**只绑在 identity-first 登录流**(及 IdP 接入/邀请),而 owner 要"用户名+密码同页登录"必须**禁用 identity-first** —— 两者原生冲突;KC 注册流无 org 步(form-action providers 无 organization)。owner 决:**v1 加入企业由企业管理员处理(合理),不做自助注册自动归属**;域自动归属(需后端自建"邮箱域→入会+刷新 token",见 design 备选 A)留 v-next。realm 仍登记 org domains(供 v-next + 邀请校验),但 v1 不驱动自动入会。
 
 ### 4. 隔离不变式(保持)
 
