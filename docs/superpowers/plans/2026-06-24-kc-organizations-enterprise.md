@@ -244,7 +244,7 @@
 ## 图形化验收 Runbook(owner 在界面上点,全程看屏)
 
 > 三个图形界面:**应用控制台 `localhost:8090`**、**Keycloak 控制台 `localhost:8080`(admin/admin)**、**mailpit 收件箱 `localhost:8025`**。
-> **一次性前置(仅这步用命令,无法 GUI)**:`make dev-reset && make deps-dev`(重导含 Organizations 的 realm,清旧卷)→ `uv run python scripts/provision_orgs.py`(置备 org+成员)→ `make up`(起服务)。其余全部在浏览器完成。
+> **一次性前置(仅这步用命令,无法 GUI)**:`make dev-reset && make deps-dev`(重导含 Organizations 的 realm,清旧卷)→ `uv run python scripts/provision_orgs.py`(置备 org+成员)→ **`make bootstrap-catalog`(建 `lite-ai` 桶 + metalake `ent_demo`;dev-reset 清了 MinIO/Gravitino,必须重建,否则上传 OSS PUT 404)** → `make up`(起服务)。其余全部在浏览器完成。
 
 - [ ] **0.(KC 控制台)确认企业实体建好**
   - 开 `localhost:8080` → admin/admin → 左上切到 **`lite-ai` realm** → 左侧 **Organizations**。
