@@ -1,10 +1,11 @@
 {
   "realm": "lite-ai", "enabled": true,
-  "internationalizationEnabled": true, "supportedLocales": ["zh-CN", "en"], "defaultLocale": "zh-CN",
+  "internationalizationEnabled": true, "supportedLocales": ["zh-CN"], "defaultLocale": "zh-CN",
   "organizationsEnabled": true,
   "registrationAllowed": true,
-  "registrationEmailAsUsername": true,
+  "registrationEmailAsUsername": false,
   "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
   "smtpServer": {
     "host": "mailpit", "port": "1025", "from": "noreply@lite-ai.dev", "fromDisplayName": "Lite AI",
     "ssl": "false", "starttls": "false", "auth": "false"
