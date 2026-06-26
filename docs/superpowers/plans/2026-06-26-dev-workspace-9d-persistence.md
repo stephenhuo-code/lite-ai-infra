@@ -19,13 +19,14 @@
 
 | Task | 状态 | 产物 |
 |---|---|---|
-| 0 探针(同步形态) | ⏳ 待交互 | —— |
+| 0 探针(同步形态) | ✅ 源码级解(RESULTS 9d) | —— |
 | 1 workspace 路径(owner 隔离) | ✅ | `bff/workspace_store.py` |
 | 2 hydrate/persist(注入式) | ✅ | `bff/workspace_store.py` |
 | 3 本地 git 工具 | ✅ | `dev_workspace_mcp/tools/git.py` |
 | 4 BFF 会话生命周期 | ✅ | `bff/workspace.py`(hydrate/close+revoke) |
 | 5 git 工具接入 MCP | ✅ | `app.py`(`liteai__git_*`) |
-| 真实 syncer + live | ⏳ 待 Task0 | —— |
+| 真实 syncer | ✅ | `bff/omnigent_fs.py`(filesystem API 读写) |
+| live | ⏳ 待起 omnigent | RUNBOOK |
 
 ---
 

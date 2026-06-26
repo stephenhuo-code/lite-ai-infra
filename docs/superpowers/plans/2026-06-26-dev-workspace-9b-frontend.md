@@ -19,12 +19,14 @@
 
 | Task | 状态 | 产物 |
 |---|---|---|
-| 0 探针(turn/stream schema) | ⏳ 待交互 | —— |
+| 0 探针(turn/stream schema) | ✅ 源码级解(RESULTS 9b) | —— |
 | 1 BFF 反代身份头 | ✅ | `bff/omnigent_proxy.py`(注入身份+剥伪造头/cookie) |
-| 2 WS 反代全量 | ⏳ 待 Task0 | —— |
+| 2 SSE 透传反代 | ✅ | `bff/workspace_routes.py`(/stream 透传 + /turn + /resolve) |
 | 3 BFF 工作区会话路由 | ✅ | `bff/workspace_routes.py`(身份取自会话) |
 | 4 前端外壳 + 左树 | ✅ | `pages/DevWorkspace.tsx`、`devws/LeftTree.tsx`、`api/devws.ts`、路由/导航 |
-| 5/6 对话流 + 文件/终端 | ⏳ 待 Task0 schema | —— |
+| 5 对话流 | ✅ | `devws/useSessionStream.ts`+`AgentChat.tsx`+DevWorkspace 接入 |
+| 6 文件/终端 | ⏳ 待 monaco/xterm | —— |
+| * 左树真数据 + 7 图形 runbook | ⏳ | —— |
 
 ---
 
