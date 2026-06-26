@@ -7,7 +7,7 @@ from services.gateway.bff.workspace import (
     create_workspace_session,
     strip_forged_identity_headers,
 )
-from services.gateway.bff.wstoken import WorkspaceTokenStore
+from services.gateway.bff.wstoken import TokenClaims, WorkspaceTokenStore
 
 
 def _client(handler):
@@ -67,3 +67,66 @@ def test_create_workspace_session_binds_token_to_caller():
     tok = calls["url"].rsplit("/", 2)[1]          # /s/<tok>/mcp
     r = store.resolve(tok)
     assert r.sub == "u-alice" and r.enterprise == "ent-demo" and r.session == "sess-7"
+
+
+from services.gateway.bff.workspace import close_workspace_session
+from services.gateway.bff.workspace_store import workspace_prefix as _wp
+
+
+class _FakeOSS:
+    def __init__(self, objs=None):
+        self.objs = dict(objs or {})
+
+    def list(self, prefix):
+        return [k for k in self.objs if k.startswith(prefix)]
+
+    def get(self, k):
+        return self.objs[k]
+
+    def put_object(self, k, b):
+        self.objs[k] = b
+
+
+class _FakeFS:
+    def __init__(self):
+        self.files = {}
+
+    def write(self, rel, b):
+        self.files[rel] = b
+
+    def read(self, rel):
+        return self.files[rel]
+
+    def listrel(self):
+        return list(self.files)
+
+
+def test_create_with_ws_hydrates_workspace():
+    pfx = _wp(enterprise="ent-demo", owner="u-alice", ws="w1")
+    oss = _FakeOSS({pfx + "recipe.py": b"x"})
+    fs = _FakeFS()
+
+    def h(req):
+        if req.url.path.endswith("/mcp-servers"):
+            return httpx.Response(201, json={})
+        return httpx.Response(200, json={"id": "sess-h"})
+
+    store = WorkspaceTokenStore(now=lambda: 0)
+    omni = OmnigentClient("http://omnigent:8000", email="a@x", transport=httpx.MockTransport(h))
+    create_workspace_session(sub="u-alice", enterprise="ent-demo", role="member",
+                             agent_id="a", store=store, omni=omni,
+                             mcp_base_url="http://mcp:8000", ws="w1", oss=oss, fs=fs)
+    assert fs.files["recipe.py"] == b"x"          # 水合到工作目录
+
+
+def test_close_persists_and_revokes():
+    store = WorkspaceTokenStore(now=lambda: 0)
+    tok = store.mint(TokenClaims("u-alice", "ent-demo", "member", "sess-c"))
+    oss = _FakeOSS()
+    fs = _FakeFS()
+    fs.write("out.txt", b"y")
+    out = close_workspace_session(session="sess-c", enterprise="ent-demo", owner="u-alice",
+                                  ws="w1", store=store, oss=oss, fs=fs)
+    assert out["persisted"] == 1 and out["revoked"] == 1
+    assert store.resolve(tok) is None              # 令牌已撤销
+    assert any(k.endswith("workspace/w1/out.txt") for k in oss.objs)   # 持久化回 OSS
