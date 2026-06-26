@@ -58,7 +58,7 @@
 - 后续 Task:BFF 反代 / 我们的 MCP 工具(catalog→DJ→python→git,逐个 TDD)/ 前端(左树 + chat + terminal + file viewer)/ 隔离负例测试 / 图形 runbook。
 
 ## 留待 spec / Task0 钉死(诚实标注,非缺口)
-- **工作目录存储形态**:OSS-backed `<企业>/{user}/workspace/` vs omnigent host 沙箱本地盘(持久化/隔离权衡)。
+- ~~**工作目录存储形态**~~ **已定(owner 2026-06-26)**:**对象存储为底、按 workspace 为单位持久化隔离**(如 `<企业>/{user}/workspace/<ws>/`),agent 默认授权访问本 workspace 目录;git **仅本地**(远端 git 用户自配)。**留 Task0**:对象存储工作目录 ↔ agent 沙箱本地盘的挂载/同步形态(沙箱跑在本地盘,需与 OSS 双向同步或挂载)。
 - **MCP 工具确切集合 + 与现有 DJ 管线复用边界**(agent 跑 DJ 是调我们现有 data-pipeline 服务,还是沙箱内直跑 `.dj-venv`?)。
 - **BFF↔omnigent 鉴权具体形态**:omnigent-OIDC(指 KC)vs BFF header-auth 代理 —— Task0 实测定。
 - **模型接入 + 成本治理**:用哪个模型 + omnigent policy 成本上限策略。
