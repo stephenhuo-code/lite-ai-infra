@@ -1,7 +1,9 @@
-# omnigent 探针/自托管(Plan 9 · Task 0)。header-auth(身份来自可信代理头),独立 postgres + /data 卷。
-# 探针期:对外暴露 8900 直连;Task 1 固化时改为仅 BFF 可达(去 ports / 接内网)。
-# 镜像策略分阶段(ADR-026 §1):探针用上游预构建;采用后自构建到我们 registry。
-name: liteai-omnigent-probe
+# omnigent 自托管(Plan 9)。header-auth(身份来自可信代理头),独立 postgres + /data 卷。
+# 「不直达」固化(Task 1):本仓库 dev 里服务跑在主机(uv),仅 deps 在 docker → omnigent 绑
+# 127.0.0.1(仅本机/主机 BFF 可达,不对外暴露);prod(容器化 BFF)改为内部网络 + 不发布端口。
+# 实测可用镜像 digest(Task0):sha256:112be2e5f8d1eae47edbd3892243a47bfde2b3a462f0a6a595f15ac4207aed1b
+# 镜像策略分阶段(ADR-026 §1):探针/dev 用上游预构建;采用后自构建到我们 registry(9-prod)。
+name: liteai-omnigent
 
 services:
   omnigent-pg:
@@ -33,7 +35,7 @@ services:
     volumes:
       - omnigent-data:/data
     ports:
-      - "8900:8000"
+      - "127.0.0.1:8900:8000"   # 仅本机可达(主机 BFF);不对外。prod 容器化时改内部网络。
 
 volumes:
   omnigent-data:
