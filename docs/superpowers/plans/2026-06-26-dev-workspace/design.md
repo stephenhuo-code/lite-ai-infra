@@ -77,7 +77,7 @@ omnigent 的每会话 MCP 注册体**只有** `name/transport/command/args/url`,
 - 前端:`frontend/src/pages/DevWorkspace.tsx`(+ 左树/chat/terminal/file-viewer 子组件),驱动 omnigent REST/WS。视觉照高保真原型。
 - BFF:`services/gateway/bff/` 加 omnigent 反代(REST + WS proxy,身份注入)。
 - **我们的 MCP server**(新):`services/dev_workspace_mcp/`(或并入现有服务)—— catalog/OSS/DJ/python/git 工具,内调 `can()`。
-- omnigent:`deploy/dev/` 加 omnigent docker compose。**部署形态 = 预构建镜像,不 fork 改源码**:`ghcr.io/omnigent-ai/omnigent-server`(+ runner 用 `omnigent-host`);认证/UI/数据工具全经配置或 API,无须改码(spike 实证)。**钉 `:vX.Y.Z` 或 `:sha-<short>`(不用 `:latest`),prod 可镜像到自有 registry**(供应链 + 版本钉定)。认证用 `OMNIGENT_AUTH_PROVIDER=header` 等 env。
+- omnigent:`deploy/dev/` 加 omnigent docker compose。**镜像策略 = 分阶段**:探针期用上游预构建 `ghcr.io/omnigent-ai/omnigent-server`(+ runner `omnigent-host`);**采用后自构建到我们 registry**(omnigent 作 git submodule 钉定上游源码 ref,CI `docker build` server/host,从清洁 checkout 构建——主 Dockerfile 支持)。认证/UI/数据工具全经配置或 API,**无改码需求**;改码仅按需起最小 patch-queue(rebase 到新上游 tag)。认证用 `OMNIGENT_AUTH_PROVIDER=header` 等 env。见 [ADR-026](../../../adr/ADR-026-dev-workspace-omnigent.md) §1。
 - 模型:harness 用 claude-sdk(订阅/API key,env 注入,§5.2)。
 
 ## 范围 / 序(epic)

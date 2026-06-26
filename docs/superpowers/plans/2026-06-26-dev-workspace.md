@@ -135,8 +135,10 @@ git commit -m "spike(plan9): omnigent 探针 RESULTS(header-auth + 令牌化 MCP
 
 ## Task 1:固化 omnigent 部署(仅 BFF 可达 + 版本钉定)
 
+> **镜像策略分阶段(ADR-026 §1)**:本计划是采用前的承重墙验证,**dev 用上游预构建镜像钉 tag**(最快,不预付构建成本)。**自构建到我们 registry**(供应链 + 可复现 + 打补丁能力位)是**采用后/进 prod 前**的硬化项,见末尾「后续计划 · 9-prod」,**不在本计划内**。
+
 **Files:**
-- Modify: `deploy/dev/omnigent.yml`(去掉对外 ports,接入内网;pin tag)
+- Modify: `deploy/dev/omnigent.yml`(去掉对外 ports,接入内网;pin 上游预构建 tag)
 - Test: 手动 runbook(docker,无单测)
 
 - [ ] **Step 1:改 compose 为"不直达"**
@@ -760,6 +762,7 @@ git commit -m "test(plan9): 隔离负例 + headless 受控链路验收 runbook"
 - **9b — Dev Workspace 前端**:自建 React19 页(左树 + chat + 文件 + 终端,照高保真原型)+ BFF REST/WS 反代。**依赖 Task 0 RESULTS 的 omnigent WS/turn 端点形态。**
 - **9c — 数据工具集 + 管线开发**:`catalog_sample` / `oss_get` / `run_dj`(复用 `pipelines/data_prep`)/ `run_python` / 注册回 catalog;policy:ASK 高成本/危险操作。覆盖 US4。
 - **9d — 工作目录持久化 + 本地 git**:对象存储为底、按 workspace 隔离、agent 默认授权;本地 git(init/commit/log);沙箱本地盘 ↔ OSS 同步。覆盖 US5。
+- **9-prod — omnigent 自构建固化(采用后/进 prod 前)**:omnigent 作 git submodule 钉定上游源码 ref;CI `docker build`(从清洁 checkout,主 Dockerfile 的 web-builder + python builder)出 `omnigent-server`/`omnigent-host` → 推我们 registry、打我们 tag;compose 切到我们 registry 镜像。升级 = bump ref + 重构建(不改零冲突)。**改码仅按需起最小 patch-queue**(rebase 到新上游 tag)。供应链 / 可复现 / 离线 / 打补丁能力位。见 ADR-026 §1。
 
 ---
 

@@ -20,8 +20,11 @@ S1 出口④ 的降级项 **Plan 9 Dev Workspace** 原定"code-server + Remote-S
 ### 1. 采用 omnigent 作 Dev Workspace 的 agent 后端(②-⑥),自托管
 
 - omnigent(Apache-2.0,self-host docker)提供 Server(FastAPI)/Host/Runner(每会话进程 + bwrap 沙箱)/Harness(claude-sdk)/policy。**非自建 agent runtime/沙箱**。
-- **部署形态 = 预构建镜像,不 fork 改源码**(spike 实证):用 `ghcr.io/omnigent-ai/omnigent-server`(+ runner `omnigent-host`);认证(header-auth)、UI(我们自建,不用其 ap-web)、数据工具(每会话 API 注册我们的 MCP)全经**配置/API**,均无须改码。**钉 `:vX.Y.Z` 或 `:sha-<short>`(不用 `:latest`),prod 可镜像到自有 registry**(供应链 + 版本钉定)。
-- alpha 依赖:**版本钉定 + Task0 探针先验**;两套后端(我们的服务 + omnigent)并存运维。
+- **镜像策略 = 分阶段(自构建为主,不预先 fork)**(omnigent 主 Dockerfile 支持 clean-checkout 构建;Apache-2.0 允许内部构建/改/再分发):
+  - **探针期**:用上游**预构建镜像** `ghcr.io/omnigent-ai/omnigent-server`(+ runner `omnigent-host`)——最快验承重墙,不为未确认采用的依赖先付构建成本。
+  - **采用后(进 prod 前)**:**自构建到我们 registry** —— omnigent 作 git submodule / vendored **钉定上游源码 ref**,我们 CI `docker build` 出 server/host 镜像、打我们的 tag、推自有 registry。给**供应链可控 + 可复现 + 可离线 + 打补丁能力位**,且**不付 fork 的 rebase 税**(不改则升级=bump ref+重构建,零冲突)。
+  - **代码修改 = 按需 patch-queue**:v1 认证(header-auth)/UI(自建,不用其 ap-web)/数据工具(MCP API)全经配置/API,**无改码需求**;仅当出现 config/API 够不着的真需求,才维护**最小补丁队列**(rebase 到新上游 tag),省着改。
+- alpha 依赖:**版本钉定(源码 ref)+ Task0 探针先验**;两套后端(我们的服务 + omnigent)并存运维。
 
 ### 2. Client 自建(React19),经 omnigent API 驱动 —— 不嵌入、不 iframe
 
@@ -55,7 +58,7 @@ S1 出口④ 的降级项 **Plan 9 Dev Workspace** 原定"code-server + Remote-S
 
 **正面**:省造 agent runtime/沙箱/harness/policy(难且非差异化);统一 UX(左树右对话,catalog 在同一树);隔离红线守住(can() 仍是数据授权唯一出入口);Cerbos 与 omnigent 解耦,各自独立演进;新增 agent 行为治理能力(我们原先没有)。
 
-**负面 / 风险**:① omnigent alpha 依赖,API 可能变 → 预构建镜像钉 release tag + 升级策略 ② 两套后端并存运维 ③ 自建 agent UI(chat/files/terminal)工作量 ④ BFF 需代理 WS ⑤ **header-auth 信任义务**:BFF 必须剥离客户端伪造身份头 + omnigent 不可直达(否则身份可冒充)⑥ **每会话令牌**需 TTL/撤销/仅内网可达,且优先"header 带令牌"避免 URL 令牌入日志(Task0 定)⑦ 模型 key(§5.2 secret)+ 成本治理(用 omnigent policy 成本上限)。
+**负面 / 风险**:① omnigent alpha 依赖,API 可能变 → 自构建钉源码 ref + 升级策略;**构建所有权成本**:自构建需我们维护多阶段构建(node web-builder + python)+ CI(采用后才付,探针期不付)② 两套后端并存运维 ③ 自建 agent UI(chat/files/terminal)工作量 ④ BFF 需代理 WS ⑤ **header-auth 信任义务**:BFF 必须剥离客户端伪造身份头 + omnigent 不可直达(否则身份可冒充)⑥ **每会话令牌**需 TTL/撤销/仅内网可达,且优先"header 带令牌"避免 URL 令牌入日志(Task0 定)⑦ 模型 key(§5.2 secret)+ 成本治理(用 omnigent policy 成本上限)。
 
 ## 否决的备选
 
@@ -64,7 +67,8 @@ S1 出口④ 的降级项 **Plan 9 Dev Workspace** 原定"code-server + Remote-S
 - **全自建 agent runtime(不用 omnigent)**:重造沙箱/harness/会话编排,成本高、非差异化价值。
 - **把租户/数据隔离交给 omnigent policy 引擎**:违宪(§2.4/§1.6)+ omnigent 不懂我们的模型,做不到。
 - **前门用 OIDC**:本架构下零增益(原生身份到不了 MCP 工具)且与 BFF 单边界冲突;仅当改"前端直连 omnigent(不走 BFF)"才考虑。
-- **fork omnigent 改源码**:认证/UI/数据工具均可经配置/API 达成,无须改码;改码徒增维护与升级负担。
+- **预先 fork 改源码**:v1 认证/UI/数据工具均可经配置/API 达成,无改码需求;预先 fork 在 alpha 上徒增 rebase 负担。**注**:这与"自构建镜像"是两回事——自构建(从钉定源码、不改)采纳;改码留 patch-queue 按需。
+- **长期只用上游预构建镜像**:对硬隔离数据平台,长期依赖第三方二进制 blob 的供应链/离线/打补丁能力不足 → 采用后切自构建。
 
 ## 待 Task0 探针确认(进 writing-plans 前/首任务)
 
