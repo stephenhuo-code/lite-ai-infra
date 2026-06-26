@@ -13,6 +13,22 @@
 
 ---
 
+## 状态(实时)
+> **代码任务完成 ✅(Task 1–5)· 274 passed + lint KEPT · 分支 `dev-workspace-9d`**
+> **待交互探针**:Task 0(omnigent environment filesystem 同步形态)+ 真实 OSS↔本地盘 syncer + live runbook —— 需运行中的 omnigent,留与 9b/9d 探针一起跑。
+
+| Task | 状态 | 产物 |
+|---|---|---|
+| 0 探针(同步形态) | ⏳ 待交互 | —— |
+| 1 workspace 路径(owner 隔离) | ✅ | `bff/workspace_store.py` |
+| 2 hydrate/persist(注入式) | ✅ | `bff/workspace_store.py` |
+| 3 本地 git 工具 | ✅ | `dev_workspace_mcp/tools/git.py` |
+| 4 BFF 会话生命周期 | ✅ | `bff/workspace.py`(hydrate/close+revoke) |
+| 5 git 工具接入 MCP | ✅ | `app.py`(`liteai__git_*`) |
+| 真实 syncer + live | ⏳ 待 Task0 | —— |
+
+---
+
 ## File Structure
 - `services/gateway/bff/workspace_store.py` — **新增**:workspace OSS 路径派生(owner 隔离)+ 水合/持久化(hydrate/persist,sync 逻辑)。
 - `services/dev_workspace_mcp/tools/git.py` — **新增**:`git_status` / `git_log`(读,供左树)+ `git_commit`(写,本地);纯函数 + 注入 runner(执行 git 命令)。
