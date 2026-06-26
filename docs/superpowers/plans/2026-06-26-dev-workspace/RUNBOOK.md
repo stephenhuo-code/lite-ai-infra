@@ -1,7 +1,7 @@
 # RUNBOOK — Dev Workspace 地基(受控数据链路)验收
 
-> 本计划范围 = **后端受控链路**(headless 可验)。前端图形验收见 9b。
-> 验收分两层:**A 门禁(自动,主验收)** + **B live 集成(可选,镜像 Task0 但用我们的真实 MCP 工具)**。
+> 受控链路 + 数据工具 + 持久化的验收。**前端图形端到端验收见同目录 [RUNBOOK-9b.md](./RUNBOOK-9b.md)。**
+> 分层:**A 门禁(自动,主验收)** + **B 受控链路 live** + **C 9c 工具/管线 live** + **D 9d 持久化 live**(B/C/D 需起 omnigent + host + 订阅 token)。
 
 ## A. 门禁(自动)—— 受控链路逻辑的主验收
 对应 SC-002(隔离负例 100% 拦)、SC-004(零沙箱逃逸,沙箱部分见 B/Task3-4)。
@@ -38,6 +38,18 @@
 - [ ] agent 调 `liteai__dj_scaffold` 生成 recipe 到工作目录 → 沙箱跑 `dj-process` → 产出 `output/coco-clean.lance`。
 - [ ] agent 调 `liteai__register_dataset`(location 落本人 `processed/` 前缀)→ 数据目录出现 `coco-clean`(owner=你)。
 - [ ] **负例**:`liteai__oss_read path=ent-other/...`(跨企业)→ `forbidden`、不触达存储;`register_dataset` location 落他人前缀 → `forbidden`。
+
+## D. 9d 工作目录持久化 + 本地 git(live,可选)
+> 在 B 起好的栈上,验"工作目录跨会话持久化(OSS 按 workspace 隔离)+ 本地 git",对应 spec US5。
+> 涉及组件:`bff/workspace_store.py`(prefix/hydrate/persist)、`bff/omnigent_fs.py`(真实 syncer)、`dev_workspace_mcp/tools/git.py`。
+- [ ] **持久化往返**:
+  1. 建工作区会话(带 ws 名,如 `coco-clean`)→ BFF 从 OSS `<企业>/{owner}/workspace/coco-clean/` **水合**到 omnigent environment 工作目录。
+  2. 让 agent 在工作目录写文件(如 `recipe.py`)。
+  3. **关会话** → BFF **持久化**(遍历 environment `/changes` → 写回 OSS,`omnigent_fs.listrel/read` + OSS `put_object`)。
+  4. **重开同一 ws** → 水合 → `recipe.py` **仍在**(证跨会话持久化)。
+- [ ] **本地 git**:agent 调 `liteai__git_status`(左树 Git 段显示改动)→ `liteai__git_commit`(本地提交)→ `liteai__git_log` 见该提交。**确认无 push**(远端 git 用户自配)。
+- [ ] **负例·越界写**:agent 试图写工作目录外(如 `/etc/x`)→ 被沙箱拒(`write_paths` 限本 workspace)。
+- [ ] **负例·跨 owner**:用另一 owner 令牌读他人 `workspace/` 前缀 → `oss_read` 返 `forbidden`(workspace_store prefix 守卫)。
 
 ## 失败处理
 任一步失败走 `superpowers:systematic-debugging`;不假绿、不跳步。沙箱/host 认证类与外部依赖相关的偏差回写 Task0 RESULTS + design。

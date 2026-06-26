@@ -27,7 +27,8 @@
 | 5 对话流 | ✅ | `devws/useSessionStream.ts`+`AgentChat.tsx`+DevWorkspace 接入 |
 | 6 文件/终端 | ✅ | `devws/FileViewer.tsx`(monaco)+`Terminal.tsx`(xterm)+`RightPane.tsx` |
 | * 左树真数据 | ✅ | DevWorkspace 接 catalog listDatasets(工作目录/git best-effort)|
-| 7 图形 runbook + live | ⏳ 待起 omnigent | —— |
+| 7 图形 runbook | ✅ | `2026-06-26-dev-workspace/RUNBOOK-9b.md` |
+| live 端到端 | ⏳ 待起 omnigent | RUNBOOK-9b |
 
 ---
 
