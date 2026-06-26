@@ -12,7 +12,15 @@
 > 镜像 Task0,但注册的是**我们真实的 MCP server(含 catalog_read_schema)**,验"agent 经令牌化工具读真实数据集 schema,每次过 can()"。
 
 ### 前置(一条命令)
-- [ ] **一次性**:`claude setup-token` → 存 `secrets/omnigent.token`;有一个本企业数据集(`coco`,没有先 `make bootstrap-catalog` + 控制台上传)。
+- [ ] **一次性 · 存模型 token**(你的 Claude 订阅,不入库;§5.2):
+  ```bash
+  mkdir -p secrets
+  claude setup-token                       # 浏览器授权,复制输出的长效 token
+  echo '粘贴上一步的 token' > secrets/omnigent.token
+  chmod 600 secrets/omnigent.token
+  ```
+  > `secrets/` 已 gitignore。`make ws-up` 的 host 会读这个文件;缺它则 host 跳过(agent 不能回复)。
+- [ ] **一次性 · 数据集**:有一个本企业数据集(`coco`,没有先 `make bootstrap-catalog` + 控制台上传)。
 - [ ] **`make ws-up`** —— 起全栈(全后台):omnigent 自构建镜像(缺则自动 build)+ omnigent 容器 + deps + 全部服务(**含 MCP server**)+ **host/runner** + **前端**。打开 `http://localhost:5173/workspace`。停:`make ws-down`;日志在 `.dev/`。
 > dev 也可免 host 用 `omnigent run` 直挂 spec 验工具(见下"快验")。
 
