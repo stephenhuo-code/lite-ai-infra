@@ -1,0 +1,3 @@
+[submodule "third_party/omnigent"]
+	path = third_party/omnigent
+	url = https://github.com/omnigent-ai/omnigent
