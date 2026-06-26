@@ -180,6 +180,9 @@ SERVICE_ENV_KEYS: dict[str, list[str]] = {
     "gateway": ["IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
                 "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
                 "BFF_REDIRECT_URI"],
+    # Dev Workspace MCP server(plan 9):读 catalog(Gravitino)+ OSS(企业/owner 前缀)。
+    "dev-workspace-mcp": ["GRAVITINO_URL", "OSS_ENDPOINT", "OSS_ACCESS_KEY", "OSS_SECRET_KEY",
+                          "DATA_BUCKET"],
 }
 
 

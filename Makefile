@@ -25,6 +25,15 @@ LOAD = uv run python scripts/load_env.py
 up:               ; $(MAKE) deps-dev && bash scripts/dev_services.sh up
 down:             ; bash scripts/dev_services.sh down; $(MAKE) dev-down
 ps:               ; bash scripts/dev_services.sh ps
+# ── Dev Workspace 全栈(plan 9):复用 up,叠加 omnigent 自构建镜像 + omnigent 容器 ──
+omnigent-image:   ; @docker image inspect omnigent-server:dev >/dev/null 2>&1 || { git submodule update --init third_party/omnigent && scripts/omnigent_build.sh dev; }
+omnigent-up:      ; docker compose -f deploy/dev/omnigent.yml up -d
+omnigent-down:    ; docker compose -f deploy/dev/omnigent.yml down
+# host/runner:前台长跑,需模型 token(一次性:claude setup-token > secrets/omnigent.token)
+omnigent-host:    ; CLAUDE_CODE_OAUTH_TOKEN=$$(cat $${OMNIGENT_TOKEN_FILE:-secrets/omnigent.token}) uv run --project third_party/omnigent omnigent host http://localhost:8900
+# 一键起 Dev Workspace 全栈(= omnigent 镜像+容器 + make up 的 deps + 全部服务含 MCP)
+ws-up:            ; $(MAKE) omnigent-image && $(MAKE) omnigent-up && $(MAKE) up && echo "✅ 全栈起好。再开两个终端:① make omnigent-host(需 token)② cd frontend && npm run dev → 浏览器 /workspace"
+ws-down:          ; $(MAKE) down; $(MAKE) omnigent-down
 # 聚合 Swagger:自动发现 contracts/openapi/*.yaml(一个页面下拉看全部 API)
 api-docs:         ; URLS=$$(uv run python scripts/swagger_urls.py) docker compose -f deploy/dev/swagger-ui.yml up -d && echo "Swagger UI(全部契约): http://localhost:8088"
 api-docs-down:    ; docker compose -f deploy/dev/swagger-ui.yml down

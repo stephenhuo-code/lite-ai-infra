@@ -12,14 +12,11 @@
 ## B. live 集成(可选,需 docker + Claude 订阅 token)
 > 镜像 Task0,但注册的是**我们真实的 MCP server(含 catalog_read_schema)**,验"agent 经令牌化工具读真实数据集 schema,每次过 can()"。
 
-### 前置
-- [ ] `make deps-dev`(KC/MinIO/PG)+ `make bootstrap-catalog`(建桶 + metalake `ent_demo`)。
-- [ ] 有一个本企业数据集(如 `coco`,owner=你);没有则先经控制台上传+注册。
-- [ ] **本地自构建 omnigent 镜像(首次/ref 或补丁变更后)**:`scripts/omnigent_build.sh dev`(从 `third_party/omnigent` 钉定 ref + patch-queue build 出 `omnigent-server:dev`/`omnigent-host:dev`;ADR-026 §1)。**未 vendor 过先** `git submodule update --init third_party/omnigent`。
-- [ ] 起 omnigent:`docker compose -f deploy/dev/omnigent.yml up -d`(用本地自构建镜像;header 模式;绑 127.0.0.1:8900)。
-- [ ] 起我们的 MCP server:`GRAVITINO_URL=http://localhost:8091 uv run uvicorn services.dev_workspace_mcp.app:asgi --host 127.0.0.1 --port 8910`。
-- [ ] 模型凭证:`claude setup-token` → 存 `CLAUDE_CODE_OAUTH_TOKEN`(你的订阅;不入库,§5.2)。
-- [ ] 起一个 host/runner(Task0 实证 server 单独不能执行):`CLAUDE_CODE_OAUTH_TOKEN=… uv run --project <omnigent 源> omnigent host http://localhost:8900`(header 模式 host 认证细节见 Task0 RESULTS;dev 也可用 `omnigent run` 直挂 spec 验工具,见下"快验")。
+### 前置(一键起)
+- [ ] **一次性**:`claude setup-token` → 存 `secrets/omnigent.token`;有一个本企业数据集(`coco`,没有先 `make bootstrap-catalog` + 控制台上传)。
+- [ ] **`make ws-up`** —— 一条命令起全栈:omnigent 自构建镜像(缺则自动 build)+ omnigent 容器(header 模式,绑 127.0.0.1:8900)+ `make up`(deps + 全部服务**含 MCP server**,服务表自动起)。
+- [ ] 另起前台:**`make omnigent-host`**(读 token;Task0 实证 server 单独不能执行)。停:`make ws-down`。
+> dev 也可免 host 用 `omnigent run` 直挂 spec 验工具(见下"快验")。
 
 ### 步骤(受控链路 e2e)
 1. [ ] **建工作区会话**:用 `create_workspace_session`(`services/gateway/bff/workspace.py`)铸令牌 + 注册我们的 MCP(`http://localhost:8910/s/<token>/mcp`)到 omnigent 会话。

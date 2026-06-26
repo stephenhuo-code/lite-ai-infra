@@ -9,6 +9,7 @@ SERVICES=(
   "metadata|8002|services.metadata_service.main:app"
   "data-pipeline|8003|services.data_pipeline_service.main:app"
   "gateway|8090|services.gateway.main:app"
+  "dev-workspace-mcp|8910|services.dev_workspace_mcp.app:asgi"
 )
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

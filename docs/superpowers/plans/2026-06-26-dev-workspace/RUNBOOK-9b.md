@@ -3,17 +3,16 @@
 > 覆盖 spec **US1(工作台会话)+ US2(数据探查)+ US4(管线,经对话)** 的图形闭环。
 > 视觉照高保真原型 `../../prototypes/2026-06-26-dev-workspace-hifi.html`。需真起后端栈(同主 RUNBOOK B 前置)。
 
-## 前置
-- [ ] 起后端依赖:`make deps-dev`(KC/MinIO/PG)+ `make bootstrap-catalog`(建桶 + metalake `ent_demo`)。
-- [ ] 有一个本企业数据集(如 `coco`,owner=你;没有则先经控制台上传+注册)。
-- [ ] **本地自构建 omnigent 镜像**(首次/ref 或补丁变更后):`git submodule update --init third_party/omnigent` → `scripts/omnigent_build.sh dev`(产 `omnigent-server:dev`/`omnigent-host:dev`;ADR-026 §1 单一源自构建)。
-- [ ] 起 omnigent:`docker compose -f deploy/dev/omnigent.yml up -d`(用本地自构建镜像)。
-- [ ] 起 host/runner 同样用自构建 `omnigent-host:dev`(prod 走 CI build+push registry,prod pull)。
-- [ ] 起我们的 MCP server:`GRAVITINO_URL=http://localhost:8091 uv run uvicorn services.dev_workspace_mcp.app:asgi --host 127.0.0.1 --port 8910`。
-- [ ] 模型凭证:`claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN`(你的订阅;§5.2 不入库)。
-- [ ] 起 host/runner:`CLAUDE_CODE_OAUTH_TOKEN=… uv run --project <omnigent 源> omnigent host http://localhost:8900`。
-- [ ] 起平台服务(含 BFF):`make up`;起前端:`cd frontend && npm run dev`。
-- [ ] BFF env:`OMNIGENT_BASE_URL`(指 omnigent)、MCP base url(指 127.0.0.1:8910)、`agent_id=liteai_devws`(按部署配)。
+## 前置(一键起,非逐步手动)
+- [ ] **一次性**:`claude setup-token`(浏览器授权)→ 输出存 `secrets/omnigent.token`(gitignore;你的订阅,§5.2 不入库)。
+- [ ] **一次性**:有一个本企业数据集(如 `coco`,owner=你;没有则先经控制台上传+注册;`make bootstrap-catalog` 建桶/metalake)。
+- [ ] **起全栈一条命令**:`make ws-up`
+  - = omnigent 自构建镜像(缺则自动 build,ADR-026 §1)+ omnigent 容器 + `make up`(deps:KC/MinIO/PG/Gravitino + 全部服务**含我们的 MCP server**,经 `dev_services.sh` 服务表自动起)。
+- [ ] **另开两个终端跑前台进程**:
+  - `make omnigent-host`(host/runner,读 `secrets/omnigent.token`)
+  - `cd frontend && npm run dev` → 浏览器开 `/workspace`
+- [ ] 停:`make ws-down`。
+> 说明:除两个前台进程(host、前端)+ 一次性 token/数据集,其余全由 `make ws-up` 编排——复用现有 `make up` + `dev_services.sh` 服务表,无单独编排脚本。
 
 ## 图形步骤(US1 + US2)
 1. [ ] 浏览器登录控制台(KC)→ 左侧导航点 **「Dev Workspace」**(`/workspace`)。

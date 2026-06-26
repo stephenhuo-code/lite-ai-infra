@@ -37,3 +37,6 @@ spikes/*/out/
 .raw/
 .smoke/
 data/
+
+# 模型 token 等本地密钥(plan 9)
+secrets/
