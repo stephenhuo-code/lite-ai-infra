@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="760" viewBox="0 0 1060 760" font-family="-apple-system, Segoe UI, Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <marker id="arrowG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#15803d"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1060" height="760" fill="#f8fafc"/>
+  <text x="530" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#0f172a">用户 → 用户的 agent 会话 → 数据集:可控链路</text>
+  <text x="530" y="62" text-anchor="middle" font-size="13" fill="#64748b">三个控制点:① 认证(谁) ② agent 行为受控 ③ 数据集受控(每会话令牌 + can())</text>
+
+  <!-- ===== 认证层:Keycloak ===== -->
+  <rect x="250" y="92" width="220" height="58" rx="10" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="360" y="118" text-anchor="middle" font-size="15" font-weight="700" fill="#1e3a8a">① Keycloak(认证)</text>
+  <text x="360" y="138" text-anchor="middle" font-size="12" fill="#1e40af">人是谁:企业(org)+ owner(sub)</text>
+
+  <!-- ===== 主链路 spine ===== -->
+  <!-- 节点 y=300 h=110 -->
+  <!-- 用户/浏览器 -->
+  <rect x="20" y="300" width="180" height="110" rx="12" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="110" y="330" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">用户 / 浏览器</text>
+  <text x="110" y="352" text-anchor="middle" font-size="12" fill="#475569">自建 React client</text>
+  <text x="110" y="372" text-anchor="middle" font-size="12" fill="#475569">(左树 + agent 对话)</text>
+  <text x="110" y="394" text-anchor="middle" font-size="11.5" fill="#b91c1c" font-weight="600">前端不持 token</text>
+
+  <!-- 我们的 BFF -->
+  <rect x="248" y="300" width="200" height="110" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2.5"/>
+  <text x="348" y="328" text-anchor="middle" font-size="15" font-weight="700" fill="#1e3a8a">我们的 BFF</text>
+  <text x="348" y="347" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="600">★ 单一信任边界</text>
+  <text x="348" y="367" text-anchor="middle" font-size="11.5" fill="#1e40af">握 KC 身份;反代 omnigent</text>
+  <text x="348" y="385" text-anchor="middle" font-size="11.5" fill="#1e40af">铸「每会话令牌」并建映射</text>
+  <text x="348" y="402" text-anchor="middle" font-size="11" fill="#1e40af">token → (sub, 企业, 会话)</text>
+
+  <!-- omnigent 会话 -->
+  <rect x="496" y="300" width="210" height="110" rx="12" fill="#ffedd5" stroke="#ea580c" stroke-width="2.5"/>
+  <text x="601" y="326" text-anchor="middle" font-size="15" font-weight="700" fill="#9a3412">omnigent 会话</text>
+  <text x="601" y="345" text-anchor="middle" font-size="11.5" fill="#9a3412">Runner + Agent(每会话一进程)</text>
+  <text x="601" y="364" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">② agent 行为受控</text>
+  <text x="601" y="382" text-anchor="middle" font-size="11" fill="#9a3412">policy: shell/tool/cost/ASK</text>
+  <text x="601" y="399" text-anchor="middle" font-size="11" fill="#9a3412">沙箱:钉死工作目录</text>
+
+  <!-- 我们的 MCP 工具 -->
+  <rect x="754" y="300" width="190" height="110" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2.5"/>
+  <text x="849" y="326" text-anchor="middle" font-size="15" font-weight="700" fill="#14532d">我们的 MCP 工具</text>
+  <text x="849" y="345" text-anchor="middle" font-size="12" font-weight="700" fill="#14532d">③ 数据集受控</text>
+  <text x="849" y="363" text-anchor="middle" font-size="11" fill="#166534">校验令牌 → 还原 KC ctx</text>
+  <text x="849" y="380" text-anchor="middle" font-size="11" fill="#166534">每次调用跑 can()</text>
+  <text x="849" y="397" text-anchor="middle" font-size="11" fill="#166534">企业硬隔离 + owner</text>
+
+  <!-- 数据集 -->
+  <rect x="980" y="300" width="70" height="110" rx="12" fill="#1e293b" stroke="#0f172a" stroke-width="2"/>
+  <text x="1015" y="350" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">数据</text>
+  <text x="1015" y="370" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">集</text>
+  <text x="1015" y="392" text-anchor="middle" font-size="10" fill="#cbd5e1">OSS</text>
+
+  <!-- ===== 认证箭头:用户→KC→BFF ===== -->
+  <path d="M110,300 L110,160 L250,128" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="5 3"/>
+  <text x="120" y="220" font-size="11.5" fill="#1e40af">登录 KC</text>
+  <path d="M360,150 L360,250 L348,300" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="5 3"/>
+  <text x="368" y="240" font-size="11.5" fill="#1e40af">回话身份给 BFF</text>
+
+  <!-- ===== 主链路箭头 ===== -->
+  <!-- 用户 -> BFF -->
+  <line x1="200" y1="355" x2="246" y2="355" stroke="#334155" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <!-- BFF -> omnigent -->
+  <line x1="448" y1="355" x2="494" y2="355" stroke="#334155" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="471" y="343" text-anchor="middle" font-size="10.5" fill="#9a3412">header-auth</text>
+  <text x="471" y="430" text-anchor="middle" font-size="10" fill="#64748b">注入身份头</text>
+  <!-- omnigent -> MCP (agent 调工具) -->
+  <line x1="706" y1="355" x2="752" y2="355" stroke="#15803d" stroke-width="2.5" marker-end="url(#arrowG)"/>
+  <!-- MCP -> 数据集 -->
+  <line x1="944" y1="355" x2="978" y2="355" stroke="#15803d" stroke-width="2.5" marker-end="url(#arrowG)"/>
+
+  <!-- ===== 关键:每会话令牌注册 MCP(BFF -> omnigent 注册体)===== -->
+  <path d="M348,410 L348,470 L601,470 L601,412" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrowG)" stroke-dasharray="6 3"/>
+  <rect x="300" y="478" width="470" height="48" rx="8" fill="#f0fdf4" stroke="#15803d" stroke-width="1.5"/>
+  <text x="535" y="497" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14532d">BFF 给该会话注册「我们的 MCP server」(http transport)</text>
+  <text x="535" y="515" text-anchor="middle" font-size="11" fill="#166534">URL 内嵌每会话令牌:https://mcp/s/&lt;token&gt;/mcp  —— omnigent 无 header/env 转发槽,故令牌即绑定</text>
+
+  <!-- ===== 数据访问唯一通道说明 ===== -->
+  <text x="861" y="432" text-anchor="middle" font-size="10.5" fill="#15803d" font-weight="600">唯一受控通道</text>
+
+  <!-- ===== 红线/不变式 callout ===== -->
+  <rect x="20" y="560" width="1020" height="86" rx="12" fill="#fff7ed" stroke="#c2410c" stroke-width="2"/>
+  <text x="40" y="588" font-size="14" font-weight="700" fill="#9a3412">红线 / 不变式</text>
+  <text x="40" y="612" font-size="12.5" fill="#7c2d12">• agent 即使「放飞」,也只能① 以该会话绑定的<tspan font-weight="700">那一个用户</tspan>身份、② 只经我们暴露的<tspan font-weight="700">那几个工具</tspan>、③ 每次访问都被 <tspan font-weight="700" font-family="monospace">can()</tspan>(企业硬隔离 + owner)拦。</text>
+  <text x="40" y="634" font-size="12.5" fill="#7c2d12">• omnigent 不直达(只经 BFF);BFF 必须剥离客户端伪造的身份头;数据集隔离<tspan font-weight="700">不外包</tspan>给 omnigent —— 它不懂我们的企业/owner 模型。</text>
+
+  <!-- ===== 图例 ===== -->
+  <text x="40" y="688" font-size="13" font-weight="700" fill="#0f172a">谁管什么:</text>
+  <rect x="150" y="676" width="16" height="16" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="174" y="689" font-size="12.5" fill="#1e3a8a">认证 = Keycloak(谁)</text>
+  <rect x="360" y="676" width="16" height="16" rx="3" fill="#ffedd5" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="384" y="689" font-size="12.5" fill="#9a3412">agent 行为 = omnigent policy + 沙箱</text>
+  <rect x="700" y="676" width="16" height="16" rx="3" fill="#dcfce7" stroke="#15803d" stroke-width="1.5"/>
+  <text x="724" y="689" font-size="12.5" fill="#14532d">数据集 = 我们 MCP 工具(每会话令牌 + can())</text>
+
+  <text x="40" y="724" font-size="11.5" fill="#64748b">注:前门「header-auth vs OIDC」只影响 omnigent 怎么认人(②层用),不影响数据集受控(③层全由我们的令牌+can() 决定,故前门用 header 即可)。</text>
+</svg>
