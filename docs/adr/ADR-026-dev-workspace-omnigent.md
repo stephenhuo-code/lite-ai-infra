@@ -1,0 +1,64 @@
+# ADR-026: Dev Workspace = 自建 client + omnigent 作 agent 后端(②-⑥);授权三分层(认证/数据/agent 行为)
+
+- 状态:**Proposed(2026-06-26)**。owner 已在 brainstorm 中拍定方向(C:自建 React19 client 经 API 驱动 omnigent;omnigent 作 ②-⑥);**正式 Accept 留待 spec/DoR 过门 + Task0 docker 探针实跑确认**(boot + OIDC→KC + 我们的 MCP 工具被 agent 调用 + 沙箱限工作目录)。
+- 决策人:owner
+- 相关:**升级 [ADR-019](./ADR-019-exit5-gui-bff-resequence.md) 的 Plan 9 定义**(从"code-server + Remote-SSH 半天版"→ agent 工作台);**沿用衔接** [ADR-023](./ADR-023-catalog-driven-datasets.md)(catalog 注册)、[ADR-024](./ADR-024-owner-based-dataset-ownership.md)(owner 授权 can())、[ADR-025](./ADR-025-keycloak-organizations-as-enterprise.md)(KC Organizations 身份);**正交并衔接** [ADR-011](./ADR-011-authorization-pdp-cerbos.md)(Cerbos 授权路线);**遵循 constitution** §2.4(can() 单一授权出入口)、§1.6(企业硬隔离)、§3.0.2(契约优先)、§5.2(secret 不入库)、§5.3(dev-prod parity)。
+- 调研:[spike RESULTS 2026-06-26 omnigent 可用性](../superpowers/spikes/2026-06-26-omnigent-feasibility.md)(源码级:openapi 53 端点 / embed.tsx 版本鸿沟 / OIDC→KC / policy / sandbox 实证)。design:[`2026-06-26-dev-workspace/design.md`](../superpowers/plans/2026-06-26-dev-workspace/design.md);spec:owner 待写。
+
+---
+
+## Context
+
+S1 出口④ 的降级项 **Plan 9 Dev Workspace** 原定"code-server + Remote-SSH 半天版"。owner 重定义为 **agent 驱动的数据开发台**:基于数据目录(catalog)的数据集做**数据探查 + 数据管线开发**(兼容 Data-Juicer + Python)。UI = 左树(工作目录 / catalog / git 树)+ 右侧(agent 对话 + 文件 + 终端)。
+
+自建完整 agent runtime(会话编排 / 沙箱 / harness / 行为策略)成本高、且非平台差异化价值。开源 **omnigent**(`omnigent-ai/omnigent`,Apache-2.0,v0.2.0 alpha)是 meta-harness,正好提供 ②-⑥(Server/Host/Runner/Harness/沙箱/policy)。spike 源码实证三承重墙均利好:① 有 openapi 契约(但 embed.tsx 期望 React18/RR6,与我们 React19/RR7 鸿沟)② OIDC 原生可指我们 KC ③ 沙箱/policy 齐全,数据隔离可落在"我们的 MCP 工具(can())"。
+
+同时引出授权边界问题:omnigent 未来提供"4级权限" + PolicyEngine(ALLOW/DENY/ASK)。需明确**哪种授权归谁**,避免把平台的租户/数据硬隔离(宪法红线)外包给一个不懂我们企业/owner 模型的外部引擎。
+
+## Decision
+
+### 1. 采用 omnigent 作 Dev Workspace 的 agent 后端(②-⑥),自托管
+
+- omnigent(Apache-2.0,self-host docker)提供 Server(FastAPI)/Host/Runner(每会话进程 + bwrap 沙箱)/Harness(claude-sdk)/policy。**非自建 agent runtime/沙箱**。
+- alpha 依赖:**版本钉定 + Task0 探针先验**;两套后端(我们的服务 + omnigent)并存运维。
+
+### 2. Client 自建(React19),经 omnigent API 驱动 —— 不嵌入、不 iframe
+
+- 在我们 React19 控制台新增「Dev Workspace」页,**对着 omnigent `openapi.json`(REST)+ WS 自建瘦客户端 UI**(左树 + chat + 文件 + 终端)。
+- **否决直接 React-island 嵌入**(`embed.tsx` 设 React/react-router 为 externals,期望 host React18/RR6;我们 React19/RR7,RR6↔7 差异大 → 高风险)。**否决 iframe**(UI 割裂,catalog 进不了统一左树,UX 不达"左树右对话"目标)。代价:自建 chat/files/terminal 工作量,owner 已认可(开发时间可延长)。
+- 前端经**我们的 BFF 反代** omnigent(REST + WS),注入 KC 身份 + CSRF;**前端不持 token**(沿用现模型)。
+
+### 3. 授权三分层 + 红线(本 ADR 核心)
+
+| 关注 | 谁管 | 依据 |
+|---|---|---|
+| **认证(你是谁)** | **Keycloak**(omnigent OIDC→KC,单一身份)| ADR-025 |
+| **租户/数据授权(能否碰这份企业数据)** | **我们 `can()`(→S2 Cerbos),落在我们的 MCP 工具内** | §2.4 单一出入口 / §1.6 硬隔离 |
+| **agent 行为治理(shell/tool/cost/working_dir/危险操作 ASK)** | **omnigent PolicyEngine**(自带,我们没有)| spike RESULTS ③ |
+| **会话协作(谁能 view/edit/run 某会话)** | **omnigent session permissions**(限我们租户内)| spike RESULTS ③ |
+
+- **数据能力经"我们的 MCP server"喂给 agent**(每会话 `POST /v1/sessions/{id}/agent/mcp-servers` 注册):工具 = 读 catalog 数据集 / 取 OSS / 跑 DJ+python / 工作目录+git,**工具内部走 `can()` 按企业/owner 把关**。agent 只能经我们的工具碰数据。
+- **红线:租户/数据隔离绝不外包给 omnigent policy。** omnigent 的 policy 作用对象是 agent 动作,不懂我们的企业/owner/catalog 模型;把硬隔离交给它 = 违 §2.4/§1.6 且它做不到。
+
+### 4. Cerbos(S2)与 omnigent policy 正交、不一起实现 —— MCP 工具是接缝
+
+- 两者解不同问题:**Cerbos = 数据/资源授权 PDP(`can()` 的演进,管 group 共享/细粒度)**;**omnigent PolicyEngine = 会话内 agent 行为治理**。
+- **Plan 9 不依赖、不拉入 Cerbos**:数据授权 v1 用现有 `can()`(在我们 MCP 工具里),agent 行为用 omnigent 自带 policy,两者现在即可跑。
+- S2 Cerbos 落地时,**MCP 工具是接缝**:把工具内 `can()` 换 Cerbos 即可,**无需碰 omnigent**、无需两者一起实现。可选 v-next:omnigent 自定义 policy 在 agent 调数据工具时回调 Cerbos(默认走"工具内调授权"更简单)。
+
+## Consequences
+
+**正面**:省造 agent runtime/沙箱/harness/policy(难且非差异化);统一 UX(左树右对话,catalog 在同一树);隔离红线守住(can() 仍是数据授权唯一出入口);Cerbos 与 omnigent 解耦,各自独立演进;新增 agent 行为治理能力(我们原先没有)。
+
+**负面 / 风险**:① omnigent alpha 依赖,API 可能变 → 版本钉定 + 升级策略(留 spec)② 两套后端并存运维 ③ 自建 agent UI(chat/files/terminal)工作量 ④ BFF 需代理 WS ⑤ OIDC session cookie 需 HTTPS(`__Host-` 前缀)→ dev 也要 TLS 或 header-auth 桥(Task0 定)⑥ 模型 key(§5.2 secret)+ 成本治理(用 omnigent policy 成本上限)。
+
+## 否决的备选
+
+- **直接 React-island 嵌入 omnigent ap-web**:React19/RR7 vs 18/RR6 鸿沟,高风险。
+- **iframe omnigent ap-web**:最省最稳,但 UI 割裂、catalog 进不了统一左树,不达交互目标。
+- **全自建 agent runtime(不用 omnigent)**:重造沙箱/harness/会话编排,成本高、非差异化价值。
+- **把租户/数据隔离交给 omnigent policy 引擎**:违宪(§2.4/§1.6)+ omnigent 不懂我们的模型,做不到。
+
+## 待 Task0 探针确认(进 writing-plans 前/首任务)
+
+docker 起 omnigent → ① OIDC 接 KC 登录通(或 header-auth 桥)② 注册一个我们的 MCP 工具被 agent 调用 ③ 沙箱 + working_dir 限到工作目录 ④ BFF 反代 REST+WS。带退化规则:某项不成则记录 + 调整集成形态(回 design)。
