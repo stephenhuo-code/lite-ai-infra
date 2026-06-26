@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dev Workspace · 高保真原型 — Lite-AI 数据平台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { brand: { DEFAULT:'#6366F1', 600:'#4F46E5', 700:'#4338CA', 50:'#EEF0FF', 100:'#E0E4FF' } },
+  fontFamily: { sans:['Fira Sans','ui-sans-serif','system-ui','sans-serif'], mono:['Fira Code','ui-monospace','monospace'] },
+}}}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Fira Sans',sans-serif;background:#FAFAFC;color:#1E1B4B}
+  .mono{font-family:'Fira Code',monospace}
+  .rail-item[aria-current="page"]{background:#EEF0FF;color:#4F46E5}
+  .tab[aria-selected="true"]{color:#4F46E5;border-color:#6366F1;background:#fff}
+  .rtab[aria-selected="true"]{color:#4F46E5;background:#EEF0FF;font-weight:600}
+  :focus-visible{outline:2px solid #6366F1;outline-offset:2px;border-radius:6px}
+  .acc.collapsed .acc-body{display:none}
+  .acc.collapsed .chev{transform:rotate(-90deg)}
+  .chev{transition:transform .15s}
+  ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:6px}
+  .term::-webkit-scrollbar-thumb{background:#475569}
+  .tree-row:hover{background:#F4F4FB}
+</style>
+</head>
+<body class="h-screen overflow-hidden">
+<div class="flex h-full">
+
+  <!-- ===== 应用左侧导航 rail(说明 Dev Workspace 是控制台内一页)===== -->
+  <aside class="w-14 shrink-0 bg-white border-r border-slate-200/70 flex flex-col items-center py-3 gap-1">
+    <div class="h-9 w-9 rounded-xl bg-gradient-to-br from-brand to-fuchsia-500 grid place-items-center text-white shadow-sm mb-2 font-bold">L</div>
+    <a class="rail-item w-10 h-10 grid place-items-center rounded-xl text-slate-500 hover:bg-slate-50" title="数据集"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></a>
+    <a class="rail-item w-10 h-10 grid place-items-center rounded-xl text-slate-500 hover:bg-slate-50" title="数据目录"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></a>
+    <a class="rail-item w-10 h-10 grid place-items-center rounded-xl text-slate-500 hover:bg-slate-50" title="数据管线"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a2 2 0 012 2v1.5M8.5 18H14a2 2 0 002-2v-1.5"/></svg></a>
+    <a class="rail-item w-10 h-10 grid place-items-center rounded-xl" aria-current="page" title="Dev Workspace"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M8 9l-3 3 3 3M16 9l3 3-3 3M13 6l-2 12"/></svg></a>
+    <div class="mt-auto h-9 w-9 rounded-full bg-brand-100 text-brand grid place-items-center text-sm font-semibold" title="韩工">韩</div>
+  </aside>
+
+  <!-- ===== Dev Workspace 区 ===== -->
+  <div class="flex-1 flex min-w-0">
+
+    <!-- 左树:工作目录 / 数据目录 / Git -->
+    <aside class="w-72 shrink-0 bg-white border-r border-slate-200/70 flex flex-col">
+      <div class="px-3.5 py-3 border-b border-slate-100 flex items-center gap-2">
+        <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M8 9l-3 3 3 3M16 9l3 3-3 3M13 6l-2 12"/></svg>
+        <span class="font-semibold text-sm">Dev Workspace</span>
+      </div>
+      <!-- workspace 切换 -->
+      <button class="mx-3 mt-3 flex items-center justify-between gap-2 text-sm border border-slate-200 rounded-xl px-3 py-2 hover:border-brand">
+        <span class="flex items-center gap-2 truncate"><span class="h-5 w-5 rounded-md bg-brand-100 text-brand grid place-items-center text-[11px] font-bold">ws</span><span class="truncate font-medium">coco-清洗</span></span>
+        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+
+      <div class="flex-1 overflow-y-auto px-2 py-3 text-sm space-y-1">
+
+        <!-- 工作目录 -->
+        <div class="acc" data-acc>
+          <button onclick="toggleAcc(this)" class="w-full flex items-center gap-1.5 px-1.5 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600">
+            <svg class="chev w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>工作目录
+            <span class="ml-auto normal-case tracking-normal text-[10px] text-slate-300 mono">~/ws/coco-清洗</span>
+          </button>
+          <div class="acc-body pl-1">
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"><svg class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>output/</div>
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer ml-3 text-slate-400"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/></svg>.gitkeep</div>
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer bg-brand-50" onclick="rtab('file')"><svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/></svg><span class="font-medium text-brand-700">recipe.py</span><span class="ml-auto text-[10px] text-amber-600 font-semibold">M</span></div>
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/></svg>explore.py</div>
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/></svg>README.md</div>
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer text-slate-300"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>.dj-venv/</div>
+          </div>
+        </div>
+
+        <!-- 数据目录 catalog -->
+        <div class="acc" data-acc>
+          <button onclick="toggleAcc(this)" class="w-full flex items-center gap-1.5 px-1.5 py-1.5 mt-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600">
+            <svg class="chev w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>数据目录
+            <span class="ml-auto normal-case tracking-normal text-[10px] text-slate-300">Demo 企业</span>
+          </button>
+          <div class="acc-body pl-1">
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"><svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/></svg>data <span class="text-slate-300 text-xs">/ datasets</span></div>
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer ml-3 ring-1 ring-brand-100 bg-brand-50" onclick="rtab('preview')"><svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="9" cy="9" r="2"/><path d="M3 5h18v14H3zM3 16l5-4 4 3 4-4 5 4"/></svg><span class="font-medium">coco</span><span class="ml-auto text-[10px] text-slate-400">raw · 5k</span></div>
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer ml-3"><svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="9" cy="9" r="2"/><path d="M3 5h18v14H3zM3 16l5-4 4 3 4-4 5 4"/></svg>coco-clean<span class="ml-auto text-[10px] text-emerald-500">processed</span></div>
+          </div>
+        </div>
+
+        <!-- Git -->
+        <div class="acc" data-acc>
+          <button onclick="toggleAcc(this)" class="w-full flex items-center gap-1.5 px-1.5 py-1.5 mt-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-600">
+            <svg class="chev w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Git
+            <span class="ml-auto normal-case tracking-normal text-[10px] text-slate-400 flex items-center gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M6 8.5v7"/></svg>main</span>
+          </button>
+          <div class="acc-body pl-1">
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"><span class="w-4 text-center text-amber-600 font-bold text-xs">M</span>recipe.py</div>
+            <div class="tree-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"><span class="w-4 text-center text-emerald-600 font-bold text-xs">?</span>output/</div>
+            <div class="px-2 pt-2">
+              <input placeholder="提交信息…" class="w-full text-xs rounded-lg border border-slate-200 px-2.5 py-1.5 mb-1.5 focus:border-brand" value="feat: 过滤短文本的 DJ recipe"/>
+              <button class="w-full bg-brand hover:bg-brand-600 text-white text-xs font-medium py-1.5 rounded-lg flex items-center justify-center gap-1.5"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12l5 5 9-9"/></svg>提交(本地)</button>
+              <p class="text-[10px] text-slate-400 mt-1.5 leading-tight">本地 git;推送远端需 <a class="text-brand underline cursor-pointer">配置远端</a></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 中+右:对话 + 文件/终端 -->
+    <main class="flex-1 flex flex-col min-w-0">
+      <!-- 顶栏:会话 + 受控状态 chips -->
+      <header class="h-14 shrink-0 border-b border-slate-200/70 bg-white/80 backdrop-blur flex items-center gap-3 px-4">
+        <h1 class="font-semibold text-[15px] truncate">coco 探查与清洗</h1>
+        <span class="text-xs text-slate-400 mono">session #a7f3</span>
+        <div class="ml-auto flex items-center gap-2 text-[11px]">
+          <span class="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 4.5-3.4 7.8-8 9-4.6-1.2-8-4.5-8-9V7z"/></svg>沙箱</span>
+          <span class="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-100">policy: ASK</span>
+          <span class="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 text-slate-600 border border-slate-200">企业 Demo · owner 韩工</span>
+          <span class="flex items-center gap-1 px-2 py-1 rounded-lg bg-brand-50 text-brand-700 border border-brand-100 mono">claude-opus</span>
+        </div>
+      </header>
+
+      <div id="splitRow" class="flex-1 flex min-h-0">
+        <!-- Agent 对话 -->
+        <section class="flex-1 flex flex-col min-w-0">
+          <div id="chat" class="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+
+            <!-- user -->
+            <div class="flex gap-3 justify-end">
+              <div class="max-w-[78%] bg-brand text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm">探查一下 <b>coco</b> 数据集,看看结构和几条样本。</div>
+              <div class="h-8 w-8 rounded-full bg-brand-100 text-brand grid place-items-center text-xs font-semibold shrink-0">韩</div>
+            </div>
+
+            <!-- agent + tool call -->
+            <div class="flex gap-3">
+              <div class="h-8 w-8 rounded-xl bg-gradient-to-br from-brand to-fuchsia-500 grid place-items-center text-white shrink-0 text-xs font-bold">AI</div>
+              <div class="max-w-[82%] space-y-2">
+                <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm shadow-sm">好的,我先读它的 schema 和采样。</div>
+                <!-- tool card -->
+                <div class="rounded-xl border border-slate-200 bg-slate-50/70 overflow-hidden text-[13px]">
+                  <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200/70 bg-white">
+                    <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M14 7l-5 10M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>
+                    <span class="mono text-xs text-slate-600">catalog.read_schema</span>
+                    <span class="mono text-xs text-slate-400">(dataset="coco")</span>
+                    <span class="ml-auto flex items-center gap-1 text-emerald-600 text-xs"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M5 12l5 5 9-9"/></svg>can() 通过</span>
+                  </div>
+                  <div class="px-3 py-2 mono text-xs text-slate-600 leading-relaxed">format: webdataset · modality: 图文对<br/>fields: image(jpg), caption(txt) · samples: 5,000 · size: 1.2 GB</div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm shadow-sm">
+                  <p class="mb-2">coco 是 <b>raw webdataset</b>(图文对),约 5,000 条。取了 3 条样本:</p>
+                  <div class="grid grid-cols-3 gap-2">
+                    <div class="rounded-lg overflow-hidden border border-slate-200"><div class="h-16 bg-gradient-to-br from-sky-200 to-indigo-200"></div><p class="text-[10px] text-slate-500 px-1.5 py-1 truncate">a cat on a sofa</p></div>
+                    <div class="rounded-lg overflow-hidden border border-slate-200"><div class="h-16 bg-gradient-to-br from-amber-200 to-rose-200"></div><p class="text-[10px] text-slate-500 px-1.5 py-1 truncate">bus on street</p></div>
+                    <div class="rounded-lg overflow-hidden border border-slate-200"><div class="h-16 bg-gradient-to-br from-emerald-200 to-teal-200"></div><p class="text-[10px] text-slate-500 px-1.5 py-1 truncate">ok</p></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- user 2 -->
+            <div class="flex gap-3 justify-end">
+              <div class="max-w-[78%] bg-brand text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm">写个 Data-Juicer recipe,过滤掉 caption 少于 3 个词的样本,跑一下。</div>
+              <div class="h-8 w-8 rounded-full bg-brand-100 text-brand grid place-items-center text-xs font-semibold shrink-0">韩</div>
+            </div>
+
+            <!-- agent writes file + run (ASK pending) -->
+            <div class="flex gap-3">
+              <div class="h-8 w-8 rounded-xl bg-gradient-to-br from-brand to-fuchsia-500 grid place-items-center text-white shrink-0 text-xs font-bold">AI</div>
+              <div class="max-w-[82%] space-y-2">
+                <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm shadow-sm">已写好 <button onclick="rtab('file')" class="text-brand font-medium underline">recipe.py</button>(<span class="mono text-xs">language_id + text length 过滤</span>)。要运行 Data-Juicer 处理 5,000 条。</div>
+                <!-- ASK 审批卡(FR-010 危险/高成本行为需确认)-->
+                <div id="askCard" class="rounded-xl border-2 border-amber-300 bg-amber-50/60 px-3.5 py-3 text-sm">
+                  <div class="flex items-center gap-2 mb-1.5 text-amber-800 font-medium"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 4.3L2.6 18a2 2 0 001.7 3h15.4a2 2 0 001.7-3L13.7 4.3a2 2 0 00-3.4 0z"/></svg>需要你确认(policy: ASK)</div>
+                  <p class="text-amber-900/80 mono text-xs mb-3">run_dj(recipe="recipe.py", input="coco", est_cost≈¥0.8, ~3min)</p>
+                  <div class="flex gap-2">
+                    <button onclick="approveRun()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3.5 py-1.5 rounded-lg">批准运行</button>
+                    <button class="border border-slate-300 text-slate-600 text-xs px-3.5 py-1.5 rounded-lg hover:bg-white">拒绝</button>
+                  </div>
+                </div>
+                <!-- 运行结果(批准后出现)-->
+                <div id="runResult" class="hidden space-y-2">
+                  <div class="rounded-xl border border-slate-200 bg-slate-50/70 overflow-hidden text-[13px]">
+                    <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200/70 bg-white">
+                      <svg class="w-4 h-4 text-brand" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg>
+                      <span class="mono text-xs text-slate-600">run_dj</span>
+                      <button onclick="rtab('term')" class="ml-auto text-xs text-brand underline">查看终端</button>
+                    </div>
+                    <div class="px-3 py-2 mono text-xs text-slate-600">✓ 完成 · 输入 5,000 → 输出 4,213 · 过滤 787 · output/coco-clean.lance</div>
+                  </div>
+                  <div class="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm shadow-sm flex items-center gap-3">
+                    <span>处理完成。把 <b>coco-clean</b> 注册回数据目录(归属:你)?</span>
+                    <button class="ml-auto bg-brand hover:bg-brand-600 text-white text-xs font-medium px-3.5 py-1.5 rounded-lg shrink-0">注册到 catalog</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- composer -->
+          <div class="shrink-0 border-t border-slate-200/70 bg-white px-4 py-3">
+            <div class="flex items-end gap-2 border border-slate-200 rounded-2xl px-3 py-2 focus-within:border-brand">
+              <button class="text-slate-400 hover:text-brand p-1" title="附数据集/文件"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M21 12.5l-8.5 8.5a5 5 0 01-7-7l9-9a3.5 3.5 0 015 5l-9 9a2 2 0 01-3-3l8-8"/></svg></button>
+              <textarea rows="1" placeholder="让 agent 探查数据、写管线、改代码…  (@ 引用数据集)" class="flex-1 resize-none outline-none text-sm py-1.5 bg-transparent"></textarea>
+              <button class="bg-brand hover:bg-brand-600 text-white p-2 rounded-xl shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1.5 px-1">agent 在沙箱内执行 · 数据访问经 can()(企业 + owner) · 危险/高成本操作需你确认</p>
+          </div>
+        </section>
+
+        <!-- 可拖拽分隔条 -->
+        <div id="gutter" class="w-1.5 shrink-0 cursor-col-resize bg-slate-200/70 hover:bg-brand/60 transition-colors"></div>
+
+        <!-- 收起后的竖条(点击展开)-->
+        <button id="rightStrip" onclick="expandRight()" class="shrink-0 w-9 border-l border-slate-200/70 bg-white hover:bg-slate-50 flex-col items-center gap-2 pt-3 text-slate-400 hover:text-brand" title="展开 文件/终端 面板" style="display:none">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+          <span class="text-[11px]" style="writing-mode:vertical-rl">文件 / 终端</span>
+        </button>
+
+        <!-- 右:文件 / 终端 / 数据预览 -->
+        <section id="rightPane" class="flex flex-col bg-white shrink-0" style="width:42%;min-width:340px">
+          <div class="h-10 shrink-0 border-b border-slate-200/70 flex items-end px-2 gap-1 text-[13px]">
+            <button onclick="rtab('file')" id="rt-file" class="rtab px-3 py-1.5 rounded-t-lg text-slate-500 flex items-center gap-1.5" aria-selected="true"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/></svg>recipe.py</button>
+            <button onclick="rtab('term')" id="rt-term" class="rtab px-3 py-1.5 rounded-t-lg text-slate-500 flex items-center gap-1.5" aria-selected="false"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 9l3 3-3 3M13 15h4"/></svg>终端</button>
+            <button onclick="rtab('preview')" id="rt-preview" class="rtab px-3 py-1.5 rounded-t-lg text-slate-500 flex items-center gap-1.5" aria-selected="false"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="9" cy="9" r="2"/><path d="M3 5h18v14H3zM3 16l5-4 4 3 4-4 5 4"/></svg>数据预览</button>
+            <button onclick="collapseRight()" class="ml-auto self-center mr-1 p-1.5 rounded-lg text-slate-400 hover:text-brand hover:bg-slate-50" title="收起面板"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+          </div>
+
+          <!-- 文件查看(monaco 风)-->
+          <div id="pane-file" class="flex-1 overflow-auto">
+            <pre class="mono text-[12.5px] leading-[1.7] p-4 text-slate-700"><span class="text-slate-400"># recipe.py — Data-Juicer 配置(agent 生成)</span>
+<span class="text-fuchsia-600">from</span> data_juicer.config <span class="text-fuchsia-600">import</span> init_configs
+
+dataset_path: <span class="text-emerald-600">"coco"</span>      <span class="text-slate-400"># 经 MCP/can() 解析为本企业 OSS</span>
+export_path:  <span class="text-emerald-600">"output/coco-clean.lance"</span>
+np: <span class="text-sky-600">4</span>
+
+process:
+  - <span class="text-amber-700">language_id_score_filter</span>:
+      lang: <span class="text-emerald-600">"en"</span>
+      min_score: <span class="text-sky-600">0.8</span>
+  - <span class="text-amber-700">text_length_filter</span>:
+      min_len: <span class="text-sky-600">3</span>        <span class="text-slate-400"># caption 少于 3 词丢弃</span>
+      max_len: <span class="text-sky-600">512</span></pre>
+          </div>
+
+          <!-- 终端(xterm 风,暗色)-->
+          <div id="pane-term" class="hidden flex-1 overflow-auto term bg-slate-900">
+            <pre class="mono text-[12px] leading-[1.7] p-4 text-slate-200">$ dj-process --config recipe.py
+<span class="text-sky-400">[INFO]</span> loading dataset "coco" via lite-ai MCP …
+<span class="text-emerald-400">[ OK ]</span> can(dataset.read, coco) → allow (企业=Demo, owner=韩工)
+<span class="text-sky-400">[INFO]</span> 5000 samples loaded · sandbox=/ws/coco-清洗
+<span class="text-sky-400">[INFO]</span> op language_id_score_filter … <span class="text-slate-400">100%|████████| 5000/5000</span>
+<span class="text-sky-400">[INFO]</span> op text_length_filter        … <span class="text-slate-400">100%|████████| 5000/5000</span>
+<span class="text-emerald-400">[ OK ]</span> exported 4213 rows → output/coco-clean.lance
+<span class="text-emerald-400">[DONE]</span> filtered 787 · 2m41s
+$ <span class="animate-pulse">▋</span></pre>
+          </div>
+
+          <!-- 数据预览 -->
+          <div id="pane-preview" class="hidden flex-1 overflow-auto p-4">
+            <div class="flex items-center justify-between mb-3"><div class="font-medium text-sm">coco <span class="text-xs text-slate-400 font-normal">raw · webdataset · 5,000</span></div><span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100">can() 通过</span></div>
+            <div class="grid grid-cols-2 gap-2.5">
+              <div class="rounded-xl overflow-hidden border border-slate-200"><div class="h-24 bg-gradient-to-br from-sky-200 to-indigo-200"></div><p class="text-xs text-slate-600 px-2 py-1.5">a cat sitting on a sofa</p></div>
+              <div class="rounded-xl overflow-hidden border border-slate-200"><div class="h-24 bg-gradient-to-br from-amber-200 to-rose-200"></div><p class="text-xs text-slate-600 px-2 py-1.5">a red bus on the street</p></div>
+              <div class="rounded-xl overflow-hidden border border-slate-200"><div class="h-24 bg-gradient-to-br from-emerald-200 to-teal-200"></div><p class="text-xs text-slate-600 px-2 py-1.5">two people hiking</p></div>
+              <div class="rounded-xl overflow-hidden border border-slate-200"><div class="h-24 bg-gradient-to-br from-violet-200 to-fuchsia-200"></div><p class="text-xs text-slate-600 px-2 py-1.5">a plate of food</p></div>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-3">列式 schema 深探 / 更大采样 = v-next(需后端读 Lance Arrow schema)。</p>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+function toggleAcc(btn){ btn.closest('[data-acc]').classList.toggle('collapsed'); }
+function rtab(which){
+  ['file','term','preview'].forEach(k=>{
+    document.getElementById('pane-'+k).classList.toggle('hidden', k!==which);
+    const b=document.getElementById('rt-'+k); if(b) b.setAttribute('aria-selected', k===which);
+  });
+}
+function approveRun(){
+  document.getElementById('askCard').style.display='none';
+  document.getElementById('runResult').classList.remove('hidden');
+  rtab('term');
+  const chat=document.getElementById('chat'); chat.scrollTop=chat.scrollHeight;
+}
+
+/* ── 右侧面板:收起 / 展开 ── */
+var _lastRightW = '42%';
+function collapseRight(){
+  var pane=document.getElementById('rightPane');
+  _lastRightW = pane.style.width || '42%';
+  pane.style.display='none';
+  document.getElementById('gutter').style.display='none';
+  document.getElementById('rightStrip').style.display='flex';
+}
+function expandRight(){
+  document.getElementById('rightPane').style.display='flex';
+  document.getElementById('rightPane').style.width=_lastRightW;
+  document.getElementById('gutter').style.display='block';
+  document.getElementById('rightStrip').style.display='none';
+}
+
+/* ── 可拖拽分隔条 ── */
+(function(){
+  var gutter=document.getElementById('gutter'), pane=document.getElementById('rightPane'),
+      row=document.getElementById('splitRow'), dragging=false;
+  function onMove(e){
+    if(!dragging) return;
+    var rect=row.getBoundingClientRect();
+    var w=rect.right - e.clientX;                 // 右面板宽 = 容器右边 - 鼠标
+    var min=340, max=rect.width-380;              // 给对话留 ≥380
+    w=Math.max(min, Math.min(max, w));
+    pane.style.width=w+'px';
+    e.preventDefault();
+  }
+  function stop(){ dragging=false; document.body.style.cursor=''; document.body.style.userSelect=''; }
+  gutter.addEventListener('mousedown',function(e){ dragging=true; document.body.style.cursor='col-resize'; document.body.style.userSelect='none'; e.preventDefault(); });
+  window.addEventListener('mousemove',onMove);
+  window.addEventListener('mouseup',stop);
+})();
+</script>
+</body>
+</html>

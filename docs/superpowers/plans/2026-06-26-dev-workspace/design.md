@@ -69,8 +69,12 @@ omnigent 的每会话 MCP 注册体**只有** `name/transport/command/args/url`,
 2. **管线开发**:agent 写并跑 **DJ recipe**(复用现有 `pipelines/data_prep/recipe.py`/`.dj-venv`/`runner.py`)+ **Python 代码**(沙箱内);产物可注册回 catalog(复用 catalog-driven 注册)。
 3. **工作目录 + git**:文档/脚本版本管理(git tree 在左树)。
 
+## UI 契约(DoR #2 第一个消费者)
+- 高保真点击稿:**[prototypes/2026-06-26-dev-workspace-hifi.html](../../prototypes/2026-06-26-dev-workspace-hifi.html)**(与现有控制台同语言:brand #6366F1 / Fira Sans+Code)。
+- 定稿交互:左树三段(工作目录 / 数据目录 / Git,可折叠)+ 中 Agent 对话(工具卡带 `can() 通过`、`policy:ASK` 审批卡)+ 右面板 Tab(文件/终端/数据预览);**对话↔右面板可拖拽分隔 + 右面板可收起**;顶栏受控 chips(沙箱 / policy / 企业·owner / 模型)。
+
 ## 组件清单
-- 前端:`frontend/src/pages/DevWorkspace.tsx`(+ 左树/chat/terminal/file-viewer 子组件),驱动 omnigent REST/WS。
+- 前端:`frontend/src/pages/DevWorkspace.tsx`(+ 左树/chat/terminal/file-viewer 子组件),驱动 omnigent REST/WS。视觉照高保真原型。
 - BFF:`services/gateway/bff/` 加 omnigent 反代(REST + WS proxy,身份注入)。
 - **我们的 MCP server**(新):`services/dev_workspace_mcp/`(或并入现有服务)—— catalog/OSS/DJ/python/git 工具,内调 `can()`。
 - omnigent:`deploy/dev/` 加 omnigent docker compose。**部署形态 = 预构建镜像,不 fork 改源码**:`ghcr.io/omnigent-ai/omnigent-server`(+ runner 用 `omnigent-host`);认证/UI/数据工具全经配置或 API,无须改码(spike 实证)。**钉 `:vX.Y.Z` 或 `:sha-<short>`(不用 `:latest`),prod 可镜像到自有 registry**(供应链 + 版本钉定)。认证用 `OMNIGENT_AUTH_PROVIDER=header` 等 env。
