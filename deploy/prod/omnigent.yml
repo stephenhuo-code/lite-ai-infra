@@ -1,0 +1,51 @@
+# omnigent prod 形态(plan 9-prod):我们 registry 镜像、不发布端口、仅内部网络(BFF 可达)、
+# 含 host/runner、持久卷 + secret。与 deploy/dev/omnigent.yml(127.0.0.1 直连)区别在隔离拓扑。
+name: liteai-omnigent-prod
+
+services:
+  omnigent-pg:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: omnigent
+      POSTGRES_USER: omnigent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in prod secret}
+    volumes: [omnigent-pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omnigent -d omnigent"]
+      interval: 5s
+      retries: 30
+    networks: [omninet]
+
+  omnigent:
+    image: ${OMNIGENT_REGISTRY:?}/omnigent-server:${OMNIGENT_TAG:?}   # 我们自构建镜像
+    depends_on:
+      omnigent-pg: {condition: service_healthy}
+    environment:
+      DATABASE_URL: postgresql+psycopg://omnigent:${POSTGRES_PASSWORD}@omnigent-pg:5432/omnigent
+      ARTIFACT_DIR: /data/artifacts
+      HOST: 0.0.0.0
+      PORT: "8000"
+      OMNIGENT_ADMIN_CREDENTIALS_PATH: /data/admin-credentials
+      OMNIGENT_AUTH_ENABLED: "1"
+      OMNIGENT_AUTH_PROVIDER: header        # BFF 注入身份;BFF MUST 剥伪造头 + omnigent 不直达
+      OMNIGENT_AUTH_HEADER: X-Forwarded-Email
+    volumes: [omnigent-data:/data]
+    expose: ["8000"]                        # 仅内部网络;不发布到宿主(prod 隔离)
+    networks: [omninet]
+
+  omnigent-host:                            # 执行后端(Task0:server 单独不能执行)
+    image: ${OMNIGENT_REGISTRY:?}/omnigent-host:${OMNIGENT_TAG:?}
+    depends_on: [omnigent]
+    environment:
+      OMNIGENT_SERVER_URL: http://omnigent:8000
+      # 模型凭证经 prod secret 注入(§5.2),示意:
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?set in prod secret}
+    networks: [omninet]
+
+volumes:
+  omnigent-pgdata:
+  omnigent-data:
+
+networks:
+  omninet:
+    internal: true                          # 仅 BFF(加入本网)可达;无对外

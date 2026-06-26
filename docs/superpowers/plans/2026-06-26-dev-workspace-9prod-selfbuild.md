@@ -74,3 +74,8 @@
 
 ## Self-Review
 - 覆盖 ADR-026 §1 自构建决策:submodule 钉 ref(Task1)+ 构建脚本/CI(Task2-3)+ compose 切换/prod 形态(Task4)+ 等价性验收(Task5)+ 升级/patch-queue 流程 ✓。不预先 fork(patch-queue 空,YAGNI);改码留按需。触发条件明确(采用后/进 prod 前),不阻塞 dev。无 TBD;Dockerfile target 名有 Task0 已读的事实兜底。
+
+---
+## 状态(实时)
+> **产物完成 ✅(脚本/CI/compose/vendor 步骤;语法+config 校验过)· 分支 `dev-workspace-9prod`**
+> **触发条件未到**:实际 submodule vendoring + `docker build`+push 留「**采用后 + 进 prod + registry 凭证**」(需网络/凭证);Task 5 等价性 RUNBOOK 复跑同此。omnigent 源码钉 ref = `38523a1`。
