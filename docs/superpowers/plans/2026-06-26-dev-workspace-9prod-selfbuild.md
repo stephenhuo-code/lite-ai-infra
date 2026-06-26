@@ -1,7 +1,8 @@
 # Dev Workspace 9-prod — omnigent 自构建固化到我们 registry Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: executing-plans(基础设施类,多为脚本/CI,非 TDD)。Steps 用 `- [ ]`。
-> **前置 / 触发条件**:地基 + 9b/9c 验证通过、**决定采用 omnigent** 后,**进 prod 前**做。dev 期仍可用上游预构建镜像(地基 Task 1)。依据 [ADR-026 §1](../../adr/ADR-026-dev-workspace-omnigent.md)。
+> **状态(2026-06-27)**:**dev 自构建链路已验通 ✅**（ADR-026 §1 修订为单一源自构建三层:dev 本地 build same-source / CI build+push / prod pull same-bits）。submodule 钉 `38523a11`、`omnigent_build.sh dev` 实跑产 `omnigent-server:dev` 并 **boot + header-auth 通过**（与上游等价）。**待 registry 凭证**:host 镜像 build + CI push + prod pull。
+> **触发条件**：CI push + prod 切换在拿到 registry 后做。依据 [ADR-026 §1](../../adr/ADR-026-dev-workspace-omnigent.md)。
 
 **Goal:** 从**钉定的上游源码 ref**(不改)自构建 `omnigent-server` + `omnigent-host` 镜像、推我们 registry、dev/prod compose 切到我们镜像;升级 = bump ref + 重构建(零冲突);改码 = 最小 patch-queue。给供应链可控 / 可复现 / 可离线 / 打补丁能力位。
 
