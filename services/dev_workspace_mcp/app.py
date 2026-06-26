@@ -9,8 +9,13 @@ import os
 
 from mcp.server.fastmcp import FastMCP
 
+import subprocess
+
 from pipelines.data_prep.oss_fetch import build_s3
 from services.dev_workspace_mcp.identity import current_context, set_current_token
+from services.dev_workspace_mcp.tools.git import git_commit as _git_commit
+from services.dev_workspace_mcp.tools.git import git_log as _git_log
+from services.dev_workspace_mcp.tools.git import git_status as _git_status
 from services.dev_workspace_mcp.tools.catalog import read_schema as _read_schema
 from services.dev_workspace_mcp.tools.oss import oss_list as _oss_list
 from services.dev_workspace_mcp.tools.oss import oss_read as _oss_read
@@ -130,6 +135,50 @@ def register_dataset(name: str, location: str, derived_from: str, fmt: str = "la
         return {"error": "unauthenticated"}
     return _register_processed(ctx, _meta(), name=name, location=location,
                                derived_from=derived_from, fmt=fmt)
+
+
+class _LocalRunner:
+    # 在工作目录跑 git(沙箱内/本地盘)。OSS↔本地盘的真实同步 = workspace_store 真实 syncer,
+    # 形态待 9d Task0 探针(omnigent environment 工作目录路径);此处只负责执行 git。
+    def run(self, argv, cwd):
+        return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=False).stdout
+
+
+_RUNNER = _LocalRunner()
+
+
+def _ws_cwd(ctx) -> str:
+    # 本会话工作目录本地路径(env base + owner)。ws 维度的会话→目录映射随持久化落地细化(9d)。
+    base = os.environ.get("WS_LOCAL_BASE", "/tmp/liteai-ws")
+    return f"{base}/{ctx.user}"
+
+
+@mcp.tool()
+def git_status() -> dict:
+    """本地 git 状态(供左树 Git 段)。显示为 liteai__git_status。"""
+    ctx = current_context()
+    if ctx is None:
+        return {"error": "unauthenticated"}
+    return {"changes": _git_status(_RUNNER, cwd=_ws_cwd(ctx))}
+
+
+@mcp.tool()
+def git_log(n: int = 20) -> dict:
+    """本地 git 历史。显示为 liteai__git_log。"""
+    ctx = current_context()
+    if ctx is None:
+        return {"error": "unauthenticated"}
+    return {"log": _git_log(_RUNNER, cwd=_ws_cwd(ctx), n=n)}
+
+
+@mcp.tool()
+def git_commit(message: str) -> dict:
+    """本地提交(无 push;远端 git 用户自配)。显示为 liteai__git_commit。"""
+    ctx = current_context()
+    if ctx is None:
+        return {"error": "unauthenticated"}
+    _git_commit(_RUNNER, cwd=_ws_cwd(ctx), message=message)
+    return {"ok": True}
 
 
 @mcp.tool()
