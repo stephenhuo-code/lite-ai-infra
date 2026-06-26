@@ -1,13 +1,15 @@
 # services/gateway/bff/wstoken.py
-# 每会话工作区令牌:不透明随机串 → (sub, 企业 alias, 角色, 会话)。带 TTL + 按会话撤销。
-# v1 进程内存映射(单 BFF 实例够;多实例 = 换共享存储,此处是唯一改点)。令牌是 agent→MCP 工具的
-# 唯一身份凭证(design「数据集受控链路」,Task0 实证:令牌随 URL 抵达我们的 MCP server),
-# 故必须不透明 + 短时 + 可撤销。
+# 每会话工作区令牌 = 无状态签名(Fernet 加密 payload)。BFF 铸 / MCP server 解,用同一
+# WS_TOKEN_KEY → 跨进程天然互通,**不需共享存储**(修复 BFF/MCP 各自内存 store 不互通)。
+# 令牌是 agent→MCP 工具的唯一身份凭证(design「数据集受控链路」,Task0 实证令牌随 URL 抵达)。
+# TTL 嵌 payload(exp);撤销 = 进程内 denylist(跨进程靠短 TTL;共享 denylist = v-next)。
 from __future__ import annotations
 
-import secrets
+import json
 import time
 from dataclasses import dataclass
+
+from cryptography.fernet import Fernet, InvalidToken
 
 
 @dataclass(frozen=True)
@@ -27,28 +29,29 @@ class ResolvedToken:
 
 
 class WorkspaceTokenStore:
-    def __init__(self, ttl_seconds: int = 3600, now=time.time):
+    def __init__(self, key: bytes | None = None, ttl_seconds: int = 3600, now=time.time):
+        # key=None 仅单实例(测试/单进程)用;跨进程(BFF+MCP)必须传同一 WS_TOKEN_KEY。
+        self._f = Fernet(key or Fernet.generate_key())
         self._ttl = ttl_seconds
         self._now = now
-        self._m: dict[str, tuple[TokenClaims, float]] = {}
+        self._revoked: set[str] = set()
 
     def mint(self, claims: TokenClaims) -> str:
-        tok = secrets.token_urlsafe(32)
-        self._m[tok] = (claims, self._now() + self._ttl)
-        return tok
+        payload = {"sub": claims.sub, "ent": claims.enterprise, "role": claims.role,
+                   "sess": claims.session, "exp": self._now() + self._ttl}
+        return self._f.encrypt(json.dumps(payload).encode()).decode()
 
     def resolve(self, token: str) -> ResolvedToken | None:
-        rec = self._m.get(token)
-        if rec is None:
+        try:
+            p = json.loads(self._f.decrypt(token.encode()))   # 验签 + 解密;篡改/错 key → InvalidToken
+        except (InvalidToken, ValueError, TypeError):
             return None
-        claims, exp = rec
-        if self._now() >= exp:
-            self._m.pop(token, None)
+        if self._now() >= p.get("exp", 0):                     # 过期(payload exp,now() 可注入)
             return None
-        return ResolvedToken(claims.sub, claims.enterprise, claims.role, claims.session)
+        if p.get("sess") in self._revoked:                     # 进程内撤销
+            return None
+        return ResolvedToken(p["sub"], p["ent"], p["role"], p["sess"])
 
     def revoke_session(self, session: str) -> int:
-        gone = [t for t, (c, _) in self._m.items() if c.session == session]
-        for t in gone:
-            self._m.pop(t, None)
-        return len(gone)
+        self._revoked.add(session)
+        return 1

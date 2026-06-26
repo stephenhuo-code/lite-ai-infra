@@ -168,6 +168,22 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
             return JSONResponse(status_code=502, content={"reason": "invite failed"})
         return {"ok": True}
 
+    # Dev Workspace 路由(plan 9):/v1/ws/* 建会话 / 发 turn / SSE 流 / ASK 解决。身份取自会话(同
+    # /auth/me 模式,复用上面的 claims)。函数内 import 避免 middleware↔workspace_routes 循环。
+    from services.gateway.bff.omnigent_client import OmnigentClient as _OmniClient
+    from services.gateway.bff.workspace_routes import make_workspace_router as _make_ws
+    from services.gateway.bff.wstoken import WorkspaceTokenStore as _WsStore
+    _ws_key = os.getenv("WS_TOKEN_KEY")
+    _ws_store = _WsStore(key=_ws_key.encode() if _ws_key else None,
+                         ttl_seconds=int(os.getenv("WS_TOKEN_TTL", "3600")))
+    _omni_base = os.getenv("OMNIGENT_BASE_URL", "http://localhost:8900")
+    app.include_router(_make_ws(
+        claims=claims, store=_ws_store,
+        omni_factory=lambda em: _OmniClient(_omni_base, email=em),
+        mcp_base_url=os.getenv("MCP_BASE_URL", "http://localhost:8910"),
+        omni_base_url=_omni_base,
+        agent_id=os.getenv("OMNIGENT_AGENT_ID", "liteai_devws")))
+
     @app.middleware("http")
     async def _session(request: Request, call_next):
         # ===== call_next 前:解会话 → (过期则刷新) → 设 request.state.bearer/session =====

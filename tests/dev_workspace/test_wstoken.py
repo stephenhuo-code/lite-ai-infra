@@ -29,3 +29,23 @@ def test_revoke_session_invalidates_token():
     tok = s.mint(TokenClaims("u", "ent-demo", "member", "sess-9"))
     s.revoke_session("sess-9")
     assert s.resolve(tok) is None
+
+
+from cryptography.fernet import Fernet
+
+
+def test_two_instances_same_key_interoperate():
+    # BFF 铸 / MCP server 解(不同进程=不同实例),同一 key → 跨进程互通(修复 store 不共享 gap)
+    key = Fernet.generate_key()
+    bff = WorkspaceTokenStore(key=key, now=lambda: 0)
+    mcp = WorkspaceTokenStore(key=key, now=lambda: 0)
+    tok = bff.mint(TokenClaims(sub="u-alice", enterprise="ent-demo", role="member", session="s1"))
+    r = mcp.resolve(tok)
+    assert r is not None and r.sub == "u-alice" and r.enterprise == "ent-demo" and r.session == "s1"
+
+
+def test_different_key_cannot_resolve():
+    a = WorkspaceTokenStore(key=Fernet.generate_key(), now=lambda: 0)
+    b = WorkspaceTokenStore(key=Fernet.generate_key(), now=lambda: 0)
+    tok = a.mint(TokenClaims("u", "ent-demo", "member", "s1"))
+    assert b.resolve(tok) is None

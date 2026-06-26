@@ -25,3 +25,5 @@ gravitino:
 pipeline:
   jobs_dir: ./.dev/jobs
   dj_bin: ./.dj-venv/bin/dj-process
+workspace:
+  token_key: izUz8HYmu8l-FHzVXypDBEyGRuf33opI-Jf3xGaLgaw=   # plan 9:BFF 铸/MCP 解令牌共享密钥(dev 非真密钥;prod 走 ${WS_TOKEN_KEY})

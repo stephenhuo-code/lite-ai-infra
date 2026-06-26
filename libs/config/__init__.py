@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -66,6 +66,12 @@ class _Pipeline:
 
 
 @dataclass
+class _Workspace:
+    # Dev Workspace(plan 9):BFF 铸/MCP 解令牌的共享密钥(WS_TOKEN_KEY,跨进程必须同值)。
+    token_key: str = ""
+
+
+@dataclass
 class Settings:
     env: str
     services: _Services
@@ -74,6 +80,7 @@ class Settings:
     oss: _Oss
     gravitino: _Gravitino
     pipeline: _Pipeline
+    workspace: _Workspace = field(default_factory=_Workspace)
 
 
 def _expand(value, missing: list[str]):
@@ -115,6 +122,7 @@ def load_settings(env: str | None = None, root: Path | None = None) -> Settings:
             oss=_Oss(**grp("oss")),
             gravitino=_Gravitino(**grp("gravitino")),
             pipeline=_Pipeline(**grp("pipeline")),
+            workspace=_Workspace(**grp("workspace")),
         )
     except TypeError as e:
         raise ConfigError(
@@ -166,6 +174,7 @@ def _flat(s: Settings) -> dict[str, str | None]:
         "AUDIT_BUCKET": s.oss.audit_bucket,
         "JOBS_DIR": _abs(p.jobs_dir),
         "DJ_BIN": _abs(p.dj_bin),
+        "WS_TOKEN_KEY": s.workspace.token_key,
     }
 
 
@@ -179,10 +188,10 @@ SERVICE_ENV_KEYS: dict[str, list[str]] = {
                       "METADATA_URL"],   # S2a:submit 时按名查 metadata 解析源 location
     "gateway": ["IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
                 "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
-                "BFF_REDIRECT_URI"],
-    # Dev Workspace MCP server(plan 9):读 catalog(Gravitino)+ OSS(企业/owner 前缀)。
+                "BFF_REDIRECT_URI", "WS_TOKEN_KEY"],   # WS_TOKEN_KEY:与 MCP 同值,铸/解令牌
+    # Dev Workspace MCP server(plan 9):读 catalog(Gravitino)+ OSS(企业/owner 前缀)+ 解令牌。
     "dev-workspace-mcp": ["GRAVITINO_URL", "OSS_ENDPOINT", "OSS_ACCESS_KEY", "OSS_SECRET_KEY",
-                          "DATA_BUCKET"],
+                          "DATA_BUCKET", "WS_TOKEN_KEY"],
 }
 
 

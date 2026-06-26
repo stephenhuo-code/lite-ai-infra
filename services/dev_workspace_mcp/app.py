@@ -26,7 +26,10 @@ from services.dev_workspace_mcp.tools.sample import read_sample as _read_sample
 from services.gateway.bff.wstoken import WorkspaceTokenStore
 from services.metadata_service.gravitino import GravitinoClient
 
-STORE = WorkspaceTokenStore(ttl_seconds=int(os.getenv("WS_TOKEN_TTL", "3600")))
+# WS_TOKEN_KEY 必须与 BFF 同值(跨进程令牌互通);dev/test 缺省则自生成(仅单实例可用)。
+_WS_KEY = os.getenv("WS_TOKEN_KEY")
+STORE = WorkspaceTokenStore(key=_WS_KEY.encode() if _WS_KEY else None,
+                            ttl_seconds=int(os.getenv("WS_TOKEN_TTL", "3600")))
 mcp = FastMCP("liteai")
 
 _GRAVITINO: GravitinoClient | None = None
