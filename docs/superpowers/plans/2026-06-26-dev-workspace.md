@@ -778,10 +778,10 @@ git commit -m "test(plan9): 隔离负例 + headless 受控链路验收 runbook"
 
 ## 后续计划(本计划 de-risk 后再写,各自独立 spec-lite/plan)
 
-- **9b — Dev Workspace 前端**:自建 React19 页(左树 + chat + 文件 + 终端,照高保真原型)+ BFF REST/WS 反代。**依赖 Task 0 RESULTS 的 omnigent WS/turn 端点形态。**
-- **9c — 数据工具集 + 管线开发**:`catalog_sample` / `oss_get` / `run_dj`(复用 `pipelines/data_prep`)/ `run_python` / 注册回 catalog;policy:ASK 高成本/危险操作。覆盖 US4。
-- **9d — 工作目录持久化 + 本地 git**:对象存储为底、按 workspace 隔离、agent 默认授权;本地 git(init/commit/log);沙箱本地盘 ↔ OSS 同步。覆盖 US5。
-- **9-prod — omnigent 自构建固化(采用后/进 prod 前)**:omnigent 作 git submodule 钉定上游源码 ref;CI `docker build`(从清洁 checkout,主 Dockerfile 的 web-builder + python builder)出 `omnigent-server`/`omnigent-host` → 推我们 registry、打我们 tag;compose 切到我们 registry 镜像。升级 = bump ref + 重构建(不改零冲突)。**改码仅按需起最小 patch-queue**(rebase 到新上游 tag)。供应链 / 可复现 / 离线 / 打补丁能力位。见 ADR-026 §1。
+- **9b — Dev Workspace 前端** → [`2026-06-26-dev-workspace-9b-frontend.md`](./2026-06-26-dev-workspace-9b-frontend.md):自建 React19 页 + BFF REST/WS 反代;**Task 0 = omnigent turn/stream schema 探针**(地基未碰)。覆盖 US1/US2。
+- **9c — 数据工具集 + 管线开发** → [`2026-06-26-dev-workspace-9c-tools-pipeline.md`](./2026-06-26-dev-workspace-9c-tools-pipeline.md):`catalog_sample`/`oss_read`/`register_dataset`/`dj_scaffold`(can() + 越界守卫),复用 `pipelines/data_prep`。覆盖 US4。
+- **9d — 工作目录持久化 + 本地 git** → [`2026-06-26-dev-workspace-9d-persistence.md`](./2026-06-26-dev-workspace-9d-persistence.md):OSS 为底按 ws 隔离 + 水合/持久化 + 本地 git(无 push);Task 0 = environment filesystem 同步形态探针。覆盖 US5。
+- **9-prod — omnigent 自构建固化(采用后/进 prod 前)** → [`2026-06-26-dev-workspace-9prod-selfbuild.md`](./2026-06-26-dev-workspace-9prod-selfbuild.md):submodule 钉源码 ref + CI 构建推我们 registry + patch-queue。见 ADR-026 §1。
 
 ---
 
