@@ -25,6 +25,13 @@ class OmnigentClient:
         r.raise_for_status()
         return r.json()
 
+    def resolve_elicitation(self, session_id: str, elicitation_id: str, approve: bool) -> dict:
+        # ASK 审批(探针 RESULTS 9b③):POST /elicitations/{eid}/resolve,ElicitResult。
+        body = {"action": "accept" if approve else "decline"}
+        r = self._c.post(f"/v1/sessions/{session_id}/elicitations/{elicitation_id}/resolve", json=body)
+        r.raise_for_status()
+        return r.json()
+
     def create_session(self, agent_id: str) -> str:
         r = self._c.post("/v1/sessions", json={"agent_id": agent_id})
         r.raise_for_status()

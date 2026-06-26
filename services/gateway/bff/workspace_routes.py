@@ -62,6 +62,15 @@ def make_workspace_router(*, claims, store, omni_factory, mcp_base_url: str,
         text = (body or {}).get("text", "")
         return omni_factory(email).post_event(session_id, user_message_event(text))
 
+    @router.post("/v1/ws/sessions/{session_id}/elicitations/{eid}/resolve")
+    async def resolve(session_id: str, eid: str, request: Request):
+        ident, err = _resolve(request, claims)
+        if err:
+            return err
+        _, _, _, email = ident
+        body = await request.json()
+        return omni_factory(email).resolve_elicitation(session_id, eid, bool((body or {}).get("approve")))
+
     @router.get("/v1/ws/sessions/{session_id}/stream")
     async def stream(session_id: str, request: Request):
         ident, err = _resolve(request, claims)
