@@ -1,0 +1,39 @@
+# omnigent 探针/自托管(Plan 9 · Task 0)。header-auth(身份来自可信代理头),独立 postgres + /data 卷。
+# 探针期:对外暴露 8900 直连;Task 1 固化时改为仅 BFF 可达(去 ports / 接内网)。
+# 镜像策略分阶段(ADR-026 §1):探针用上游预构建;采用后自构建到我们 registry。
+name: liteai-omnigent-probe
+
+services:
+  omnigent-pg:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: omnigent
+      POSTGRES_USER: omnigent
+      POSTGRES_PASSWORD: probe-pw
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omnigent -d omnigent"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  omnigent:
+    image: ${OMNIGENT_IMAGE:-ghcr.io/omnigent-ai/omnigent-server}:${OMNIGENT_IMAGE_TAG:-latest}
+    depends_on:
+      omnigent-pg:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://omnigent:probe-pw@omnigent-pg:5432/omnigent
+      ARTIFACT_DIR: /data/artifacts
+      HOST: 0.0.0.0
+      PORT: "8000"
+      OMNIGENT_ADMIN_CREDENTIALS_PATH: /data/admin-credentials
+      OMNIGENT_AUTH_ENABLED: "1"
+      OMNIGENT_AUTH_PROVIDER: header
+      OMNIGENT_AUTH_HEADER: X-Forwarded-Email
+    volumes:
+      - omnigent-data:/data
+    ports:
+      - "8900:8000"
+
+volumes:
+  omnigent-data:
