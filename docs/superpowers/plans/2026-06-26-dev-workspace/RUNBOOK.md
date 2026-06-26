@@ -1,7 +1,6 @@
 # RUNBOOK — Dev Workspace 地基(受控数据链路)验收
 
-> 受控链路 + 数据工具 + 持久化的验收。**前端图形端到端验收见同目录 [RUNBOOK-9b.md](./RUNBOOK-9b.md)。**
-> 分层:**A 门禁(自动,主验收)** + **B 受控链路 live** + **C 9c 工具/管线 live** + **D 9d 持久化 live**(B/C/D 需起 omnigent + host + 订阅 token)。
+> Dev Workspace 全部验收(一份)。分层:**A 门禁(自动,主验收)** + **B 受控链路 live** + **C 9c 工具/管线 live** + **D 9d 持久化 live** + **E 前端图形 live**(B–E 需 `make ws-up` 起栈 + host + 订阅 token)。
 
 ## A. 门禁(自动)—— 受控链路逻辑的主验收
 对应 SC-002(隔离负例 100% 拦)、SC-004(零沙箱逃逸,沙箱部分见 B/Task3-4)。
@@ -48,6 +47,17 @@
 - [ ] **本地 git**:agent 调 `liteai__git_status`(左树 Git 段显示改动)→ `liteai__git_commit`(本地提交)→ `liteai__git_log` 见该提交。**确认无 push**(远端 git 用户自配)。
 - [ ] **负例·越界写**:agent 试图写工作目录外(如 `/etc/x`)→ 被沙箱拒(`write_paths` 限本 workspace)。
 - [ ] **负例·跨 owner**:用另一 owner 令牌读他人 `workspace/` 前缀 → `oss_read` 返 `forbidden`(workspace_store prefix 守卫)。
+
+## E. 前端图形 live(US1 + US2,照高保真原型)
+> 前置同 B(`make ws-up` + `make omnigent-host` + `cd frontend && npm run dev`)。视觉照 `../../prototypes/2026-06-26-dev-workspace-hifi.html`。
+- [ ] 浏览器登录(KC)→ 左侧导航点 **「Dev Workspace」**(`/workspace`)。
+- [ ] **左树**三段:工作目录 / 数据目录(展开见**真实数据集** `coco`)/ Git;段头可折叠。
+- [ ] 对话 **"探查一下 coco 数据集"** → 用户气泡即时 + agent **流式回复** + **工具卡 `liteai__catalog_read_schema`**(「can() 通过」)→ webdataset/样本数/owner=你;右上受控 chip(沙箱/policy/企业·owner)。
+- [ ] **"写个 DJ recipe 过滤短文本并跑一下"** → agent 写 `recipe.py` → **ASK 审批卡**(policy:ASK)→ 点「批准」;右栏「文件」tab 看 `recipe.py`(**monaco**)、「终端」tab 看 `dj-process` 输出(**xterm**,含 `can()=allow`)。
+- [ ] **"把结果注册回数据目录"** → 左树数据目录出现 `coco-clean`(owner=你,processed)。
+- [ ] **交互**:拖拽分隔(对话 ≥380/右栏 ≥340)· 右栏收起/展开 · tab 切换 · 点数据集→预览;前端**不持 token**(devtools 查无 access token)。
+- [ ] **隔离负例**:无企业账户进入 → 友好「待分配」提示(FR-011);左树只列本企业数据集、跨企业读被拒不泄露;危险/高成本 → ASK 拦截(FR-010)。
+- **判据(SC)**:打开→一次探查结果 ≤5 步/数分钟(SC-001);工具卡+流式+文件/终端可见 = US2 图形闭环;隔离负例全拦。
 
 ## 失败处理
 任一步失败走 `superpowers:systematic-debugging`;不假绿、不跳步。沙箱/host 认证类与外部依赖相关的偏差回写 Task0 RESULTS + design。
