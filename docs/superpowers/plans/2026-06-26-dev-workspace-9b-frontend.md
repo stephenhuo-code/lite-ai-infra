@@ -13,6 +13,21 @@
 
 ---
 
+## 状态(实时)
+> **probe-independent 部分完成 ✅(Task 1/3/4)· 后端 278 passed + 前端 39 passed + build OK · 分支 `dev-workspace-9b`**
+> **待交互探针 + 后续**:Task 0(omnigent turn 端点 + stream 事件 schema)→ 解锁 Task 2(WS 反代全量)/ Task 5(对话流)/ Task 6(文件·终端)/ Task 7(图形 runbook)。**未硬编码任何未验证的 omnigent 事件契约。**
+
+| Task | 状态 | 产物 |
+|---|---|---|
+| 0 探针(turn/stream schema) | ⏳ 待交互 | —— |
+| 1 BFF 反代身份头 | ✅ | `bff/omnigent_proxy.py`(注入身份+剥伪造头/cookie) |
+| 2 WS 反代全量 | ⏳ 待 Task0 | —— |
+| 3 BFF 工作区会话路由 | ✅ | `bff/workspace_routes.py`(身份取自会话) |
+| 4 前端外壳 + 左树 | ✅ | `pages/DevWorkspace.tsx`、`devws/LeftTree.tsx`、`api/devws.ts`、路由/导航 |
+| 5/6 对话流 + 文件/终端 | ⏳ 待 Task0 schema | —— |
+
+---
+
 ## File Structure
 - `services/gateway/bff/omnigent_proxy.py` — **新增**:REST + WS 反代(注入身份头、剥伪造头、转发 `/v1/ws/*` → omnigent)。
 - `services/gateway/bff/workspace_routes.py` — **新增**:HTTP 路由 `POST /v1/ws/sessions`(调地基 `create_workspace_session`)+ `DELETE`(close)。
