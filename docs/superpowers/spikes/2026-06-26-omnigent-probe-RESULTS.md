@@ -55,3 +55,41 @@
 
 ## 待钉版本
 - 采用后把 `:latest` 换实测 `:vX.Y.Z`(当前 digest 已记于顶部);自构建固化见 9-prod。
+
+---
+## 9b + 9d 探针(2026-06-26,源码级解掉,无需 live)
+
+> 来源:omnigent 官方客户端 `ap-web/src/lib/{sessionsApi,types,sse}.ts` + openapi `ServerStreamEvent`。
+> 官方客户端做的正是我们 9b 要做的 → 直接采信,无需起 omnigent + host + 模型 token。
+
+### 9b① 发 user turn = `POST /v1/sessions/{id}/events`(承重墙解)
+body = `SessionEventInput`(= `omnigent.server.schemas.SessionEventInput`):
+```json
+{ "type": "message",
+  "data": { "role": "user",
+            "content": [ { "type": "input_text", "text": "<用户消息>" } ] } }
+```
+- 其它事件同端点:`{type:"interrupt"}`、`{type:"stop_session"}`、`{type:"approval"}`、`{type:"function_call_output"}`。
+- 响应 `PostEventResponse` = `{queued, item_id?, denied?, pending_id?}`。
+- **runner 未连 → 503**(再证需 host/runner)。
+
+### 9b② stream = `GET /v1/sessions/{id}/stream`(SSE,非 WS)
+- `Accept: text/event-stream`,body 是 SSE,逐条 `ServerStreamEvent`(openapi 联合)。
+- **BFF 决策:SSE 透传(StreamingResponse),非 WS 反代** → 9b Task 2 据此实现。
+- 前端消费事件(openapi 事件类型 + ap-web):
+  - `response.output_text.delta`(`OutputTextDeltaEvent`)→ 流式 assistant 文本气泡
+  - `response.output_item.done`(`OutputItemDoneEvent`)→ 工具调用/结果卡
+  - `ElicitationRequestEvent` / `response.elicitation.*` → **ASK 审批卡**
+  - `ReasoningTextDeltaEvent` → 思考流;`response.created/completed/incomplete`、`ErrorEvent`、`HeartbeatEvent` → turn 生命周期
+  - item 形态:`{type:"message", role, content:[{type:"output_text", text}]}` / `{type:"user_message"}`
+
+### 9b③ ASK 审批 = `POST /v1/sessions/{id}/elicitations/{eid}/resolve`
+- body = MCP `ElicitResult`;elicitation id 在 URL,非 body。对应原型的 ASK 审批卡"批准/拒绝"。
+
+### 9d filesystem(同步形态解)= environment filesystem API
+- 读 `GET …/environments/{eid}/filesystem/{relative_path}` → `{content, encoding}`(utf-8 / base64,见 ap-web `useFileContent`)。
+- 写 `PUT …/filesystem/{relative_path}` body `{content, encoding}`(见 `useWriteFileContent`)。删 `DELETE`;变更 `GET …/changes`。
+- **9d 决策:同步走"遍历 filesystem API 读写"**(plan 9d Task0 决策规则的 ②分支);workspace_store 真实 syncer 据此实现(OSS ↔ filesystem API)。
+
+### 结论
+**9b Task 0 与 9d Task 0 均解(源码级)。** 解锁:9b Task 2(SSE 透传反代)/ Task 5(对话流消费)/ Task 6(文件 GET-PUT、终端 WS)/ Task 7;9d 真实 syncer。**未起 live**(契约取自官方客户端,权威);如需 end-to-end live 确认,按地基 RUNBOOK B 跑一次即可。
