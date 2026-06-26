@@ -32,5 +32,12 @@
 ### 快验(免 host,镜像 Task0)
 直接用 `omnigent run` 挂一个 spec(`executor.harness: claude-native` + `tools.liteai: {type: mcp, transport: http, url: http://localhost:8910/s/<手铸token>/mcp}`),prompt "call liteai__catalog_read_schema for dataset coco"。看工具返回 + MCP 日志 `can()=allow`。(Task0 已用此法证承重墙②。)
 
+## C. 9c 数据工具集 + 管线(live,可选)
+> 在 B 起好的栈上,验 agent 经新工具走"探查→管线→注册回 catalog"。
+- [ ] agent 调 `liteai__catalog_sample` 对 coco 采样 → 返回定位/格式(can()=allow)。
+- [ ] agent 调 `liteai__dj_scaffold` 生成 recipe 到工作目录 → 沙箱跑 `dj-process` → 产出 `output/coco-clean.lance`。
+- [ ] agent 调 `liteai__register_dataset`(location 落本人 `processed/` 前缀)→ 数据目录出现 `coco-clean`(owner=你)。
+- [ ] **负例**:`liteai__oss_read path=ent-other/...`(跨企业)→ `forbidden`、不触达存储;`register_dataset` location 落他人前缀 → `forbidden`。
+
 ## 失败处理
 任一步失败走 `superpowers:systematic-debugging`;不假绿、不跳步。沙箱/host 认证类与外部依赖相关的偏差回写 Task0 RESULTS + design。

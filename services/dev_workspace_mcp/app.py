@@ -9,8 +9,15 @@ import os
 
 from mcp.server.fastmcp import FastMCP
 
+from pipelines.data_prep.oss_fetch import build_s3
 from services.dev_workspace_mcp.identity import current_context, set_current_token
 from services.dev_workspace_mcp.tools.catalog import read_schema as _read_schema
+from services.dev_workspace_mcp.tools.oss import oss_list as _oss_list
+from services.dev_workspace_mcp.tools.oss import oss_read as _oss_read
+from services.dev_workspace_mcp.tools.pipeline import dj_run_command as _dj_cmd
+from services.dev_workspace_mcp.tools.pipeline import scaffold_dj_recipe as _scaffold
+from services.dev_workspace_mcp.tools.register import register_processed as _register_processed
+from services.dev_workspace_mcp.tools.sample import read_sample as _read_sample
 from services.gateway.bff.wstoken import WorkspaceTokenStore
 from services.metadata_service.gravitino import GravitinoClient
 
@@ -46,6 +53,90 @@ def catalog_read_schema(dataset: str, catalog: str = "data", schema: str = "data
     if ctx is None:
         return {"error": "unauthenticated"}
     return _read_schema(ctx, _gravitino(), dataset=dataset, catalog=catalog, schema=schema)
+
+
+class _OssClient:
+    # boto3 s3 → 我们工具期望的 .get(path)/.list(prefix)(path=bucket 内 key)。
+    def __init__(self, s3, bucket: str):
+        self._s3, self._bucket = s3, bucket
+
+    def get(self, path: str) -> bytes:
+        return self._s3.get_object(Bucket=self._bucket, Key=path)["Body"].read()
+
+    def list(self, prefix: str):
+        r = self._s3.list_objects_v2(Bucket=self._bucket, Prefix=prefix)
+        return [o["Key"] for o in r.get("Contents", [])]
+
+
+_OSS: _OssClient | None = None
+
+
+def _oss() -> _OssClient:
+    global _OSS
+    if _OSS is None:
+        s3 = build_s3(os.environ["OSS_ENDPOINT"], os.environ["OSS_ACCESS_KEY"], os.environ["OSS_SECRET_KEY"])
+        _OSS = _OssClient(s3, os.environ["DATA_BUCKET"])
+    return _OSS
+
+
+class _MetaClient:
+    # 注册回 catalog:复用 Gravitino 写(metalake 映射 + s3→s3a,同 metadata_service 语义)。
+    def create(self, *, name, location, owner, enterprise, kind, format, derived_from, scope):
+        ml = enterprise.replace("-", "_")
+        loc = location.replace("s3://", "s3a://", 1)
+        props = {"owner_user": owner, "scope": scope, "kind": kind, "format": format}
+        if derived_from:
+            props["derived_from"] = derived_from
+        _gravitino().create_fileset(ml, "data", "datasets", name, loc, comment="", properties=props)
+        return {"name": name, "owner": owner}
+
+
+def _meta() -> _MetaClient:
+    return _MetaClient()
+
+
+@mcp.tool()
+def catalog_sample(dataset: str, n: int = 5, catalog: str = "data", schema: str = "datasets") -> dict:
+    """采样数据集(can() 把关)。显示为 liteai__catalog_sample。"""
+    ctx = current_context()
+    if ctx is None:
+        return {"error": "unauthenticated"}
+    return _read_sample(ctx, _gravitino(), dataset=dataset, n=n, catalog=catalog, schema=schema)
+
+
+@mcp.tool()
+def oss_read(path: str) -> dict:
+    """读 OSS 对象(仅限本企业/owner 前缀)。显示为 liteai__oss_read。"""
+    ctx = current_context()
+    if ctx is None:
+        return {"error": "unauthenticated"}
+    return _oss_read(ctx, _oss(), path=path)
+
+
+@mcp.tool()
+def oss_list(prefix: str = "") -> dict:
+    """列 OSS 对象(仅限本企业/owner 前缀)。显示为 liteai__oss_list。"""
+    ctx = current_context()
+    if ctx is None:
+        return {"error": "unauthenticated"}
+    return _oss_list(ctx, _oss(), prefix=prefix)
+
+
+@mcp.tool()
+def register_dataset(name: str, location: str, derived_from: str, fmt: str = "lance") -> dict:
+    """把处理后数据集注册回数据目录(owner=本人,越界前缀拒)。显示为 liteai__register_dataset。"""
+    ctx = current_context()
+    if ctx is None:
+        return {"error": "unauthenticated"}
+    return _register_processed(ctx, _meta(), name=name, location=location,
+                               derived_from=derived_from, fmt=fmt)
+
+
+@mcp.tool()
+def dj_scaffold(dataset: str, export: str, ops: list, np: int = 4) -> dict:
+    """生成 Data-Juicer recipe 到工作目录 + 返回运行命令。显示为 liteai__dj_scaffold。"""
+    return {"recipe": _scaffold(dataset=dataset, export=export, ops=ops, np=np),
+            "run": _dj_cmd(recipe_path="recipe.py")}
 
 
 def build_asgi(store: WorkspaceTokenStore = STORE):

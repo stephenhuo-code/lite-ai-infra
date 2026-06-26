@@ -13,6 +13,21 @@
 
 ---
 
+## 状态(实时)
+> **开发完成 ✅(Task 1–5)· 266 passed + lint KEPT · 分支 `dev-workspace-9c`**
+> Task 6 = live runbook(并入 `2026-06-26-dev-workspace/RUNBOOK.md` C 段)。
+
+| Task | 状态 | 产物 |
+|---|---|---|
+| 1 OSS 越界守卫 | ✅ | `tools/oss.py` |
+| 2 catalog_sample | ✅ | `tools/sample.py` |
+| 3 register_dataset | ✅ | `tools/register.py` |
+| 4 dj_scaffold | ✅ | `tools/pipeline.py` |
+| 5 接入 MCP server | ✅ | `app.py`(5 工具 + OSS/Meta 适配) |
+| 6 live runbook | ✅ | `RUNBOOK.md` C 段 |
+
+---
+
 ## File Structure
 - `services/dev_workspace_mcp/tools/sample.py` — **新增**:`read_sample(ctx, gravitino, oss, *, dataset, n)` 采样(can() + 不可归属 fail-closed)。
 - `services/dev_workspace_mcp/tools/oss.py` — **新增**:`oss_read(ctx, oss, *, path)` / `oss_list` —— 仅限调用者企业/owner 前缀(`<企业>/{owner}/...`),越界拒。
