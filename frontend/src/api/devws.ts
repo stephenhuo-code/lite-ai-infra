@@ -23,3 +23,19 @@ export async function sendTurn(sessionId: string, text: string): Promise<void> {
 export async function resolveElicitation(sessionId: string, id: string, approve: boolean): Promise<void> {
   await fetch(`/v1/ws/sessions/${encodeURIComponent(sessionId)}/elicitations/${encodeURIComponent(id)}/resolve`, mut({ approve }))
 }
+
+// 工作目录树 / git 状态:经 BFF → omnigent filesystem / 我们的 git 工具(best-effort,失败回空,
+// 不阻塞外壳;live 接入后填充)。
+export async function fetchWorkingFiles(): Promise<string[]> {
+  try {
+    const r = await fetch('/v1/ws/working-files')
+    return r.ok ? (await r.json()).files ?? [] : []
+  } catch { return [] }
+}
+
+export async function fetchGitChanges(): Promise<{ x: string; path: string }[]> {
+  try {
+    const r = await fetch('/v1/ws/git-status')
+    return r.ok ? (await r.json()).changes ?? [] : []
+  } catch { return [] }
+}
