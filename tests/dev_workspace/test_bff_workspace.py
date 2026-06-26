@@ -15,18 +15,20 @@ def _client(handler):
                           transport=httpx.MockTransport(handler))
 
 
-def test_create_session_sends_header_auth_and_agent_id():
+def test_create_session_bundled_upload():
     seen = {}
 
     def h(req):
         seen["email"] = req.headers.get("X-Forwarded-Email")
-        seen["body"] = json.loads(req.content)
-        return httpx.Response(200, json={"id": "sess-omni-1"})
+        seen["ctype"] = req.headers.get("content-type", "")
+        seen["body"] = req.content
+        return httpx.Response(200, json={"session_id": "sess-omni-1"})
 
-    sid = _client(h).create_session(agent_id="liteai_devws")
+    sid = _client(h).create_session(agent_config_yaml="name: liteai_devws\n")
     assert sid == "sess-omni-1"
-    assert seen["email"] == "alice@acme.test"      # header-auth 注入
-    assert seen["body"]["agent_id"] == "liteai_devws"   # Task0:agent_id 必填
+    assert seen["email"] == "alice@acme.test"          # header-auth 注入
+    assert "multipart/form-data" in seen["ctype"]      # bundled multipart
+    assert b"bundle" in seen["body"] and b"metadata" in seen["body"]
 
 
 def test_register_mcp_sends_tokenized_url():
@@ -55,13 +57,13 @@ def test_create_workspace_session_binds_token_to_caller():
         if req.url.path.endswith("/mcp-servers"):
             calls["url"] = json.loads(req.content)["url"]
             return httpx.Response(201, json={})
-        return httpx.Response(200, json={"id": "sess-7"})
+        return httpx.Response(200, json={"session_id": "sess-7"})
 
     store = WorkspaceTokenStore(now=lambda: 0)
     omni = OmnigentClient("http://omnigent:8000", email="alice@acme.test",
                           transport=httpx.MockTransport(h))
     out = create_workspace_session(sub="u-alice", enterprise="ent-demo", role="member",
-                                   agent_id="liteai_devws", store=store, omni=omni,
+                                   agent_config_yaml="name: liteai_devws\n", store=store, omni=omni,
                                    mcp_base_url="http://liteai-mcp:8000")
     assert out["session_id"] == "sess-7"
     tok = calls["url"].rsplit("/", 2)[1]          # /s/<tok>/mcp
@@ -109,12 +111,12 @@ def test_create_with_ws_hydrates_workspace():
     def h(req):
         if req.url.path.endswith("/mcp-servers"):
             return httpx.Response(201, json={})
-        return httpx.Response(200, json={"id": "sess-h"})
+        return httpx.Response(200, json={"session_id": "sess-h"})
 
     store = WorkspaceTokenStore(now=lambda: 0)
     omni = OmnigentClient("http://omnigent:8000", email="a@x", transport=httpx.MockTransport(h))
     create_workspace_session(sub="u-alice", enterprise="ent-demo", role="member",
-                             agent_id="a", store=store, omni=omni,
+                             agent_config_yaml="name: liteai_devws\n", store=store, omni=omni,
                              mcp_base_url="http://mcp:8000", ws="w1", oss=oss, fs=fs)
     assert fs.files["recipe.py"] == b"x"          # 水合到工作目录
 

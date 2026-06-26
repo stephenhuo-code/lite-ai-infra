@@ -38,8 +38,8 @@ def _resolve(request: Request, claims):
 
 
 def make_workspace_router(*, claims, store, omni_factory, mcp_base_url: str,
-                          omni_base_url: str = "http://omnigent:8000",
-                          agent_id: str = "liteai_devws") -> APIRouter:
+                          agent_config_yaml: str,
+                          omni_base_url: str = "http://omnigent:8000") -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/ws/sessions")
@@ -49,7 +49,7 @@ def make_workspace_router(*, claims, store, omni_factory, mcp_base_url: str,
             return err
         ctx, enterprise, role, email = ident
         return create_workspace_session(
-            sub=ctx.user, enterprise=enterprise, role=role, agent_id=agent_id,
+            sub=ctx.user, enterprise=enterprise, role=role, agent_config_yaml=agent_config_yaml,
             store=store, omni=omni_factory(email), mcp_base_url=mcp_base_url)
 
     @router.post("/v1/ws/sessions/{session_id}/turn")

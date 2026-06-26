@@ -177,12 +177,15 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
     _ws_store = _WsStore(key=_ws_key.encode() if _ws_key else None,
                          ttl_seconds=int(os.getenv("WS_TOKEN_TTL", "3600")))
     _omni_base = os.getenv("OMNIGENT_BASE_URL", "http://localhost:8900")
+    from pathlib import Path as _Path
+    _spec = _Path(os.getenv("OMNIGENT_AGENT_SPEC", "deploy/dev/liteai-devws-agent/config.yaml"))
+    _agent_yaml = _spec.read_text() if _spec.exists() else "spec_version: 1\nname: liteai_devws\n"
     app.include_router(_make_ws(
         claims=claims, store=_ws_store,
         omni_factory=lambda em: _OmniClient(_omni_base, email=em),
         mcp_base_url=os.getenv("MCP_BASE_URL", "http://localhost:8910"),
         omni_base_url=_omni_base,
-        agent_id=os.getenv("OMNIGENT_AGENT_ID", "liteai_devws")))
+        agent_config_yaml=_agent_yaml))
 
     @app.middleware("http")
     async def _session(request: Request, call_next):

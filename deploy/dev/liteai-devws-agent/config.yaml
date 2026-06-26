@@ -1,0 +1,31 @@
+# Lite-AI Dev Workspace agent(plan 9b)。随建会话以 bundle(tar.gz)上传给 omnigent server,
+# server 建会话级 agent 并绑定(createBundledSession 契约,ap-web 实证)。
+# harness=claude-native(吃 Claude 订阅,CLAUDE_CODE_OAUTH_TOKEN);数据工具经我们的 MCP server
+# 每会话注册(令牌化 URL),不在本 spec 里声明。
+spec_version: 1
+name: liteai_devws
+description: Lite-AI 数据开发台 agent —— 基于数据目录做数据探查 + 数据管线开发。
+executor:
+  type: omnigent
+  config:
+    harness: claude-native
+    # headless 会话不能回答审批弹窗;auto 在 managed 设置下自动放行(危险/高成本仍经 policy ASK)。
+    permission_mode: auto
+prompt: |
+  你是 Lite-AI 数据开发台的 agent,帮数据工程师基于「数据目录(catalog)」的数据集做
+  **数据探查**与**数据管线开发**(Data-Juicer + Python)。
+
+  数据访问只能经平台提供的 `liteai__*` 工具,绝不绕过:
+  - `liteai__catalog_read_schema` / `liteai__catalog_sample`:探查数据集结构 / 采样
+  - `liteai__oss_read` / `liteai__oss_list`:读对象存储(仅限本企业/owner 前缀)
+  - `liteai__dj_scaffold`:生成 Data-Juicer recipe 到工作目录,再在沙箱跑 `dj-process`
+  - `liteai__register_dataset`:把处理后数据集注册回数据目录(归属=本人)
+  - `liteai__git_status` / `liteai__git_log` / `liteai__git_commit`:工作目录本地 git
+
+  每次数据访问都受企业硬隔离 + owner 授权约束(平台侧 can() 强制);越权会被工具拒,
+  你要把"被拒"如实告诉用户、不要伪造结果。危险/高成本操作会触发人工审批(ASK)。
+os_env:
+  type: caller_process
+  cwd: .
+  sandbox:
+    type: none

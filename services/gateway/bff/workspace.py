@@ -16,11 +16,11 @@ def strip_forged_identity_headers(headers: dict) -> dict:
     return {k: v for k, v in headers.items() if k.lower() not in _FORGED}
 
 
-def create_workspace_session(*, sub: str, enterprise: str, role: str, agent_id: str,
+def create_workspace_session(*, sub: str, enterprise: str, role: str, agent_config_yaml: str,
                              store: WorkspaceTokenStore, omni: OmnigentClient,
                              mcp_base_url: str, ws: str | None = None,
                              oss=None, fs=None) -> dict:
-    sid = omni.create_session(agent_id=agent_id)
+    sid = omni.create_session(agent_config_yaml=agent_config_yaml)   # bundled:上传 agent spec
     tok = store.mint(TokenClaims(sub=sub, enterprise=enterprise, role=role, session=sid))
     omni.register_mcp(session_id=sid, name="liteai",
                       url=f"{mcp_base_url.rstrip('/')}/s/{tok}/mcp")

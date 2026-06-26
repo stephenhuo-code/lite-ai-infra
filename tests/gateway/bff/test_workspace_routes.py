@@ -15,7 +15,7 @@ def _omni_factory(email):
         if req.url.path.endswith("/mcp-servers"):
             return httpx.Response(201, json={})
         assert req.headers.get("X-Forwarded-Email") == "alice@acme.test"   # header-auth
-        return httpx.Response(200, json={"id": "sess-omni"})
+        return httpx.Response(200, json={"session_id": "sess-omni"})
     return OmnigentClient("http://omnigent:8000", email=email, transport=httpx.MockTransport(h))
 
 
@@ -31,7 +31,8 @@ def _app():
 
     app.include_router(make_workspace_router(
         claims=lambda t: _CLAIMS, store=WorkspaceTokenStore(now=lambda: 0),
-        omni_factory=_omni_factory, mcp_base_url="http://mcp:8000"))
+        omni_factory=_omni_factory, mcp_base_url="http://mcp:8000",
+        agent_config_yaml="name: liteai_devws\n"))
     return app
 
 
@@ -53,7 +54,7 @@ def test_turn_posts_user_message():
             import json as _j
             seen["body"] = _j.loads(req.content)
             return httpx.Response(200, json={"queued": True})
-        return httpx.Response(200, json={"id": "x"})
+        return httpx.Response(200, json={"session_id": "x"})
 
     def omni_factory(email):
         return OmnigentClient("http://omnigent:8000", email=email, transport=httpx.MockTransport(h))
@@ -69,7 +70,8 @@ def test_turn_posts_user_message():
 
     app.include_router(make_workspace_router(
         claims=lambda t: _CLAIMS, store=WorkspaceTokenStore(now=lambda: 0),
-        omni_factory=omni_factory, mcp_base_url="http://mcp:8000"))
+        omni_factory=omni_factory, mcp_base_url="http://mcp:8000",
+        agent_config_yaml="name: liteai_devws\n"))
     r = TestClient(app).post("/v1/ws/sessions/s1/turn", headers={"x-test-bearer": "tok"},
                              json={"text": "探查 coco"})
     assert r.status_code == 200 and r.json()["queued"] is True
