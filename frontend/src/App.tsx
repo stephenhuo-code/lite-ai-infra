@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Shell } from './app/Shell'
 import { Account } from './pages/Account'
+import { DevWorkspace } from './pages/DevWorkspace'
 import { Catalog } from './pages/Catalog'
 import { CreateJob } from './pages/CreateJob'
 import { Datasets } from './pages/Datasets'
@@ -14,6 +15,7 @@ export default function App() {
         <Route index element={<Navigate to="/datasets" replace />} />
         <Route path="/datasets" element={<Datasets />} />
         <Route path="/catalog" element={<Catalog />} />
+        <Route path="/workspace" element={<DevWorkspace />} />
         <Route path="/pipelines" element={<Pipelines />} />
         <Route path="/create" element={<CreateJob />} />
         <Route path="/account" element={<Account />} />
