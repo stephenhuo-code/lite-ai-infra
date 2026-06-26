@@ -1,8 +1,10 @@
 # omnigent 自托管(Plan 9)。header-auth(身份来自可信代理头),独立 postgres + /data 卷。
 # 「不直达」固化(Task 1):本仓库 dev 里服务跑在主机(uv),仅 deps 在 docker → omnigent 绑
 # 127.0.0.1(仅本机/主机 BFF 可达,不对外暴露);prod(容器化 BFF)改为内部网络 + 不发布端口。
-# 实测可用镜像 digest(Task0):sha256:112be2e5f8d1eae47edbd3892243a47bfde2b3a462f0a6a595f15ac4207aed1b
-# 镜像策略分阶段(ADR-026 §1):探针/dev 用上游预构建;采用后自构建到我们 registry(9-prod)。
+# 镜像 = 本地自构建(ADR-026 §1 修订:单一源自构建,dev/prod 同源)。
+# 起前先:`scripts/omnigent_build.sh dev`(从 third_party/omnigent 钉定 ref + patch-queue 本地 build
+# 出 omnigent-server:dev / omnigent-host:dev)。prod 走 CI build+push registry,prod pull(same bits)。
+# omnigent 源码钉 ref(Task0 实测):38523a1。
 name: liteai-omnigent
 
 services:
@@ -19,7 +21,8 @@ services:
       retries: 30
 
   omnigent:
-    image: ${OMNIGENT_IMAGE:-ghcr.io/omnigent-ai/omnigent-server}:${OMNIGENT_IMAGE_TAG:-latest}
+    # 本地自构建镜像(scripts/omnigent_build.sh dev);不再默认拉上游(ADR-026 §1:dev 同源自构建)。
+    image: ${OMNIGENT_IMAGE:-omnigent-server}:${OMNIGENT_IMAGE_TAG:-dev}
     depends_on:
       omnigent-pg:
         condition: service_healthy

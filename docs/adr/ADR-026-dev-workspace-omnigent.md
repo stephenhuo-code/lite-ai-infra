@@ -20,11 +20,16 @@ S1 出口④ 的降级项 **Plan 9 Dev Workspace** 原定"code-server + Remote-S
 ### 1. 采用 omnigent 作 Dev Workspace 的 agent 后端(②-⑥),自托管
 
 - omnigent(Apache-2.0,self-host docker)提供 Server(FastAPI)/Host/Runner(每会话进程 + bwrap 沙箱)/Harness(claude-sdk)/policy。**非自建 agent runtime/沙箱**。
-- **镜像策略 = 分阶段(自构建为主,不预先 fork)**(omnigent 主 Dockerfile 支持 clean-checkout 构建;Apache-2.0 允许内部构建/改/再分发):
-  - **探针期**:用上游**预构建镜像** `ghcr.io/omnigent-ai/omnigent-server`(+ runner `omnigent-host`)——最快验承重墙,不为未确认采用的依赖先付构建成本。
-  - **采用后(进 prod 前)**:**自构建到我们 registry** —— omnigent 作 git submodule / vendored **钉定上游源码 ref**,我们 CI `docker build` 出 server/host 镜像、打我们的 tag、推自有 registry。给**供应链可控 + 可复现 + 可离线 + 打补丁能力位**,且**不付 fork 的 rebase 税**(不改则升级=bump ref+重构建,零冲突)。
-  - **代码修改 = 按需 patch-queue**:v1 认证(header-auth)/UI(自建,不用其 ap-web)/数据工具(MCP API)全经配置/API,**无改码需求**;仅当出现 config/API 够不着的真需求,才维护**最小补丁队列**(rebase 到新上游 tag),省着改。
-- alpha 依赖:**版本钉定(源码 ref)+ Task0 探针先验**;两套后端(我们的服务 + omnigent)并存运维。
+- **镜像策略 = 单一源自构建 + 三层(修订 2026-06-27)**。动机:owner 目标 = **dev/prod 一致(§5.3)+ 未来会改 omnigent 源码**。"dev 用上游预构建"在改码后即破 parity(预构建 ≠ 我们的构建,dev 跑不到改的代码)→ 放弃分阶段,统一从单一源自构建。
+  - **单一源(唯一真相)**:omnigent 作 git submodule **钉定上游 ref** `third_party/omnigent` + `deploy/omnigent-patches/`(patch-queue)+ 上游 `Dockerfile` + `scripts/omnigent_build.sh`。改 omnigent = 往 patch-queue 加补丁;升级 = bump submodule ref。
+  - **三层 + parity 强度**(强 parity 落在**发布路径 CI→prod**,非 dev):
+    - **dev**:`omnigent_build.sh dev` **本地 build**(单平台,load 本地)→ dev compose 用本地 tag。**same source**(同 ref+补丁+Dockerfile),允许字节不同;价值 = 改码秒级 rebuild、快速迭代;**不依赖 registry**(本地 build+跑,不 push/pull)。
+    - **CI**:`omnigent_build.sh ci` 同源 build → 测 → **push 我们 registry**(release tag)= 唯一权威发布制品。
+    - **prod**:`pull` CI 推的那一份 = **same bits**(= CI 测过的字节)。**registry 仅服务 CI→prod**。
+  - **不变量**:dev 与 CI 吃**同一套源**(submodule ref + patch-queue + Dockerfile + build 脚本)→ 行为一致,dev 验证可信。
+  - **探针例外**:首次承重墙探针(Task0)用上游预构建快验(已用、已弃);之后 dev 即走自构建。
+  - **不预先 fork**:无改码需求时 patch-queue 为空,纯 vendor 不改;改码才加补丁(rebase 到新上游 ref)。
+- alpha 依赖:**版本钉定(submodule ref)+ Task0 探针先验**;两套后端(我们的服务 + omnigent)并存运维。
 
 ### 2. Client 自建(React19),经 omnigent API 驱动 —— 不嵌入、不 iframe
 
