@@ -10,10 +10,22 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from services.dev_workspace_mcp.identity import current_context, set_current_token
+from services.dev_workspace_mcp.tools.catalog import read_schema as _read_schema
 from services.gateway.bff.wstoken import WorkspaceTokenStore
+from services.metadata_service.gravitino import GravitinoClient
 
 STORE = WorkspaceTokenStore(ttl_seconds=int(os.getenv("WS_TOKEN_TTL", "3600")))
 mcp = FastMCP("liteai")
+
+_GRAVITINO: GravitinoClient | None = None
+
+
+def _gravitino() -> GravitinoClient:
+    # 进程生命周期单例(httpx 连接池),与 metadata_service 同 env。
+    global _GRAVITINO
+    if _GRAVITINO is None:
+        _GRAVITINO = GravitinoClient(base_url=os.environ.get("GRAVITINO_URL", "http://localhost:8091"))
+    return _GRAVITINO
 
 
 @mcp.tool()
@@ -24,6 +36,16 @@ def whoami() -> dict:
         return {"error": "unauthenticated"}        # fail-closed
     ent = ctx.memberships[0].enterprise_id if ctx.memberships else None
     return {"user": ctx.user, "enterprise": str(ent) if ent else None}
+
+
+@mcp.tool()
+def catalog_read_schema(dataset: str, catalog: str = "data", schema: str = "datasets") -> dict:
+    """探查数据集:返回 owner/scope/format/kind/num_samples/location(经 can() 把关)。
+    对 agent 显示为 liteai__catalog_read_schema。"""
+    ctx = current_context()
+    if ctx is None:
+        return {"error": "unauthenticated"}
+    return _read_schema(ctx, _gravitino(), dataset=dataset, catalog=catalog, schema=schema)
 
 
 def build_asgi(store: WorkspaceTokenStore = STORE):
