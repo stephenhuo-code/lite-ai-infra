@@ -33,7 +33,7 @@ TOKEN ?= $${OMNIGENT_TOKEN_FILE:-secrets/omnigent.token}
 # host/runner 后台(读 token 文件;缺则跳过并提示一次性 claude setup-token)
 ws-host-up:       ; @mkdir -p .dev; if [ -f $(TOKEN) ]; then CLAUDE_CODE_OAUTH_TOKEN=$$(cat $(TOKEN)) nohup uv run --project third_party/omnigent omnigent host http://localhost:8900 >.dev/omnigent-host.log 2>&1 & echo $$! >.dev/omnigent-host.pid; echo "  omnigent-host  → 后台 (.dev/omnigent-host.log)"; else echo "  omnigent-host  → 跳过:缺 $(TOKEN)(先 'claude setup-token' 把输出存进去)"; fi
 ws-fe-up:         ; @mkdir -p .dev; cd frontend && nohup npm run dev >../.dev/frontend.log 2>&1 & echo $$! >.dev/frontend.pid; echo "  frontend       → 后台 (.dev/frontend.log, http://localhost:5173/workspace)"
-ws-up:            ; @$(MAKE) omnigent-image && $(MAKE) omnigent-up && $(MAKE) up && $(MAKE) ws-host-up && $(MAKE) ws-fe-up && echo "✅ Dev Workspace 全栈已起（全后台）。打开 http://localhost:5173/workspace；停: make ws-down；日志在 .dev/"
+ws-up:            ; @$(MAKE) omnigent-image && $(MAKE) omnigent-up && $(MAKE) up && $(MAKE) ws-host-up && $(MAKE) ws-fe-up && echo "✅ Dev Workspace 全栈已起（全后台）。打开 http://localhost:8090/workspace(同源登录;5173 仅前端 HMR 开发用)；停: make ws-down；日志在 .dev/"
 ws-down:          ; -@[ -f .dev/omnigent-host.pid ] && kill $$(cat .dev/omnigent-host.pid) 2>/dev/null; [ -f .dev/frontend.pid ] && kill $$(cat .dev/frontend.pid) 2>/dev/null; rm -f .dev/omnigent-host.pid .dev/frontend.pid; pkill -f "omnigent host" 2>/dev/null; pkill -f "vite" 2>/dev/null; $(MAKE) down; $(MAKE) omnigent-down
 # 聚合 Swagger:自动发现 contracts/openapi/*.yaml(一个页面下拉看全部 API)
 api-docs:         ; URLS=$$(uv run python scripts/swagger_urls.py) docker compose -f deploy/dev/swagger-ui.yml up -d && echo "Swagger UI(全部契约): http://localhost:8088"

@@ -21,7 +21,7 @@
   ```
   > `secrets/` 已 gitignore。`make ws-up` 的 host 会读这个文件;缺它则 host 跳过(agent 不能回复)。
 - [ ] **一次性 · 数据集**:有一个本企业数据集(`coco`,没有先 `make bootstrap-catalog` + 控制台上传)。
-- [ ] **`make ws-up`** —— 起全栈(全后台):omnigent 自构建镜像(缺则自动 build)+ omnigent 容器 + deps + 全部服务(**含 MCP server**)+ **host/runner** + **前端**。打开 `http://localhost:5173/workspace`。停:`make ws-down`;日志在 `.dev/`。
+- [ ] **`make ws-up`** —— 起全栈(全后台):omnigent 自构建镜像(缺则自动 build)+ omnigent 容器 + deps + 全部服务(**含 MCP server**)+ **host/runner** + **前端**。打开 `http://localhost:8090/workspace`(gateway 同源服务前端 + 认证;5173=vite HMR 开发用,登录会跳 8090)。停:`make ws-down`;日志在 `.dev/`。
 > dev 也可免 host 用 `omnigent run` 直挂 spec 验工具(见下"快验")。
 
 ### 步骤(受控链路 e2e)
@@ -57,7 +57,7 @@
 
 ## E. 前端图形 live(US1 + US2,照高保真原型)
 > 前置同 B(`make ws-up` 起全栈,含 host + 前端)。视觉照 `../../prototypes/2026-06-26-dev-workspace-hifi.html`。
-- [ ] 浏览器登录(KC)→ 左侧导航点 **「Dev Workspace」**(`/workspace`)。
+- [ ] 浏览器开 `http://localhost:8090/workspace` 登录(alice/alice)→ 左侧导航点 **「Dev Workspace」**(`/workspace`)。
 - [ ] **左树**三段:工作目录 / 数据目录(展开见**真实数据集** `coco`)/ Git;段头可折叠。
 - [ ] 对话 **"探查一下 coco 数据集"** → 用户气泡即时 + agent **流式回复** + **工具卡 `liteai__catalog_read_schema`**(「can() 通过」)→ webdataset/样本数/owner=你;右上受控 chip(沙箱/policy/企业·owner)。
 - [ ] **"写个 DJ recipe 过滤短文本并跑一下"** → agent 写 `recipe.py` → **ASK 审批卡**(policy:ASK)→ 点「批准」;右栏「文件」tab 看 `recipe.py`(**monaco**)、「终端」tab 看 `dj-process` 输出(**xterm**,含 `can()=allow`)。
