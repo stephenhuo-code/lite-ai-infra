@@ -14,6 +14,25 @@
 
 ---
 
+## 状态(实时)
+
+> **开发完成 ✅(Task 0–6 全过)· 全量门禁绿:257 passed + lint KEPT · 分支 `dev-workspace-probe`**
+> 留 owner 手动验收:RUNBOOK.md 的 **B live 集成**(可选,需 docker + 订阅 token)。
+
+| Task | 状态 | 产物 |
+|---|---|---|
+| 0 探针(两承重墙) | ✅ 通过 | `spikes/2026-06-26-omnigent-probe-RESULTS.md`、`deploy/dev/omnigent.yml` |
+| 1 部署固化 | ✅ | `deploy/dev/omnigent.yml`(绑 127.0.0.1) |
+| 2 每会话令牌 | ✅ | `services/gateway/bff/wstoken.py` |
+| 3 MCP server 骨架 | ✅ | `services/dev_workspace_mcp/{identity,app}.py` |
+| 4 catalog_read_schema | ✅ | `services/dev_workspace_mcp/tools/catalog.py` |
+| 5 BFF 工作区会话 | ✅ | `services/gateway/bff/{omnigent_client,workspace}.py` |
+| 6 隔离负例 + runbook | ✅ | `tests/dev_workspace/test_isolation.py`、`RUNBOOK.md` |
+
+**后续(各自独立 plan,见末尾「后续计划」)**:9b 前端、9c 工具+管线、9d 持久化、9-prod 自构建。
+
+---
+
 ## File Structure(本计划新增/改动)
 
 - `deploy/dev/omnigent.yml` — **新增**:omnigent self-host compose(prebuilt 镜像 pin + header-auth env + 仅 BFF 可达)。
