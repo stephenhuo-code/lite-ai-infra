@@ -18,7 +18,7 @@
         ├─ header-auth 注入身份头(MUST 剥离客户端伪造的同名头);omnigent 不直达
         └─ 会话创建时铸「每会话令牌」 token→(sub, 企业, 会话),并据此注册我们的 MCP server
         ↓
-  omnigent ②-⑥(自托管 docker,预构建镜像):Server/Host/Runner(每会话进程 + 沙箱)/Harness(claude-sdk)/policy
+  omnigent ②-⑥(自托管):Server(docker)+ **独立 Host/Runner**(每会话进程 + 沙箱;探针实证 server 单独不能执行,需注册 host)/Harness(claude-native,吃订阅 token)/policy
         │  agent 调工具 ↓(http transport,URL 内嵌每会话令牌)
   我们的 MCP server:工具 = 读 catalog 数据集 / 取 OSS / 跑 DJ+python / 工作目录+git
         └─ 校验令牌 → 还原 KC ctx → 每次 can()(企业硬隔离 + owner)→ 数据集
