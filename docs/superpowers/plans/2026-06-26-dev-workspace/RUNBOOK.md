@@ -15,7 +15,8 @@
 ### 前置
 - [ ] `make deps-dev`(KC/MinIO/PG)+ `make bootstrap-catalog`(建桶 + metalake `ent_demo`)。
 - [ ] 有一个本企业数据集(如 `coco`,owner=你);没有则先经控制台上传+注册。
-- [ ] 起 omnigent:`docker compose -f deploy/dev/omnigent.yml up -d`(header 模式;绑 127.0.0.1:8900)。
+- [ ] **本地自构建 omnigent 镜像(首次/ref 或补丁变更后)**:`scripts/omnigent_build.sh dev`(从 `third_party/omnigent` 钉定 ref + patch-queue build 出 `omnigent-server:dev`/`omnigent-host:dev`;ADR-026 §1)。**未 vendor 过先** `git submodule update --init third_party/omnigent`。
+- [ ] 起 omnigent:`docker compose -f deploy/dev/omnigent.yml up -d`(用本地自构建镜像;header 模式;绑 127.0.0.1:8900)。
 - [ ] 起我们的 MCP server:`GRAVITINO_URL=http://localhost:8091 uv run uvicorn services.dev_workspace_mcp.app:asgi --host 127.0.0.1 --port 8910`。
 - [ ] 模型凭证:`claude setup-token` → 存 `CLAUDE_CODE_OAUTH_TOKEN`(你的订阅;不入库,§5.2)。
 - [ ] 起一个 host/runner(Task0 实证 server 单独不能执行):`CLAUDE_CODE_OAUTH_TOKEN=… uv run --project <omnigent 源> omnigent host http://localhost:8900`(header 模式 host 认证细节见 Task0 RESULTS;dev 也可用 `omnigent run` 直挂 spec 验工具,见下"快验")。
