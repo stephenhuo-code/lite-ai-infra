@@ -11,10 +11,9 @@
 ## B. live 集成(可选,需 docker + Claude 订阅 token)
 > 镜像 Task0,但注册的是**我们真实的 MCP server(含 catalog_read_schema)**,验"agent 经令牌化工具读真实数据集 schema,每次过 can()"。
 
-### 前置(一键起)
+### 前置(一条命令)
 - [ ] **一次性**:`claude setup-token` → 存 `secrets/omnigent.token`;有一个本企业数据集(`coco`,没有先 `make bootstrap-catalog` + 控制台上传)。
-- [ ] **`make ws-up`** —— 一条命令起全栈:omnigent 自构建镜像(缺则自动 build)+ omnigent 容器(header 模式,绑 127.0.0.1:8900)+ `make up`(deps + 全部服务**含 MCP server**,服务表自动起)。
-- [ ] 另起前台:**`make omnigent-host`**(读 token;Task0 实证 server 单独不能执行)。停:`make ws-down`。
+- [ ] **`make ws-up`** —— 起全栈(全后台):omnigent 自构建镜像(缺则自动 build)+ omnigent 容器 + deps + 全部服务(**含 MCP server**)+ **host/runner** + **前端**。打开 `http://localhost:5173/workspace`。停:`make ws-down`;日志在 `.dev/`。
 > dev 也可免 host 用 `omnigent run` 直挂 spec 验工具(见下"快验")。
 
 ### 步骤(受控链路 e2e)
@@ -49,7 +48,7 @@
 - [ ] **负例·跨 owner**:用另一 owner 令牌读他人 `workspace/` 前缀 → `oss_read` 返 `forbidden`(workspace_store prefix 守卫)。
 
 ## E. 前端图形 live(US1 + US2,照高保真原型)
-> 前置同 B(`make ws-up` + `make omnigent-host` + `cd frontend && npm run dev`)。视觉照 `../../prototypes/2026-06-26-dev-workspace-hifi.html`。
+> 前置同 B(`make ws-up` 起全栈,含 host + 前端)。视觉照 `../../prototypes/2026-06-26-dev-workspace-hifi.html`。
 - [ ] 浏览器登录(KC)→ 左侧导航点 **「Dev Workspace」**(`/workspace`)。
 - [ ] **左树**三段:工作目录 / 数据目录(展开见**真实数据集** `coco`)/ Git;段头可折叠。
 - [ ] 对话 **"探查一下 coco 数据集"** → 用户气泡即时 + agent **流式回复** + **工具卡 `liteai__catalog_read_schema`**(「can() 通过」)→ webdataset/样本数/owner=你;右上受控 chip(沙箱/policy/企业·owner)。
