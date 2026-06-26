@@ -43,3 +43,34 @@ def test_authed_creates_session():
 def test_unauthed_401():
     r = TestClient(_app()).post("/v1/ws/sessions")
     assert r.status_code == 401
+
+
+def test_turn_posts_user_message():
+    seen = {}
+
+    def h(req):
+        if req.url.path.endswith("/events"):
+            import json as _j
+            seen["body"] = _j.loads(req.content)
+            return httpx.Response(200, json={"queued": True})
+        return httpx.Response(200, json={"id": "x"})
+
+    def omni_factory(email):
+        return OmnigentClient("http://omnigent:8000", email=email, transport=httpx.MockTransport(h))
+
+    app = FastAPI()
+
+    @app.middleware("http")
+    async def fake(request: Request, call_next):
+        b = request.headers.get("x-test-bearer")
+        request.state.bearer = b
+        request.state.session = object() if b else None
+        return await call_next(request)
+
+    app.include_router(make_workspace_router(
+        claims=lambda t: _CLAIMS, store=WorkspaceTokenStore(now=lambda: 0),
+        omni_factory=omni_factory, mcp_base_url="http://mcp:8000"))
+    r = TestClient(app).post("/v1/ws/sessions/s1/turn", headers={"x-test-bearer": "tok"},
+                             json={"text": "探查 coco"})
+    assert r.status_code == 200 and r.json()["queued"] is True
+    assert seen["body"]["data"]["content"][0]["text"] == "探查 coco"

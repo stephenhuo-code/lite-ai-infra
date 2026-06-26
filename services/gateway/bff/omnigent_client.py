@@ -7,11 +7,30 @@ from __future__ import annotations
 import httpx
 
 
+def user_message_event(text: str) -> dict:
+    # SessionEventInput(探针 RESULTS 9b①):发 user turn 的事件封装。
+    return {"type": "message",
+            "data": {"role": "user", "content": [{"type": "input_text", "text": text}]}}
+
+
 class OmnigentClient:
     def __init__(self, base_url: str, email: str, header: str = "X-Forwarded-Email",
                  transport: httpx.BaseTransport | None = None):
         self._c = httpx.Client(base_url=base_url.rstrip("/"),
                                headers={header: email}, timeout=30, transport=transport)
+
+    def post_event(self, session_id: str, event: dict) -> dict:
+        # 发 turn / interrupt / approval(探针 RESULTS 9b①):POST /v1/sessions/{id}/events。
+        r = self._c.post(f"/v1/sessions/{session_id}/events", json=event)
+        r.raise_for_status()
+        return r.json()
+
+    def resolve_elicitation(self, session_id: str, elicitation_id: str, approve: bool) -> dict:
+        # ASK 审批(探针 RESULTS 9b③):POST /elicitations/{eid}/resolve,ElicitResult。
+        body = {"action": "accept" if approve else "decline"}
+        r = self._c.post(f"/v1/sessions/{session_id}/elicitations/{elicitation_id}/resolve", json=body)
+        r.raise_for_status()
+        return r.json()
 
     def create_session(self, agent_id: str) -> str:
         r = self._c.post("/v1/sessions", json={"agent_id": agent_id})
