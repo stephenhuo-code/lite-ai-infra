@@ -1,22 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
 import { LeftTree } from './devws/LeftTree'
 import { AgentChat } from './devws/AgentChat'
+import { RightPane } from './devws/RightPane'
 import { useSessionStream } from './devws/useSessionStream'
-import { createWorkspaceSession, resolveElicitation, sendTurn } from '../api/devws'
+import { createWorkspaceSession, fetchGitChanges, fetchWorkingFiles, resolveElicitation, sendTurn } from '../api/devws'
+import { listDatasets, type Dataset } from '../api/catalog'
 
-// Dev Workspace 页(plan 9b · US1/US2):左树 + 中 Agent 对话(SSE 流)+ 右 文件/终端(Task6/待依赖)。
-// 对话流经 BFF 反代 omnigent(探针 RESULTS 9b);拖拽分隔 + 右栏可收起(照高保真原型)。
+// Dev Workspace 页(plan 9b · US1/US2):左树(真实 catalog 数据集 + 工作目录 + git)+ 中 Agent 对话(SSE)
+// + 右 文件(monaco)/终端(xterm)/数据预览。对话流经 BFF 反代 omnigent;拖拽分隔 + 右栏可收起。
 export function DevWorkspace() {
   const [rightW, setRightW] = useState(440)
   const [collapsed, setCollapsed] = useState(false)
   const [sid, setSid] = useState<string | null>(null)
+  const [datasets, setDatasets] = useState<Dataset[]>([])
+  const [workingFiles, setWorkingFiles] = useState<string[]>([])
+  const [gitChanges, setGitChanges] = useState<{ x: string; path: string }[]>([])
+  const [preview, setPreview] = useState<string | undefined>(undefined)
   const rowRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
   const { items, addUser } = useSessionStream(sid)
 
-  useEffect(() => {
-    createWorkspaceSession().then(s => setSid(s.session_id)).catch(() => {})
-  }, [])
+  useEffect(() => { createWorkspaceSession().then(s => setSid(s.session_id)).catch(() => {}) }, [])
+  useEffect(() => { listDatasets('data', 'datasets').then(r => setDatasets(r.datasets ?? [])).catch(() => {}) }, [])
+  useEffect(() => { fetchWorkingFiles().then(setWorkingFiles).catch(() => {}); fetchGitChanges().then(setGitChanges).catch(() => {}) }, [sid])
 
   function onMove(e: React.MouseEvent) {
     if (!dragging.current || !rowRef.current) return
@@ -30,7 +36,11 @@ export function DevWorkspace() {
     <div ref={rowRef} className="flex h-[calc(100vh-3.5rem)] select-none"
          onMouseMove={onMove} onMouseUp={() => (dragging.current = false)}>
       <aside className="w-72 shrink-0 border-r border-slate-200/70 overflow-y-auto px-2 py-3 bg-white">
-        <LeftTree workingFiles={[]} datasets={[]} gitChanges={[]} onSelectDataset={() => {}} />
+        <LeftTree
+          workingFiles={workingFiles}
+          datasets={datasets.map(d => ({ name: d.name, kind: d.kind ?? undefined }))}
+          gitChanges={gitChanges}
+          onSelectDataset={setPreview} />
       </aside>
 
       <section className="flex-1 min-w-0 border-r border-slate-200/70">
@@ -41,13 +51,8 @@ export function DevWorkspace() {
         <>
           <div onMouseDown={() => (dragging.current = true)}
                className="w-1.5 shrink-0 cursor-col-resize bg-slate-200/70 hover:bg-[#6366F1]/60" />
-          <section className="shrink-0 flex flex-col bg-white" style={{ width: rightW, minWidth: 340 }}>
-            <div className="h-10 shrink-0 border-b border-slate-200/70 flex items-center px-3 text-[13px] text-slate-500">
-              文件 / 终端 / 数据预览
-              <button onClick={() => setCollapsed(true)} title="收起"
-                      className="ml-auto p-1.5 rounded-lg text-slate-400 hover:text-[#6366F1] hover:bg-slate-50 cursor-pointer">›</button>
-            </div>
-            <div className="flex-1 grid place-items-center text-slate-400 text-sm">文件查看 / 终端(Task 6)</div>
+          <section className="shrink-0" style={{ width: rightW, minWidth: 340 }}>
+            <RightPane fileContent="" termLines={[]} previewName={preview} onCollapse={() => setCollapsed(true)} />
           </section>
         </>
       ) : (
