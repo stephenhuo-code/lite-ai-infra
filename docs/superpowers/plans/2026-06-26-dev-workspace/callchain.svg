@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1140" viewBox="0 0 1600 1140" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrTok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/>
+    </marker>
+    <style>
+      .box{rx:10;ry:10;stroke-width:1.5}
+      .t{font-size:15px;font-weight:600;fill:#0f172a}
+      .s{font-size:11.5px;fill:#475569}
+      .port{font-size:11px;fill:#64748b;font-weight:600}
+      .num{fill:#fff;font-size:13px;font-weight:700;text-anchor:middle}
+      .numc{fill:#475569}
+      .lbl{font-size:12px;fill:#334155}
+      .ph{font-size:15px;font-weight:700}
+      .pd{font-size:12.5px;fill:#334155}
+      .mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;fill:#475569}
+    </style>
+  </defs>
+
+  <rect width="1600" height="1140" fill="#f8fafc"/>
+  <text x="40" y="48" font-size="24" font-weight="700" fill="#0f172a">Dev Workspace（Plan 9）—— 从用户到数据的完整调用链路</text>
+  <text x="40" y="74" class="s" font-size="13">harness = claude-native（dev 已跑通）· 承重墙：用户 → BFF 铸令牌 → omnigent → Claude Code → 我们的 MCP（令牌→Context→can()）→ 数据</text>
+
+  <!-- ===================== 左侧组件竖列 ===================== -->
+  <!-- 主轴 x 中心 = 380, 盒宽 360 (200..560) -->
+
+  <!-- 1 User -->
+  <rect class="box" x="200" y="100" width="360" height="48" fill="#dbeafe" stroke="#3b82f6"/>
+  <text class="t" x="380" y="129" text-anchor="middle">用户（浏览器）</text>
+
+  <!-- 2 Frontend -->
+  <rect class="box" x="200" y="192" width="360" height="70" fill="#e0e7ff" stroke="#6366F1"/>
+  <text class="t" x="380" y="218" text-anchor="middle">前端 React（dist 由 gateway 托管）</text>
+  <text class="s" x="380" y="238" text-anchor="middle">DevWorkspace · AgentChat · useSessionStream</text>
+  <text class="mono" x="380" y="254" text-anchor="middle">http://localhost:8090/workspace</text>
+
+  <!-- Keycloak (side left) -->
+  <rect class="box" x="20" y="300" width="160" height="64" fill="#ffedd5" stroke="#f97316"/>
+  <text class="t" x="100" y="326" text-anchor="middle" font-size="14">Keycloak</text>
+  <text class="port" x="100" y="345" text-anchor="middle">OIDC · :8080</text>
+  <text class="s" x="100" y="359" text-anchor="middle">organization claim</text>
+
+  <!-- 3 Gateway/BFF -->
+  <rect class="box" x="200" y="300" width="360" height="104" fill="#ccfbf1" stroke="#0d9488"/>
+  <text class="t" x="380" y="326" text-anchor="middle">Gateway / BFF　:8090</text>
+  <text class="s" x="380" y="346" text-anchor="middle">① OIDC 会话(cookie) ② 从会话解 sub/企业/角色</text>
+  <text class="s" x="380" y="363" text-anchor="middle">③ 铸每会话令牌(Fernet, WS_TOKEN_KEY) ④ 剥伪造头</text>
+  <text class="s" x="380" y="380" text-anchor="middle">⑤ 反代 omnigent(SSE/turn/items)</text>
+  <text class="mono" x="380" y="396" text-anchor="middle">send_identity=0 (dev 单用户)</text>
+
+  <!-- 4 omnigent server -->
+  <rect class="box" x="200" y="448" width="360" height="60" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="t" x="380" y="474" text-anchor="middle">omnigent server　:8900（docker）</text>
+  <text class="s" x="380" y="494" text-anchor="middle">会话/事件协调 · AUTH_ENABLED=0（单用户）</text>
+
+  <!-- 5 host daemon (常驻 · 可多个 → 卡片堆叠) -->
+  <rect x="216" y="538" width="344" height="44" rx="9" fill="#f3e8ff" stroke="#c4b5fd"/>
+  <rect x="208" y="542" width="352" height="45" rx="9" fill="#f3e8ff" stroke="#a78bfa"/>
+  <rect class="box" x="200" y="546" width="360" height="46" fill="#f3e8ff" stroke="#9333ea"/>
+  <text class="t" x="376" y="566" text-anchor="middle" font-size="14">omnigent host 守护进程　🔁常驻</text>
+  <text class="s" x="376" y="583" text-anchor="middle">1..N(池) · dev=本机跑源码 · 注册到 server</text>
+
+  <!-- 6 runner (动态 · 每会话 → 卡片堆叠) -->
+  <rect x="216" y="616" width="344" height="44" rx="9" fill="#faf5ff" stroke="#d8b4fe"/>
+  <rect x="208" y="620" width="352" height="45" rx="9" fill="#faf5ff" stroke="#c084fc"/>
+  <rect class="box" x="200" y="624" width="360" height="46" fill="#f3e8ff" stroke="#9333ea"/>
+  <text class="t" x="376" y="644" text-anchor="middle" font-size="14">runner　⚡动态（每会话一个）</text>
+  <text class="s" x="376" y="661" text-anchor="middle">launch_runner 时 host spawn · /tmp/liteai-ws/&lt;sid&gt;</text>
+
+  <!-- Anthropic (side left, near claude) -->
+  <rect class="box" x="20" y="702" width="160" height="80" fill="#fef9c3" stroke="#ca8a04"/>
+  <text class="t" x="100" y="728" text-anchor="middle" font-size="13">Anthropic API</text>
+  <text class="s" x="100" y="747" text-anchor="middle">模型推理</text>
+  <text class="s" x="100" y="764" text-anchor="middle">claude 订阅 token</text>
+  <text class="mono" x="100" y="778" text-anchor="middle">OAUTH_TOKEN</text>
+
+  <!-- 7 Claude Code -->
+  <rect class="box" x="200" y="702" width="360" height="80" fill="#e2e8f0" stroke="#334155"/>
+  <text class="t" x="380" y="728" text-anchor="middle">Claude Code（claude-native @ tmux）</text>
+  <text class="s" x="380" y="748" text-anchor="middle">会话级 agent: liteai_devws · ENABLE_TOOL_SEARCH</text>
+  <text class="s" x="380" y="765" text-anchor="middle">--dangerously-skip-permissions（数据安全靠 can()）</text>
+  <text class="mono" x="380" y="780" text-anchor="middle">回复整段落 omnigent /items（无 SSE delta）</text>
+
+  <!-- 8 MCP server -->
+  <rect class="box" x="200" y="828" width="360" height="84" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5"/>
+  <text class="t" x="380" y="853" text-anchor="middle" fill="#14532d">我们的 MCP server　:8910　🧱承重墙</text>
+  <text class="s" x="380" y="873" text-anchor="middle" fill="#166534">/s/&lt;token&gt;/mcp → 解令牌(Fernet) → Context</text>
+  <text class="s" x="380" y="890" text-anchor="middle" fill="#166534">can(action, resource)：企业硬隔离 + owner 授权</text>
+  <text class="s" x="380" y="906" text-anchor="middle" fill="#166534">工具: whoami/catalog_*/oss_*/dj_*/register/git_*</text>
+
+  <!-- 9 Data -->
+  <rect class="box" x="200" y="956" width="360" height="60" fill="#f1f5f9" stroke="#64748b"/>
+  <text class="t" x="380" y="982" text-anchor="middle">数据层</text>
+  <text class="s" x="380" y="1002" text-anchor="middle">Gravitino 数据目录 :8091　·　MinIO/OSS :9000</text>
+
+  <!-- ===================== 主轴箭头 + 编号 ===================== -->
+  <!-- helper: 竖直箭头沿 x=380 -->
+  <!-- U->FE -->
+  <line x1="380" y1="148" x2="380" y2="190" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <!-- FE->GW -->
+  <line x1="380" y1="262" x2="380" y2="298" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <!-- GW<->KC -->
+  <line x1="200" y1="332" x2="182" y2="332" stroke="#f97316" stroke-width="1.6" marker-end="url(#arr)" marker-start="url(#arr)"/>
+  <!-- GW->omni -->
+  <line x1="380" y1="404" x2="380" y2="446" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <!-- omni->host -->
+  <line x1="380" y1="508" x2="380" y2="544" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <!-- host->runner -->
+  <line x1="380" y1="592" x2="380" y2="622" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <!-- runner->claude -->
+  <line x1="380" y1="670" x2="380" y2="700" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <!-- claude<->anthropic -->
+  <line x1="200" y1="742" x2="182" y2="742" stroke="#ca8a04" stroke-width="1.6" marker-end="url(#arr)" marker-start="url(#arr)"/>
+  <!-- claude->MCP (token path, green) -->
+  <line x1="380" y1="782" x2="380" y2="826" stroke="#16a34a" stroke-width="2.4" marker-end="url(#arrTok)"/>
+  <!-- MCP->Data -->
+  <line x1="380" y1="912" x2="380" y2="954" stroke="#16a34a" stroke-width="2.4" marker-end="url(#arrTok)"/>
+
+  <!-- token 旁注:GW 铸令牌 → 经 omnigent register → 随 URL 到 MCP（虚线绕行表意） -->
+  <path d="M560,360 C620,360 620,855 562,868" fill="none" stroke="#16a34a" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrTok)"/>
+  <text x="628" y="610" class="mono" fill="#16a34a" transform="rotate(90 628 610)">每会话令牌随注册 URL 抵达 MCP（与 omnigent 身份无关）</text>
+
+  <!-- server<->host 注册/调度、host->runner spawn 标签 -->
+  <text x="395" y="530" class="mono" fill="#7c3aed">host 注册 / server 调度挑一个</text>
+  <text x="395" y="611" class="mono" fill="#9333ea">spawn（每会话动态）</text>
+
+  <!-- 左侧:数量 / 生命周期 面板 -->
+  <rect x="18" y="430" width="170" height="150" rx="9" fill="#fff" stroke="#cbd5e1"/>
+  <text x="34" y="452" font-size="13" font-weight="700" fill="#0f172a">数量 / 生命周期</text>
+  <circle cx="40" cy="474" r="6" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="54" y="478" class="s" font-weight="600">server</text>
+  <text x="118" y="478" class="s">1 · 常驻</text>
+  <circle cx="40" cy="500" r="6" fill="#f3e8ff" stroke="#9333ea"/>
+  <text x="54" y="504" class="s" font-weight="600">host</text>
+  <text x="100" y="504" class="s">1..N · 常驻(池)</text>
+  <circle cx="40" cy="526" r="6" fill="#faf5ff" stroke="#c084fc"/>
+  <text x="54" y="530" class="s" font-weight="600">runner</text>
+  <text x="108" y="530" class="s">每会话 · 动态</text>
+  <line x1="30" y1="544" x2="176" y2="544" stroke="#e2e8f0"/>
+  <text x="34" y="562" class="s" fill="#7c3aed" font-weight="600">agent 在 host 上执行</text>
+  <text x="34" y="576" class="s">dev: host=你的 Mac</text>
+
+  <!-- 编号圆圈 -->
+  <g class="num">
+    <circle cx="398" cy="169" r="12" class="numc"/><text x="398" y="173">1</text>
+    <circle cx="398" cy="280" r="12" class="numc"/><text x="398" y="284">3</text>
+    <circle cx="150" cy="285" r="12" fill="#f97316"/><text x="150" y="289">2</text>
+    <circle cx="398" cy="425" r="12" class="numc"/><text x="398" y="429">4</text>
+    <circle cx="398" cy="526" r="12" class="numc"/><text x="398" y="530">5</text>
+    <circle cx="398" cy="607" r="12" class="numc"/><text x="398" y="611">6</text>
+    <circle cx="398" cy="685" r="12" class="numc"/><text x="398" y="689">7</text>
+    <circle cx="150" cy="688" r="12" fill="#ca8a04"/><text x="150" y="692">9</text>
+    <circle cx="404" cy="804" r="12" fill="#16a34a"/><text x="404" y="808">10</text>
+    <circle cx="404" cy="933" r="12" fill="#16a34a"/><text x="404" y="937">11</text>
+  </g>
+
+  <!-- ===================== 右侧分阶段说明 ===================== -->
+  <line x1="690" y1="100" x2="690" y2="1040" stroke="#e2e8f0" stroke-width="2"/>
+
+  <!-- 阶段A 登录 -->
+  <rect x="720" y="100" width="14" height="14" rx="3" fill="#f97316"/>
+  <text class="ph" x="744" y="113" fill="#9a3412">阶段 A · 登录（一次）</text>
+  <text class="pd" x="744" y="138">1　用户开 /workspace；未登录 → 前端跳 BFF /auth</text>
+  <text class="pd" x="744" y="159">2　BFF ↔ Keycloak 走 OIDC；回设 BFF 会话 cookie，</text>
+  <text class="pd" x="763" y="178">身份(sub/organization/role)从此只取自会话，不信请求体</text>
+
+  <!-- 阶段B 建会话 -->
+  <rect x="720" y="208" width="14" height="14" rx="3" fill="#0d9488"/>
+  <text class="ph" x="744" y="221" fill="#115e59">阶段 B · 建会话（进页面自动）</text>
+  <text class="pd" x="744" y="246">3　前端 createWorkspaceSession → POST /v1/ws/sessions</text>
+  <text class="pd" x="744" y="265">4　BFF 解出 sub/企业/角色（剥掉客户端伪造的身份头）</text>
+  <text class="pd" x="744" y="284">5　BFF → omnigent：建 bundled 会话（上传 agent spec.tar.gz）</text>
+  <text class="pd" x="744" y="303">　 BFF 铸每会话令牌(Fernet) + register MCP（令牌化 URL）</text>
+  <text class="pd" x="744" y="322">6　BFF → omnigent：launch_runner(workspace=/tmp/liteai-ws/&lt;sid&gt;)</text>
+  <text class="pd" x="744" y="341">　 host 守护进程在本机 spawn runner</text>
+  <text class="pd" x="744" y="360">7　runner 起 Claude Code：注入 --mcp-config（omnigent bridge</text>
+  <text class="pd" x="763" y="379">+ 我们的 liteai MCP）+ skip-permissions（omnigent fork 补丁）</text>
+
+  <!-- 阶段C 发消息 -->
+  <rect x="720" y="404" width="14" height="14" rx="3" fill="#334155"/>
+  <text class="ph" x="744" y="417" fill="#1e293b">阶段 C · 发消息</text>
+  <text class="pd" x="744" y="442">8　前端 onSend → POST /v1/ws/sessions/&lt;id&gt;/turn</text>
+  <text class="pd" x="744" y="461">9　BFF → omnigent POST /events → runner 注入 Claude Code；</text>
+  <text class="pd" x="763" y="480">Claude Code ↔ Anthropic 推理（用 claude 订阅 token）</text>
+
+  <!-- 阶段D 承重墙 -->
+  <rect x="720" y="506" width="14" height="14" rx="3" fill="#16a34a"/>
+  <text class="ph" x="744" y="519" fill="#14532d">阶段 D · 数据工具 🧱承重墙</text>
+  <text class="pd" x="744" y="544">10  Claude Code 调 mcp__liteai__*（直连 :8910/s/&lt;token&gt;/mcp）</text>
+  <text class="pd" x="744" y="563">　  MCP 解令牌(Fernet) → Context(sub/企业/角色)</text>
+  <text class="pd" x="744" y="582">　  can(action, resource)：企业硬隔离 + owner 授权</text>
+  <text class="pd" x="744" y="601">11  准了 → 读 Gravitino 目录 / OSS（限本企业+owner 前缀）</text>
+  <text class="pd" x="744" y="620">　  拒了 → 工具如实报「被拒」，不伪造结果</text>
+  <text class="pd" x="744" y="641" fill="#166534" font-weight="600">　  关键：数据隔离在 MCP 层强制，与 omnigent 单用户身份无关</text>
+
+  <!-- 阶段E 渲染 -->
+  <rect x="720" y="666" width="14" height="14" rx="3" fill="#6366F1"/>
+  <text class="ph" x="744" y="679" fill="#3730a3">阶段 E · 渲染回复</text>
+  <text class="pd" x="744" y="704">12  Claude Code 回复整段落 omnigent /items（assistant 条目）</text>
+  <text class="pd" x="744" y="723">13  前端 useSessionStream 订阅 SSE /stream（claude-native</text>
+  <text class="pd" x="763" y="742">不发文本 delta，仅生命周期事件 → 当“有变化→刷新”触发）</text>
+  <text class="pd" x="744" y="761">14  前端 → BFF → omnigent GET /items → items_to_chat</text>
+  <text class="pd" x="763" y="780">（归一化 + 去重 user 双记）→ AgentChat 气泡渲染</text>
+  <text class="pd" x="744" y="799" fill="#64748b">　  注：整段出现是这套架构固有粒度；逐字流式=独立体验项</text>
+
+  <!-- 关键约束盒 -->
+  <rect x="720" y="826" width="850" height="196" rx="10" fill="#fff" stroke="#cbd5e1"/>
+  <text x="740" y="852" font-size="14" font-weight="700" fill="#0f172a">关键设计约束（已落地）</text>
+  <text class="pd" x="740" y="877">• 不透明 ID + 企业硬隔离 + can() 单一授权入口（宪法 §1.4/§1.6/§2.4）</text>
+  <text class="pd" x="740" y="899">• 数据身份走 MCP 令牌，独立于 omnigent 自身身份（承重墙）</text>
+  <text class="pd" x="740" y="921">• dev：omnigent 单用户 + host/runner 跑源码 → 改 omnigent 重启即生效</text>
+  <text class="pd" x="740" y="943">• prod：host 镜像需重建才带 omnigent fork 补丁；header-auth 多用户</text>
+  <text class="pd" x="740" y="965">• omnigent fork 补丁：claude-native 注入会话级 HTTP MCP 到 --mcp-config</text>
+  <text class="pd" x="740" y="987">• 前端：items 驱动渲染 + 去重；中文输入法合成中回车不误发</text>
+  <text class="pd" x="740" y="1009">• 每会话单 agent（liteai_devws），可并发多会话；agent 内可起 sub-agent</text>
+
+  <!-- 图例 -->
+  <text x="40" y="1070" class="s" font-weight="700">图例：</text>
+  <line x1="90" y1="1066" x2="130" y2="1066" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <text x="138" y="1070" class="s">控制/请求流</text>
+  <line x1="250" y1="1066" x2="290" y2="1066" stroke="#16a34a" stroke-width="2.4" marker-end="url(#arrTok)"/>
+  <text x="298" y="1070" class="s">承重墙：令牌→Context→can()→数据</text>
+  <rect x="620" y="1058" width="14" height="14" rx="3" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="640" y="1070" class="s">我们自建的组件（BFF/MCP/前端）</text>
+  <rect x="880" y="1058" width="14" height="14" rx="3" fill="#ede9fe" stroke="#7c3aed"/>
+  <text x="900" y="1070" class="s">omnigent（vendored fork，跑源码）</text>
+</svg>

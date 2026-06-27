@@ -29,11 +29,42 @@ def user_message_event(text: str) -> dict:
             "data": {"role": "user", "content": [{"type": "input_text", "text": text}]}}
 
 
+def items_to_chat(raw: list[dict]) -> list[dict]:
+    # claude-native 的回复只落 items(SSE 不发 response.output_text.delta —— 那是 API-harness 才有的),
+    # 故对话历史以 GET /v1/sessions/{id}/items 为准。归一化成前端 ChatItem;
+    # 去重连续相同(kind,text):claude-native 把 user 消息记两次(API turn_* + forwarder 回灌 resp_claude_*)。
+    out: list[dict] = []
+    for it in raw or []:
+        if it.get("type") == "message":
+            role = it.get("role")
+            if role not in ("user", "assistant"):
+                continue
+            text = "".join(
+                b.get("text", "")
+                for b in (it.get("content") or [])
+                if b.get("type") in ("input_text", "output_text", "text")
+            ).strip()
+            if not text:
+                continue
+            kind = "user" if role == "user" else "assistant"
+            if out and out[-1].get("kind") == kind and out[-1].get("text") == text:
+                continue
+            out.append({"kind": kind, "text": text})
+        elif it.get("type") == "function_call":
+            out.append({"kind": "tool", "name": it.get("name") or "?"})
+    return out
+
+
 class OmnigentClient:
+    # send_identity=False:dev 单用户 omnigent(不发 X-Forwarded-Email,一切归 "local",与本地 host
+    # owner 对齐;否则 alice 头会让 omnigent 按 owner 过滤掉 local 的 host → 起不了 runner)。
+    # prod=header 模式必须 True。注:数据控制链路的身份(can())走 MCP 令牌,与此无关。
+    # trust_env=False:连 localhost omnigent 不走代理(SOCKS 代理会断连)。
     def __init__(self, base_url: str, email: str, header: str = "X-Forwarded-Email",
-                 transport: httpx.BaseTransport | None = None):
-        self._c = httpx.Client(base_url=base_url.rstrip("/"),
-                               headers={header: email}, timeout=30, transport=transport)
+                 send_identity: bool = True, transport: httpx.BaseTransport | None = None):
+        headers = {header: email} if send_identity else {}
+        self._c = httpx.Client(base_url=base_url.rstrip("/"), headers=headers,
+                               timeout=30, trust_env=False, transport=transport)
 
     def post_event(self, session_id: str, event: dict) -> dict:
         # 发 turn / interrupt / approval(探针 RESULTS 9b①):POST /v1/sessions/{id}/events。
@@ -71,9 +102,17 @@ class OmnigentClient:
                 return hst["host_id"]
         return None
 
-    def launch_runner(self, *, host_id: str, session_id: str, workspace: str = "default") -> str:
+    def launch_runner(self, *, host_id: str, session_id: str, workspace: str) -> str:
         # 在 host 上起 runner 并绑到会话(body 带 session_id)。无 runner 则发 turn 会 503。
+        # workspace 必须是 host 上已存在的绝对路径(实证:omnigent 不自建,缺则 400)。
         r = self._c.post(f"/v1/hosts/{host_id}/runners",
                          json={"session_id": session_id, "workspace": workspace})
         r.raise_for_status()
         return r.json()["runner_id"]
+
+    def get_items(self, session_id: str, *, limit: int = 100) -> list[dict]:
+        # 会话条目(对话历史的权威来源,claude-native 回复只在此)。
+        r = self._c.get(f"/v1/sessions/{session_id}/items",
+                        params={"limit": limit, "order": "asc"})
+        r.raise_for_status()
+        return r.json().get("data", [])

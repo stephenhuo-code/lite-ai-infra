@@ -27,3 +27,4 @@ pipeline:
   dj_bin: ./.dj-venv/bin/dj-process
 workspace:
   token_key: izUz8HYmu8l-FHzVXypDBEyGRuf33opI-Jf3xGaLgaw=   # plan 9:BFF 铸/MCP 解令牌共享密钥(dev 非真密钥;prod 走 ${WS_TOKEN_KEY})
+  send_identity: "0"   # dev 单用户 omnigent(AUTH_ENABLED=0):BFF 不发身份头,一切归 local(与本地 host owner 对齐)

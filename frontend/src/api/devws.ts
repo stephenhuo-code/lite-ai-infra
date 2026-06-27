@@ -20,6 +20,14 @@ export async function sendTurn(sessionId: string, text: string): Promise<void> {
   await fetch(`/v1/ws/sessions/${encodeURIComponent(sessionId)}/turn`, mut({ text }))
 }
 
+// 对话历史(claude-native 回复只落 items;前端以此为权威源,SSE 仅作刷新触发)。
+export async function fetchSessionItems(sessionId: string): Promise<unknown[]> {
+  try {
+    const r = await fetch(`/v1/ws/sessions/${encodeURIComponent(sessionId)}/items`, { headers: { Accept: 'application/json' } })
+    return r.ok ? (await r.json()).items ?? [] : []
+  } catch { return [] }
+}
+
 export async function resolveElicitation(sessionId: string, id: string, approve: boolean): Promise<void> {
   await fetch(`/v1/ws/sessions/${encodeURIComponent(sessionId)}/elicitations/${encodeURIComponent(id)}/resolve`, mut({ approve }))
 }

@@ -1,4 +1,4 @@
-.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog
+.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog omnigent-host ws-up ws-down ws-host-up ws-fe-up omnigent-image omnigent-up omnigent-down
 EID ?= ent-demo
 sync:             ; uv sync --extra dev
 # dev/prod parity:建独立 .dj-venv(同云上 Data-Juicer+Ray);本地真跑数据管线前先 `make dj-setup` 一次
@@ -32,7 +32,10 @@ omnigent-down:    ; docker compose -f deploy/dev/omnigent.yml down
 TOKEN ?= $${OMNIGENT_TOKEN_FILE:-secrets/omnigent.token}
 # host/runner 后台(读 token 文件;缺则跳过并提示一次性 claude setup-token)
 # NO_PROXY=localhost:host 连 localhost server 的 WS tunnel 必须直连(否则继承 SOCKS 代理 → 缺 python-socks 连不上)
-ws-host-up:       ; @mkdir -p .dev; if [ -f $(TOKEN) ]; then NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 ALL_PROXY= all_proxy= HTTP_PROXY= http_proxy= HTTPS_PROXY= https_proxy= CLAUDE_CODE_OAUTH_TOKEN=$$(cat $(TOKEN)) nohup uv run --project third_party/omnigent omnigent host http://localhost:8900 >.dev/omnigent-host.log 2>&1 & echo $$! >.dev/omnigent-host.pid; echo "  omnigent-host  → 后台 (.dev/omnigent-host.log)"; else echo "  omnigent-host  → 跳过:缺 $(TOKEN)(先 'claude setup-token' 把输出存进去)"; fi
+# NO_PROXY=localhost:host/runner 回连 localhost server 的 WS tunnel 直连(否则走 SOCKS 代理需 python-socks)。
+# 保留外部代理(ALL_PROXY 等)给 runner 访问 Anthropic;python-socks 已装进 omnigent venv 以支持 SOCKS。
+ws-host-up:       ; @mkdir -p .dev; if [ -f $(TOKEN) ]; then NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1 CLAUDE_CODE_OAUTH_TOKEN=$$(cat $(TOKEN)) nohup uv run --project third_party/omnigent omnigent host http://localhost:8900 >.dev/omnigent-host.log 2>&1 & echo $$! >.dev/omnigent-host.pid; echo "  omnigent-host  → 后台 (.dev/omnigent-host.log)"; else echo "  omnigent-host  → 跳过:缺 $(TOKEN)(先 'claude setup-token' 把输出存进去)"; fi
+omnigent-host:    ; @$(MAKE) ws-host-up   # 别名:单独(重)起 omnigent host/runner 后台
 ws-fe-up:         ; @mkdir -p .dev; cd frontend && nohup npm run dev >../.dev/frontend.log 2>&1 & echo $$! >.dev/frontend.pid; echo "  frontend       → 后台 (.dev/frontend.log, http://localhost:5173/workspace)"
 ws-up:            ; @$(MAKE) omnigent-image && $(MAKE) omnigent-up && $(MAKE) up && $(MAKE) ws-host-up && $(MAKE) ws-fe-up && echo "✅ Dev Workspace 全栈已起（全后台）。打开 http://localhost:8090/workspace(同源登录;5173 仅前端 HMR 开发用)；停: make ws-down；日志在 .dev/"
 ws-down:          ; -@[ -f .dev/omnigent-host.pid ] && kill $$(cat .dev/omnigent-host.pid) 2>/dev/null; [ -f .dev/frontend.pid ] && kill $$(cat .dev/frontend.pid) 2>/dev/null; rm -f .dev/omnigent-host.pid .dev/frontend.pid; pkill -f "omnigent host" 2>/dev/null; pkill -f "vite" 2>/dev/null; $(MAKE) down; $(MAKE) omnigent-down

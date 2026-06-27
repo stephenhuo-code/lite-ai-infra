@@ -12,7 +12,7 @@ from libs.identity.context import parse_context
 from libs.identity.ids import EnterpriseId
 from services._scaffold.auth import enterprise_of
 from services.gateway.bff.middleware import _as_list
-from services.gateway.bff.omnigent_client import user_message_event
+from services.gateway.bff.omnigent_client import items_to_chat, user_message_event
 from services.gateway.bff.workspace import create_workspace_session
 
 
@@ -38,7 +38,7 @@ def _resolve(request: Request, claims):
 
 
 def make_workspace_router(*, claims, store, omni_factory, mcp_base_url: str,
-                          agent_config_yaml: str,
+                          agent_config_yaml: str, send_identity: bool = True,
                           omni_base_url: str = "http://omnigent:8000") -> APIRouter:
     router = APIRouter()
 
@@ -62,6 +62,15 @@ def make_workspace_router(*, claims, store, omni_factory, mcp_base_url: str,
         text = (body or {}).get("text", "")
         return omni_factory(email).post_event(session_id, user_message_event(text))
 
+    @router.get("/v1/ws/sessions/{session_id}/items")
+    def items(session_id: str, request: Request):
+        # 对话历史(claude-native 回复只在 items;前端以此为准,stream 仅作刷新触发)。
+        ident, err = _resolve(request, claims)
+        if err:
+            return err
+        _, _, _, email = ident
+        return {"items": items_to_chat(omni_factory(email).get_items(session_id))}
+
     @router.post("/v1/ws/sessions/{session_id}/elicitations/{eid}/resolve")
     async def resolve(session_id: str, eid: str, request: Request):
         ident, err = _resolve(request, claims)
@@ -80,8 +89,10 @@ def make_workspace_router(*, claims, store, omni_factory, mcp_base_url: str,
 
         async def gen():
             url = f"{omni_base_url.rstrip('/')}/v1/sessions/{session_id}/stream"
-            headers = {"X-Forwarded-Email": email, "Accept": "text/event-stream"}
-            async with httpx.AsyncClient(timeout=None) as ac:
+            headers = {"Accept": "text/event-stream"}
+            if send_identity:                          # dev 单用户:不发身份头(与会话 owner=local 对齐)
+                headers["X-Forwarded-Email"] = email
+            async with httpx.AsyncClient(timeout=None, trust_env=False) as ac:   # 不走代理
                 async with ac.stream("GET", url, headers=headers) as r:
                     async for chunk in r.aiter_raw():
                         yield chunk

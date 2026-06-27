@@ -45,6 +45,23 @@ def test_register_mcp_sends_tokenized_url():
     assert seen["body"]["url"].endswith("/s/tok-xyz/mcp")
 
 
+def test_items_to_chat_normalizes_and_dedupes():
+    from services.gateway.bff.omnigent_client import items_to_chat
+    raw = [
+        {"type": "resource_event"},                                                   # 跳过
+        {"type": "message", "role": "user",                                           # API turn 记一次
+         "content": [{"type": "input_text", "text": "探查 coco-2"}]},
+        {"type": "message", "role": "user",                                           # forwarder 回灌(重复)→ 去重
+         "content": [{"type": "input_text", "text": "探查 coco-2"}]},
+        {"type": "message", "role": "assistant",                                      # claude-native 用 output_text
+         "content": [{"type": "output_text", "text": "coco-2 有 2 列"}], "model": "claude-native-ui"},
+    ]
+    assert items_to_chat(raw) == [
+        {"kind": "user", "text": "探查 coco-2"},
+        {"kind": "assistant", "text": "coco-2 有 2 列"},
+    ]
+
+
 def test_strip_forged_identity_header():
     out = strip_forged_identity_headers({"X-Forwarded-Email": "evil@x", "Cookie": "ok"})
     assert "X-Forwarded-Email" not in out and "Cookie" in out

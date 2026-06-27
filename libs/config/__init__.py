@@ -69,6 +69,10 @@ class _Pipeline:
 class _Workspace:
     # Dev Workspace(plan 9):BFF 铸/MCP 解令牌的共享密钥(WS_TOKEN_KEY,跨进程必须同值)。
     token_key: str = ""
+    # BFF 是否向 omnigent 发身份头(X-Forwarded-Email)。dev 单用户 omnigent(AUTH_ENABLED=0)
+    # 必须 "0"(否则 alice 头按 owner 过滤掉 local host → 起不了 runner);prod header 模式 "1"。
+    # 注:数据控制链路的身份(can())走 MCP 令牌,与此无关。
+    send_identity: str = "1"
 
 
 @dataclass
@@ -175,6 +179,7 @@ def _flat(s: Settings) -> dict[str, str | None]:
         "JOBS_DIR": _abs(p.jobs_dir),
         "DJ_BIN": _abs(p.dj_bin),
         "WS_TOKEN_KEY": s.workspace.token_key,
+        "OMNIGENT_BFF_SEND_IDENTITY": s.workspace.send_identity,
     }
 
 
@@ -188,7 +193,8 @@ SERVICE_ENV_KEYS: dict[str, list[str]] = {
                       "METADATA_URL"],   # S2a:submit 时按名查 metadata 解析源 location
     "gateway": ["IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
                 "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
-                "BFF_REDIRECT_URI", "WS_TOKEN_KEY"],   # WS_TOKEN_KEY:与 MCP 同值,铸/解令牌
+                "BFF_REDIRECT_URI", "WS_TOKEN_KEY",    # WS_TOKEN_KEY:与 MCP 同值,铸/解令牌
+                "OMNIGENT_BFF_SEND_IDENTITY"],          # dev 单用户 omnigent → "0"(见 _Workspace)
     # Dev Workspace MCP server(plan 9):读 catalog(Gravitino)+ OSS(企业/owner 前缀)+ 解令牌。
     "dev-workspace-mcp": ["GRAVITINO_URL", "OSS_ENDPOINT", "OSS_ACCESS_KEY", "OSS_SECRET_KEY",
                           "DATA_BUCKET", "WS_TOKEN_KEY"],

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { fetchSessionItems } from '../../api/devws'
 
-// Dev Workspace 对话流(plan 9b · 探针 RESULTS 9b②)。SSE `/v1/ws/sessions/{id}/stream`(经 BFF 透传)
-// 逐条 ServerStreamEvent → ChatItem。事件 type 取 OpenAI-responses 约定(omnigent 镜像);
-// 精确 discriminator 以 live(RUNBOOK)为准,差异只改本文件的 mapping 一处。
+// Dev Workspace 对话流(plan 9b)。live 实证:harness=claude-native 的回复只落 GET /items
+// (SSE 不发 response.output_text.delta —— 那是 API-harness 才有的),故对话历史以 items 为权威源,
+// SSE `/stream` 仅作"有变化→刷新 items"的触发器 + ASK(elicitation)即时卡片。
+// applyStreamEvent/parseSse 保留(API-harness 的 delta 映射 + 单测),live 走 items 路径。
 export type ChatItem =
   | { kind: 'user'; text: string }
   | { kind: 'assistant'; text: string }
@@ -47,12 +49,33 @@ export function parseSse(buffer: string): StreamEvent[] {
   return out
 }
 
+// 去重连续相同的 user/assistant 气泡(乐观 user 与 refetch 重叠 / 后端漏网的回灌)。
+export function dedupeChat(items: ChatItem[]): ChatItem[] {
+  const out: ChatItem[] = []
+  for (const it of items) {
+    const last = out[out.length - 1]
+    if (last && (it.kind === 'user' || it.kind === 'assistant') && last.kind === it.kind &&
+        last.text === it.text) continue
+    out.push(it)
+  }
+  return out
+}
+
 export function useSessionStream(sessionId: string | null): { items: ChatItem[]; addUser: (t: string) => void } {
-  const [items, setItems] = useState<ChatItem[]>([])
-  const addUser = (t: string) => setItems(prev => [...prev, { kind: 'user', text: t }])
+  const [items, setItems] = useState<ChatItem[]>([])     // 权威:GET /items
+  const [asks, setAsks] = useState<ChatItem[]>([])        // ASK 卡片:只在 SSE
+  const addUser = (t: string) => setItems(prev => [...prev, { kind: 'user', text: t }])  // 乐观,refetch 会校正
   useEffect(() => {
-    if (!sessionId) return
+    if (!sessionId) return            // sessionId 仅 null→sid 变一次(建会话),items/asks 初始即空,无需清
     const ctrl = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const refetch = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        fetchSessionItems(sessionId).then(raw => setItems(raw as ChatItem[])).catch(() => {})
+      }, 400)
+    }
+    refetch()   // 进入会话先拉一次历史
     ;(async () => {
       const res = await fetch(`/v1/ws/sessions/${encodeURIComponent(sessionId)}/stream`,
         { headers: { Accept: 'text/event-stream' }, signal: ctrl.signal })
@@ -67,11 +90,14 @@ export function useSessionStream(sessionId: string | null): { items: ChatItem[];
         const parts = buf.split('\n\n')
         buf = parts.pop() ?? ''
         for (const ev of parseSse(parts.join('\n\n') + '\n\n')) {
-          setItems(prev => applyStreamEvent(prev, ev))
+          if ((ev.type ?? '').includes('elicitation'))     // ASK:即时卡片(不在 items)
+            setAsks(prev => [...prev, { kind: 'ask', id: ev.elicitation_id ?? '', prompt: ev.message ?? '' }])
+          else
+            refetch()                                       // 任何生命周期变化 → 刷新 items
         }
       }
     })().catch(() => {})
-    return () => ctrl.abort()
+    return () => { ctrl.abort(); clearTimeout(timer) }
   }, [sessionId])
-  return { items, addUser }
+  return { items: dedupeChat([...items, ...asks]), addUser }
 }

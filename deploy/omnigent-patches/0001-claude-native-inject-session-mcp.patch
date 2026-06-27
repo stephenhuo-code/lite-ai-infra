@@ -1,0 +1,119 @@
+diff --git a/omnigent/claude_native_bridge.py b/omnigent/claude_native_bridge.py
+index 63774c04..1364cc34 100644
+--- a/omnigent/claude_native_bridge.py
++++ b/omnigent/claude_native_bridge.py
+@@ -974,7 +974,12 @@ def read_permission_hook_config(bridge_dir: Path) -> dict[str, Any]:
+     return payload if isinstance(payload, dict) else {}
+ 
+ 
+-def build_mcp_config(bridge_dir: Path, *, python_executable: str | None = None) -> dict[str, Any]:
++def build_mcp_config(
++    bridge_dir: Path,
++    *,
++    python_executable: str | None = None,
++    extra_http_servers: dict[str, str] | None = None,
++) -> dict[str, Any]:
+     """
+     Build the Claude Code MCP config for the Omnigent bridge server.
+ 
+@@ -982,27 +987,35 @@ def build_mcp_config(bridge_dir: Path, *, python_executable: str | None = None)
+     :param python_executable: Python executable to run, e.g.
+         ``"/path/to/.venv/bin/python"``. ``None`` uses
+         :data:`sys.executable`.
++    :param extra_http_servers: Optional ``{name: url}`` of session-scoped
++        HTTP MCP servers (e.g. Lite-AI's per-session token-scoped data
++        plane) to expose to Claude Code ALONGSIDE the Omnigent bridge.
++        The Omnigent bridge relays only Omnigent's own tools; session
++        MCP servers registered via ``/agent/mcp-servers`` are otherwise
++        invisible to the native ``claude`` CLI. Wiring them here lets
++        Claude Code connect to them directly (tools ``mcp__<name>__*``).
+     :returns: JSON-serializable Claude MCP config.
+     """
+     python = python_executable or sys.executable
+-    return {
+-        "mcpServers": {
+-            _MCP_SERVER_NAME: {
+-                "command": python,
+-                "args": [
+-                    "-I",
+-                    "-m",
+-                    "omnigent.claude_native_bridge",
+-                    "serve-mcp",
+-                    "--bridge-dir",
+-                    str(bridge_dir),
+-                ],
+-                "env": {
+-                    "PYTHONUNBUFFERED": "1",
+-                },
+-            }
++    servers: dict[str, Any] = {
++        _MCP_SERVER_NAME: {
++            "command": python,
++            "args": [
++                "-I",
++                "-m",
++                "omnigent.claude_native_bridge",
++                "serve-mcp",
++                "--bridge-dir",
++                str(bridge_dir),
++            ],
++            "env": {
++                "PYTHONUNBUFFERED": "1",
++            },
+         }
+     }
++    for name, url in (extra_http_servers or {}).items():
++        servers[name] = {"type": "http", "url": url}
++    return {"mcpServers": servers}
+ 
+ 
+ def build_hook_settings(
+@@ -1271,6 +1284,7 @@ def augment_claude_args(
+     bundle_dir: Path | None = None,
+     agent_name: str | None = None,
+     skills_filter: str | list[str] = "all",
++    extra_http_mcp_servers: dict[str, str] | None = None,
+ ) -> list[str]:
+     """
+     Return Claude CLI args with Omnigent MCP/hook/skill injection.
+@@ -1305,7 +1319,11 @@ def augment_claude_args(
+         ``setting_sources``. Defaults to ``"all"``.
+     :returns: Augmented argument list for the terminal resource.
+     """
+-    mcp_config = build_mcp_config(bridge_dir, python_executable=python_executable)
++    mcp_config = build_mcp_config(
++        bridge_dir,
++        python_executable=python_executable,
++        extra_http_servers=extra_http_mcp_servers,
++    )
+     hook_settings = build_hook_settings(
+         bridge_dir,
+         python_executable=python_executable,
+diff --git a/omnigent/runner/app.py b/omnigent/runner/app.py
+index c710a723..72127870 100644
+--- a/omnigent/runner/app.py
++++ b/omnigent/runner/app.py
+@@ -5068,6 +5068,15 @@ async def _auto_create_claude_terminal(
+     # has the spec resolver) expose a bundle's ``skills/`` to Claude Code
+     # via ``--plugin-dir`` — the CLI mirror of the SDK plugin wiring.
+     # ``api_key_helper`` (ucode) registers Claude's gateway token command.
++    # Session-scoped HTTP MCP servers (registered via /agent/mcp-servers, e.g.
++    # Lite-AI's per-session token-scoped data plane) are invisible to the native
++    # claude CLI through the bridge (which relays only Omnigent's own tools), so
++    # wire them straight into Claude Code's --mcp-config for a direct connection.
++    _extra_http_mcp = {
++        s.name: s.url
++        for s in (getattr(agent_spec, "mcp_servers", None) or [])
++        if getattr(s, "transport", None) == "http" and getattr(s, "url", None)
++    }
+     claude_args = augment_claude_args(
+         base_claude_args,
+         bridge_dir=bridge_dir,
+@@ -5077,6 +5086,7 @@ async def _auto_create_claude_terminal(
+         agent_name=agent_name,
+         skills_filter=skills_filter,
+         api_key_helper=claude_config.api_key_helper if claude_config is not None else None,
++        extra_http_mcp_servers=_extra_http_mcp,
+     )
+ 
+     # Inherit the agent's os_env so its sandbox (e.g. ``type: none``),

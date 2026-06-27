@@ -44,7 +44,7 @@ export function AgentChat({ items, onSend, onResolve }: AgentChatProps) {
         <div className="flex items-end gap-2 border border-slate-200 rounded-2xl px-3 py-2 focus-within:border-[#6366F1]">
           <textarea
             rows={1} value={text} onChange={e => setText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() } }}
             placeholder="让 agent 探查数据、写管线、改代码…"
             className="flex-1 resize-none outline-none text-sm py-1.5 bg-transparent" />
           <button onClick={send} className="text-white text-sm font-medium px-3.5 py-1.5 rounded-xl cursor-pointer" style={{ background: BRAND }}>发送</button>

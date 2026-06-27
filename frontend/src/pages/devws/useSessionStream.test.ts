@@ -1,5 +1,17 @@
 import { it, expect } from 'vitest'
-import { applyStreamEvent, type ChatItem } from './useSessionStream'
+import { applyStreamEvent, dedupeChat, type ChatItem } from './useSessionStream'
+
+it('dedupeChat collapses consecutive identical user/assistant bubbles', () => {
+  const s = dedupeChat([
+    { kind: 'user', text: '探查 coco-2' },
+    { kind: 'user', text: '探查 coco-2' },        // claude-native 回灌的重复 → 折叠
+    { kind: 'assistant', text: 'coco-2 有 2 列' },
+  ])
+  expect(s).toEqual([
+    { kind: 'user', text: '探查 coco-2' },
+    { kind: 'assistant', text: 'coco-2 有 2 列' },
+  ])
+})
 
 it('output_text.delta accumulates into one assistant bubble', () => {
   let s: ChatItem[] = []
