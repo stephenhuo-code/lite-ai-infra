@@ -190,6 +190,15 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
         omni_base_url=_omni_base,
         agent_config_yaml=_agent_yaml))
 
+    # 订阅凭据 onboarding(T5):/v1/me/model-credentials 提交/查/删 用户自己的 claude/codex 订阅凭据。
+    # vault 复用 WS_TOKEN_KEY(同为 Fernet key);明文加密存盘,绝不回显。函数内 import 避免循环依赖。
+    from services.credential_vault.vault import CredentialVault as _CredVault
+    from services.gateway.bff.credentials_routes import make_credentials_router as _make_cred
+    from pathlib import Path as _CPath
+    if _ws_key:
+        _vault = _CredVault(key=_ws_key, store_dir=_CPath(os.getenv("CRED_VAULT_DIR", ".dev/cred-vault")))
+        app.include_router(_make_cred(claims=claims, vault=_vault))
+
     @app.middleware("http")
     async def _session(request: Request, call_next):
         # ===== call_next 前:解会话 → (过期则刷新) → 设 request.state.bearer/session =====

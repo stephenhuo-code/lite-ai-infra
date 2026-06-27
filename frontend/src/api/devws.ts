@@ -47,3 +47,25 @@ export async function fetchGitChanges(): Promise<{ x: string; path: string }[]> 
     return r.ok ? (await r.json()).changes ?? [] : []
   } catch { return [] }
 }
+
+// 订阅凭据 onboarding(T5):用户提交自己的 claude / codex 订阅凭据,经 BFF 加密存。
+// secret 只随 PUT 上行,永不下行;状态仅布尔(已连/未连)。
+export type ModelProvider = 'claude' | 'codex'
+export interface ModelCredentialStatus { claude: boolean; codex: boolean }
+
+export async function fetchModelCredentials(): Promise<ModelCredentialStatus> {
+  const r = await fetch('/v1/me/model-credentials', { headers: { Accept: 'application/json' } })
+  if (!r.ok) throw new Error(`fetch model credentials failed: ${r.status}`)
+  return r.json()
+}
+
+export async function putModelCredential(provider: ModelProvider, secret: string): Promise<void> {
+  const r = await fetch('/v1/me/model-credentials', mut({ provider, secret }))
+  if (!r.ok) throw new Error(`put model credential failed: ${r.status}`)
+}
+
+export async function deleteModelCredential(provider: ModelProvider): Promise<void> {
+  const r = await fetch(`/v1/me/model-credentials/${encodeURIComponent(provider)}`,
+    { method: 'DELETE', headers: { 'x-csrf-token': csrf() } })
+  if (!r.ok) throw new Error(`delete model credential failed: ${r.status}`)
+}
