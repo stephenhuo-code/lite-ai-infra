@@ -21,9 +21,18 @@
 - server 容器需能 `docker run`(挂 `/var/run/docker.sock`)。dev macOS + prod ECS 都是普通 docker,**不需 KVM、不依赖云 SaaS**。
 - 收益:复用 omnigent 原生 managed-host 全套(token 认证解 header-auth、owner 绑定、重建、session 绑定)+ 普通 docker 后端 + dev/prod 同机制。
 
+## boxlite 实证被堵(owner 一度想用 → 验证后否决,记 vNext)
+
+owner 曾倾向 boxlite(微虚拟机强隔离)。**实测确认在"全容器化 server"前提下跑不起来**:
+- `docker run alpine ls /dev/kvm` → **容器内无 /dev/kvm**(Docker Desktop macOS 不给容器嵌套虚拟化)。
+- boxlite 是可选 extra(`pyproject.toml:125 boxlite = ["boxlite>=0.9.5,<1"]`),server 镜像未装(`import boxlite` → ModuleNotFoundError)。
+- boxlite 自述 "local embedded micro-VMs (KVM/HVF)" —— server 是 Linux 容器,只能走 KVM,而容器里没 /dev/kvm。
+- 标准阿里云 ECS 一般也不给容器嵌套 KVM。
+→ **boxlite 需要:server 出容器(用宿主 HVF/KVM,破 parity)或 KVM 能力主机(裸金属/嵌套虚拟化实例,重)。owner 决策:记 vNext 硬化项(将来有 KVM 主机时上,顺带覆盖推迟的 sandbox 强隔离)。v1 走 (b) 普通 docker。**
+
 ## 否决
 
-- **boxlite local(microVM)**:需 KVM/hypervisor + 额外 SDK,prod ECS 嵌套虚拟化不保证;隔离更强但当前 sandbox=none 已推迟,microVM 过重。后续要强隔离可换。
+- **boxlite local(microVM)**:见上,实证被嵌套 KVM 堵;记 vNext。
 - **云 SaaS provider(modal/e2b/...)**:把数据平台的 host 外包给第三方云沙箱,违自托管 + 数据隔离取向。
 - **决策(c)纯 BFF 侧编排(计划默认)**:不用 omnigent managed-host,自己 docker run host + 自取 host token + 静态注册。可行但要重造 token/owner/重建逻辑,且 header-auth 下取 host token 仍绕不开 managed-host token API → 不如 (b) 干净。**改用 (b)。**
 
