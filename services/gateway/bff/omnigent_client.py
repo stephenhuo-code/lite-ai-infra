@@ -61,3 +61,19 @@ class OmnigentClient:
         r = self._c.post(f"/v1/sessions/{session_id}/agent/mcp-servers",
                          json={"name": name, "transport": "http", "url": url})
         r.raise_for_status()
+
+    def first_online_host(self) -> str | None:
+        # 取一个在线 host(runner 在其上起)。dev 单机一个 host。
+        r = self._c.get("/v1/hosts")
+        r.raise_for_status()
+        for hst in r.json().get("hosts", []):
+            if hst.get("status") == "online":
+                return hst["host_id"]
+        return None
+
+    def launch_runner(self, *, host_id: str, session_id: str, workspace: str = "default") -> str:
+        # 在 host 上起 runner 并绑到会话(body 带 session_id)。无 runner 则发 turn 会 503。
+        r = self._c.post(f"/v1/hosts/{host_id}/runners",
+                         json={"session_id": session_id, "workspace": workspace})
+        r.raise_for_status()
+        return r.json()["runner_id"]

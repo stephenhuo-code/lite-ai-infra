@@ -32,9 +32,10 @@ services:
       HOST: 0.0.0.0
       PORT: "8000"
       OMNIGENT_ADMIN_CREDENTIALS_PATH: /data/admin-credentials
-      OMNIGENT_AUTH_ENABLED: "1"
-      OMNIGENT_AUTH_PROVIDER: header
-      OMNIGENT_AUTH_HEADER: X-Forwarded-Email
+      # dev 单用户模式:本地 `omnigent host` CLI 无法对 header 模式做回拨认证(401,需代理注入头=prod)。
+      # 单用户下 host 可连、runner 注册。我们的数据控制链路(MCP 令牌+can())独立于 omnigent 身份,
+      # 单用户下照常成立(BFF 仍注入 X-Forwarded-Email,omnigent 忽略)。**prod = header 模式(代理后)**。
+      OMNIGENT_AUTH_ENABLED: "0"
     volumes:
       - omnigent-data:/data
     ports:

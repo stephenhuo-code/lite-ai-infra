@@ -15,6 +15,10 @@ def _omni_factory(email):
         if req.url.path.endswith("/mcp-servers"):
             return httpx.Response(201, json={})
         assert req.headers.get("X-Forwarded-Email") == "alice@acme.test"   # header-auth
+        if req.url.path == "/v1/hosts":
+            return httpx.Response(200, json={"hosts": [{"host_id": "h1", "status": "online"}]})
+        if req.url.path.endswith("/runners"):
+            return httpx.Response(200, json={"runner_id": "r1"})
         return httpx.Response(200, json={"session_id": "sess-omni"})
     return OmnigentClient("http://omnigent:8000", email=email, transport=httpx.MockTransport(h))
 
@@ -54,6 +58,10 @@ def test_turn_posts_user_message():
             import json as _j
             seen["body"] = _j.loads(req.content)
             return httpx.Response(200, json={"queued": True})
+        if req.url.path == "/v1/hosts":
+            return httpx.Response(200, json={"hosts": [{"host_id": "h1", "status": "online"}]})
+        if req.url.path.endswith("/runners"):
+            return httpx.Response(200, json={"runner_id": "r1"})
         return httpx.Response(200, json={"session_id": "x"})
 
     def omni_factory(email):

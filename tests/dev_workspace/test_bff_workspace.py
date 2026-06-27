@@ -57,6 +57,10 @@ def test_create_workspace_session_binds_token_to_caller():
         if req.url.path.endswith("/mcp-servers"):
             calls["url"] = json.loads(req.content)["url"]
             return httpx.Response(201, json={})
+        if req.url.path == "/v1/hosts":
+            return httpx.Response(200, json={"hosts": [{"host_id": "h1", "status": "online"}]})
+        if req.url.path.endswith("/runners"):
+            return httpx.Response(200, json={"runner_id": "r1"})
         return httpx.Response(200, json={"session_id": "sess-7"})
 
     store = WorkspaceTokenStore(now=lambda: 0)
@@ -111,6 +115,10 @@ def test_create_with_ws_hydrates_workspace():
     def h(req):
         if req.url.path.endswith("/mcp-servers"):
             return httpx.Response(201, json={})
+        if req.url.path == "/v1/hosts":
+            return httpx.Response(200, json={"hosts": [{"host_id": "h1", "status": "online"}]})
+        if req.url.path.endswith("/runners"):
+            return httpx.Response(200, json={"runner_id": "r1"})
         return httpx.Response(200, json={"session_id": "sess-h"})
 
     store = WorkspaceTokenStore(now=lambda: 0)

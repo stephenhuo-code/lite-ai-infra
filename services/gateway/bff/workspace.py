@@ -24,6 +24,9 @@ def create_workspace_session(*, sub: str, enterprise: str, role: str, agent_conf
     tok = store.mint(TokenClaims(sub=sub, enterprise=enterprise, role=role, session=sid))
     omni.register_mcp(session_id=sid, name="liteai",
                       url=f"{mcp_base_url.rstrip('/')}/s/{tok}/mcp")
+    host_id = omni.first_online_host()              # 起 runner 绑会话(无 host 则跳过,发 turn 会 503)
+    if host_id:
+        omni.launch_runner(host_id=host_id, session_id=sid, workspace=ws or "default")
     if ws and oss is not None and fs is not None:     # 持久化:会话开 → 从 OSS 水合工作目录(9d)
         hydrate(oss, fs, prefix=workspace_prefix(enterprise=enterprise, owner=sub, ws=ws))
     return {"session_id": sid}     # 令牌不回给前端(前端不持令牌,经 BFF 反代)
