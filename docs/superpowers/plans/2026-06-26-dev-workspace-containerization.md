@@ -386,9 +386,18 @@ git commit -m "feat(bff): 订阅凭据 onboarding API + 连接订阅设置页"
 
 ---
 
-## Phase 3 — per-user host 编排 + 凭据注入(★ GATE on P1;默认按 0a 决策 (c))
+## Phase 3 — per-user host 编排 + 凭据注入(★ P0a 已决:决策 (b) docker SandboxLauncher)
 
-> 本阶段按 **Task 0a 的决策结论**实现。下方默认按 (c)「我们侧编排 `docker run` per-user host + host token 注册」写;若 0a 命中 (a)/(b),Step 实现替换为 omnigent 原生 managed-host launch(更简,去掉 docker run 部分,保留凭据注入与 ensure 逻辑)。
+> **P0a 结论(owner 已拍,2026-06-28)**:走 **(b) 自写 docker SandboxLauncher 经 patch-queue 加 `provider: docker`**。omnigent 无普通-docker provider(boxlite=microVM 需嵌套 KVM,实测容器内无 /dev/kvm,记 vNext;云 provider=SaaS),但有 launcher-factory 接缝 + managed-host launch-token(正好解 header-auth 下 host 认证)。
+>
+> **docker launcher 设计(参照 `omnigent/onboarding/sandboxes/kubernetes.py`)**:实现 `SandboxLauncher`(`omnigent/onboarding/sandboxes/base.py:152`)的 `prepare/provision/run/terminate/put`:
+> - `prepare()`:校验 `docker` 可用。
+> - `provision(name) -> sandbox_id`:`docker run -d --name <name> -e OMNIGENT_HOST_TOKEN=<launch_token> -e <user 订阅凭据 env> <reaper> omnigent host --server <server_url>`(host 命令同 k8s 的 `_render_host_command`:`omnigent host --server <url>`,token/身份经 env 到达);返回容器 id。
+> - `run(id, cmd)`:`docker exec <id> sh -lc cmd`;`put(id, local, remote)`:`docker cp local <id>:remote`(注入 codex `auth.json`);`terminate(id)`:`docker rm -f <id>`。
+> - 经 **patch-queue** 加 `provider: docker` 到 `parse_sandbox_config`(`omnigent/server/managed_hosts.py`)+ 注册该 launcher;server compose 挂 `/var/run/docker.sock` + 配置 `sandbox: provider: docker`(+ `server_url` + host 镜像 tag)。
+> - 凭据注入:server 从我们 vault(T4)取该 user 的 claude/codex 订阅 → 作为 env(claude OAuth)/ `docker cp` 文件(codex auth.json)注入容器。
+>
+> **T3(静态 host compose)取消**:host 不再静态起,改由 server 经 docker launcher 按需起/复用 per-user host。
 
 ### Task 6: per-user host 编排器(ensure host online + 注入凭据/host-token)
 
