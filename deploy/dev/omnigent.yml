@@ -32,10 +32,11 @@ services:
       HOST: 0.0.0.0
       PORT: "8000"
       OMNIGENT_ADMIN_CREDENTIALS_PATH: /data/admin-credentials
-      # dev 单用户模式:本地 `omnigent host` CLI 无法对 header 模式做回拨认证(401,需代理注入头=prod)。
-      # 单用户下 host 可连、runner 注册。我们的数据控制链路(MCP 令牌+can())独立于 omnigent 身份,
-      # 单用户下照常成立(BFF 仍注入 X-Forwarded-Email,omnigent 忽略)。**prod = header 模式(代理后)**。
-      OMNIGENT_AUTH_ENABLED: "0"
+      # 全容器化多用户(ADR-027):header-auth —— 身份来自可信代理头(BFF 注入 X-Forwarded-Email,
+      # 剥客户端伪造头 + omnigent 不可直达)。容器化 host 用 managed host token 认证(非用户凭据)。
+      # 数据控制链路(MCP 令牌+can())与 omnigent 身份正交,承重墙不变。
+      OMNIGENT_AUTH_ENABLED: "1"
+      OMNIGENT_AUTH_PROVIDER: header
     volumes:
       - omnigent-data:/data
     ports:
