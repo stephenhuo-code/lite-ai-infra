@@ -16,4 +16,6 @@ dev = ["pytest>=8", "pytest-asyncio>=0.24", "import-linter>=2.1", "datamodel-cod
 pythonpath = ["."]
 asyncio_mode = "auto"
 markers = ["integration: 需要本地 MinIO/Keycloak（docker-compose）的集成测试；默认不跑"]
-addopts = "-m 'not integration'"
+# third_party = fork submodule(如 omnigent),其测试不归本仓 CI 收集(模型 C 自编译,测试在 fork 内跑)。
+addopts = "-m 'not integration' --ignore=third_party"
+norecursedirs = ["third_party"]
