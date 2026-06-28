@@ -1,0 +1,491 @@
+diff --git a/omnigent/onboarding/sandboxes/__init__.py b/omnigent/onboarding/sandboxes/__init__.py
+index af551433..5a831079 100644
+--- a/omnigent/onboarding/sandboxes/__init__.py
++++ b/omnigent/onboarding/sandboxes/__init__.py
+@@ -70,6 +70,10 @@ _LAUNCHERS: dict[str, str] = {
+     # On-demand Kubernetes runner Pod via the official kubernetes client (the
+     # `omnigent[kubernetes]` extra), imported lazily like modal/daytona.
+     "kubernetes": "omnigent.onboarding.sandboxes.kubernetes:KubernetesSandboxLauncher",
++    # Plain Docker daemon (no microVM / cloud SaaS): a host container started on
++    # demand over the local Docker socket, driven via the `docker` CLI. Needs
++    # no optional SDK — just a `docker` client on PATH.
++    "docker": "omnigent.onboarding.sandboxes.docker:DockerSandboxLauncher",
+ }
+ 
+ 
+diff --git a/omnigent/onboarding/sandboxes/docker.py b/omnigent/onboarding/sandboxes/docker.py
+new file mode 100644
+index 00000000..b8b590c4
+--- /dev/null
++++ b/omnigent/onboarding/sandboxes/docker.py
+@@ -0,0 +1,387 @@
++"""
++Plain-Docker sandbox launcher.
++
++Implements the managed-launch subset of
++:class:`~omnigent.onboarding.sandboxes.base.SandboxLauncher` for a host
++container started on demand on a plain Docker daemon (no microVM, no cloud
++SaaS) — the backend a self-hosted omnigent-server reaches over the local
++Docker socket. Unlike Kubernetes (entrypoint-as-host) this launcher is
++**exec-model**, exactly like the Daytona / Modal launchers: ``provision``
++starts a bare keep-alive container, and the inherited
++:meth:`~omnigent.onboarding.sandboxes.base.SandboxLauncher.start_host`
++``docker exec``\\ s into it to create the workspace, clone the repository, and
++launch ``omnigent host`` detached — with the launch token + identity in the
++process environment (the base ``start_host`` builds the
++``OMNIGENT_HOST_TOKEN=… OMNIGENT_HOST_ID=… OMNIGENT_HOST_NAME=… omnigent host
++--server <url>`` command), so the token reaches the host without ever landing
++in a ``docker run`` argv / image / inspect surface.
++
++The Docker CLI is driven via ``subprocess`` (no Docker SDK dependency) — a
++plain ``docker`` binary on the server's PATH, talking to the daemon the
++``DOCKER_HOST`` env / mounted socket points at.
++
++Platform notes that shape this launcher:
++
++- **Keep-alive entrypoint.** A managed host container is a bare box the server
++  execs into, so it must stay up with nothing running: the container command is
++  ``sleep infinity`` (the host process is started later via ``docker exec``).
++- **Networking.** The started host dials the server back, so the container must
++  reach ``server_url``. The network is a constructor parameter
++  (:data:`_DEFAULT_NETWORK`, env-overridable via :data:`NETWORK_ENV_VAR`): set
++  it to the compose network the server runs on so container→server DNS resolves;
++  ``"host"`` (the Docker host network) suits a server reachable on the daemon's
++  own ``localhost``.
++- **Env passthrough.** Harness credentials / ``GIT_TOKEN`` are injected as
++  literal ``-e NAME=value`` from the SERVER process environment, resolved BY
++  NAME (``sandbox.docker.env`` config / :data:`SANDBOX_ENV_PASSTHROUGH_ENV_VAR`)
++  so secret values never live in the server config file. The launch token is
++  NOT injected here — the base ``start_host`` passes it in the exec env.
++- **No CLI bootstrap / port forward.** Like the other managed-only launchers,
++  this exists for server-managed hosts only.
++"""
++
++from __future__ import annotations
++
++import os
++import shlex
++import subprocess
++import uuid
++from collections.abc import Sequence
++from typing import TYPE_CHECKING, ClassVar
++
++import click
++
++from omnigent.onboarding.sandboxes.base import (
++    DEFAULT_HOST_IMAGE,
++    RemoteCommandResult,
++    SandboxLauncher,
++)
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++
++# ── Constants ──────────────────────────────────────────
++
++HOST_IMAGE_ENV_VAR: str = "OMNIGENT_DOCKER_HOST_IMAGE"
++"""Environment variable overriding
++:data:`~omnigent.onboarding.sandboxes.base.DEFAULT_HOST_IMAGE` for plain-Docker
++host containers, e.g. a locally-built ``omnigent-host:dev``. The
++``sandbox.docker.image`` config takes precedence."""
++
++NETWORK_ENV_VAR: str = "OMNIGENT_DOCKER_NETWORK"
++"""Environment variable naming the Docker network host containers are attached
++to so they can reach the server (``--network``). The ``sandbox.docker.network``
++config takes precedence; default :data:`_DEFAULT_NETWORK`."""
++
++SANDBOX_ENV_PASSTHROUGH_ENV_VAR: str = "OMNIGENT_DOCKER_SANDBOX_ENV"
++"""Environment variable naming (comma-separated) the SERVER-process environment
++variables whose values are injected into every host container as literal
++``-e NAME=value`` — the harness LLM credentials and ``GIT_TOKEN``. Names, not
++values: the values are read from the server's own environment at provision
++time, so secrets never live in config files. The ``sandbox.docker.env`` config
++takes precedence."""
++
++# Default network. A locally-built dev image with the server on the Docker
++# host's localhost works on the host network; deployments that run the server
++# in a compose project set sandbox.docker.network to that project's network so
++# container→server DNS resolves.
++_DEFAULT_NETWORK: str = "host"
++
++# Image for a managed host container. Dev default is the locally-built tag the
++# patch-queue build produces; production overrides via config / env.
++_DEFAULT_DEV_HOST_IMAGE: str = "omnigent-host:dev"
++
++# Keep-alive entrypoint for the bare host container — the host process itself is
++# started later via `docker exec` (the exec model). `sleep infinity` blocks PID 1
++# forever with no busy loop, so the container stays up until terminate().
++_KEEP_ALIVE_COMMAND: tuple[str, ...] = ("sleep", "infinity")
++
++# Per-CLI-call timeout (seconds). Generous enough for a cold image pull on the
++# first `docker run`; a stalled daemon socket fails the call instead of hanging
++# the managed-launch worker thread indefinitely.
++_DOCKER_RUN_TIMEOUT_S: float = 900.0
++_DOCKER_OP_TIMEOUT_S: float = 120.0
++
++
++def _new_container_name(label: str) -> str:
++    """
++    Derive a Docker-safe container name from a human label.
++
++    Docker names match ``[a-zA-Z0-9][a-zA-Z0-9_.-]*``. Non-matching runs
++    collapse to ``-``, leading non-alnum is stripped, empty falls back to
++    ``host``, and a short random suffix guarantees uniqueness across relaunches
++    of the same session.
++
++    :param label: Human-readable label, e.g. ``"managed-a1b2c3d4"``.
++    :returns: A container name like ``"omnigent-managed-a1b2c3d4-1a2b3c"``.
++    """
++    import re
++
++    base = re.sub(r"[^a-zA-Z0-9_.-]+", "-", label).strip("-_.")
++    base = base or "host"
++    return f"omnigent-{base[:48]}-{uuid.uuid4().hex[:6]}"
++
++
++class DockerSandboxLauncher(SandboxLauncher):
++    """
++    :class:`SandboxLauncher` for plain-Docker host containers.
++
++    Server-managed only and exec-model: :meth:`provision` starts a bare
++    keep-alive container, the inherited
++    :meth:`~omnigent.onboarding.sandboxes.base.SandboxLauncher.start_host`
++    ``docker exec``\\ s in to prepare the workspace and launch ``omnigent host``
++    (token + identity in the exec env), and :meth:`terminate` force-removes the
++    container. All transport rides the ``docker`` CLI over ``subprocess``.
++    """
++
++    provider: ClassVar[str] = "docker"
++    # Managed-only: no CLI bootstrap, no local→sandbox port forward.
++    supports_cli_bootstrap: ClassVar[bool] = False
++    supports_local_port_forward: ClassVar[bool] = False
++
++    def __init__(
++        self,
++        *,
++        image: str | None = None,
++        network: str | None = None,
++        env: Sequence[str] | None = None,
++    ) -> None:
++        """
++        Initialize the launcher.
++
++        :param image: Host image reference to run — the
++            ``sandbox.docker.image`` config. ``None`` resolves
++            :data:`HOST_IMAGE_ENV_VAR` then :data:`_DEFAULT_DEV_HOST_IMAGE`.
++        :param network: Docker network to attach containers to so they can
++            reach the server — the ``sandbox.docker.network`` config. ``None``
++            resolves :data:`NETWORK_ENV_VAR` then :data:`_DEFAULT_NETWORK`.
++        :param env: Names of server-process environment variables to inject as
++            literal container env, e.g. ``["OPENAI_API_KEY", "GIT_TOKEN"]`` —
++            the ``sandbox.docker.env`` config. ``None`` resolves
++            :data:`SANDBOX_ENV_PASSTHROUGH_ENV_VAR` (comma-separated).
++        """
++        self._image_ref = image
++        self._network = network
++        self._env_names = tuple(env) if env is not None else None
++
++    # ── resolution helpers ──────────────────────────────────
++
++    def _resolve_image(self) -> str:
++        """
++        Resolve the host image: constructor → env override → dev default.
++
++        :returns: The image reference to run.
++        """
++        return self._image_ref or os.environ.get(HOST_IMAGE_ENV_VAR) or _DEFAULT_DEV_HOST_IMAGE
++
++    def _resolve_network(self) -> str:
++        """
++        Resolve the Docker network: constructor → env override → default.
++
++        :returns: The network name to attach containers to.
++        """
++        return self._network or os.environ.get(NETWORK_ENV_VAR) or _DEFAULT_NETWORK
++
++    def _resolve_sandbox_env(self) -> dict[str, str]:
++        """
++        Resolve the literal env vars to inject into created containers.
++
++        Explicit constructor names win; otherwise
++        :data:`SANDBOX_ENV_PASSTHROUGH_ENV_VAR` (comma-separated) applies.
++        Values come from the server's own environment — a configured name that
++        is unset there fails loud (silently launching without it would surface
++        much later as an opaque harness auth failure inside the container).
++
++        :returns: Name → value mapping for literal ``-e`` flags.
++        :raises click.ClickException: When a configured name is unset in the
++            server environment.
++        """
++        if self._env_names is not None:
++            names: Sequence[str] = self._env_names
++        else:
++            names = [
++                name.strip()
++                for name in os.environ.get(SANDBOX_ENV_PASSTHROUGH_ENV_VAR, "").split(",")
++                if name.strip()
++            ]
++        resolved: dict[str, str] = {}
++        for name in names:
++            value = os.environ.get(name)
++            if value is None:
++                raise click.ClickException(
++                    f"sandbox env passthrough names '{name}' but it is not set in "
++                    "the server's environment — set it (or remove it from "
++                    f"sandbox.docker.env / {SANDBOX_ENV_PASSTHROUGH_ENV_VAR})."
++                )
++            resolved[name] = value
++        return resolved
++
++    def _docker(
++        self, args: Sequence[str], *, check: bool, timeout: float
++    ) -> subprocess.CompletedProcess[str]:
++        """
++        Run a ``docker`` CLI subcommand, capturing stdout/stderr as text.
++
++        :param args: Arguments after the ``docker`` binary, e.g.
++            ``["rm", "-f", "id"]``.
++        :param check: When ``True``, raise on a non-zero exit.
++        :param timeout: Per-call timeout in seconds.
++        :returns: The completed process.
++        :raises click.ClickException: When the ``docker`` binary is missing,
++            the call times out, or (*check*) it exits non-zero — with the
++            captured stderr so the managed-launch 502 carries the real reason.
++        """
++        try:
++            completed = subprocess.run(  # noqa: S603  # fixed argv, no shell
++                ["docker", *args],
++                capture_output=True,
++                text=True,
++                timeout=timeout,
++                check=False,
++            )
++        except FileNotFoundError as exc:
++            raise click.ClickException(
++                "The 'docker' CLI was not found on PATH — the 'docker' sandbox "
++                "provider needs a docker client with access to a daemon "
++                "(mount the Docker socket / set DOCKER_HOST)."
++            ) from exc
++        except subprocess.TimeoutExpired as exc:
++            raise click.ClickException(
++                f"docker {args[0] if args else ''} timed out after {timeout:.0f}s"
++            ) from exc
++        if check and completed.returncode != 0:
++            detail = (completed.stderr or completed.stdout or "").strip()
++            raise click.ClickException(
++                f"docker {args[0] if args else ''} failed "
++                f"(exit {completed.returncode}): {detail}"
++            )
++        return completed
++
++    # ── lifecycle ───────────────────────────────────────────
++
++    def prepare(self) -> None:
++        """
++        Local preflight: verify a usable Docker daemon via ``docker version``.
++
++        :raises click.ClickException: When the ``docker`` CLI is missing or
++            cannot reach a daemon.
++        """
++        self._docker(["version", "--format", "{{.Server.Version}}"], check=True, timeout=_DOCKER_OP_TIMEOUT_S)
++
++    def provision(self, name: str) -> str:
++        """
++        Start a bare keep-alive host container and return its name as the id.
++
++        Exec-model: the container boots running ``sleep infinity`` (nothing
++        else) so the inherited :meth:`start_host` can ``docker exec`` in to
++        prepare the workspace and launch ``omnigent host``. Harness-credential
++        env is injected here as literal ``-e`` flags; the launch token is NOT
++        (the base ``start_host`` passes it in the exec env), so it never lands
++        in the ``docker run`` argv / ``docker inspect`` output.
++
++        :param name: Human-readable label, e.g. ``"managed-a1b2c3d4"``.
++        :returns: The container name (also its ``--name``), used as sandbox id.
++        :raises click.ClickException: When the daemon is unreachable or the
++            ``docker run`` fails (e.g. image pull error).
++        """
++        container = _new_container_name(name)
++        image = self._resolve_image()
++        network = self._resolve_network()
++        env_literals = self._resolve_sandbox_env()
++        args: list[str] = [
++            "run",
++            "-d",
++            "--name",
++            container,
++            "--network",
++            network,
++            "-e",
++            "IS_SANDBOX=1",
++        ]
++        for env_name, env_value in env_literals.items():
++            args += ["-e", f"{env_name}={env_value}"]
++        args += [image, *_KEEP_ALIVE_COMMAND]
++        click.echo(f"▸ Starting docker host container '{container}' on network '{network}' from {image}")
++        self._docker(args, check=True, timeout=_DOCKER_RUN_TIMEOUT_S)
++        click.echo(f"  → started {container}")
++        return container
++
++    def run(self, sandbox_id: str, command: str, *, check: bool = True) -> RemoteCommandResult:
++        """
++        Run a shell command inside the container via ``docker exec``.
++
++        The command is run through ``sh -lc`` (a login shell, so the image's
++        profile puts the venv on PATH — the same shape the base ``start_host``
++        relies on for ``omnigent host``). stdout and stderr are captured
++        separately.
++
++        :param sandbox_id: The container name/id from :meth:`provision`.
++        :param command: Shell command to execute remotely; quote paths yourself.
++        :param check: When ``True``, raise on non-zero exit.
++        :returns: Exit code plus captured stdout/stderr.
++        :raises click.ClickException: When *check* is ``True`` and the command
++            exits non-zero (or the exec itself fails).
++        """
++        completed = self._docker(
++            ["exec", sandbox_id, "sh", "-lc", command],
++            check=False,
++            timeout=_DOCKER_OP_TIMEOUT_S,
++        )
++        if check and completed.returncode != 0:
++            detail = (completed.stderr or completed.stdout or "").strip()
++            raise click.ClickException(
++                f"Remote command failed in docker container '{sandbox_id}' "
++                f"(exit {completed.returncode}): {command}"
++                f"{f' — {detail}' if detail else ''}"
++            )
++        return RemoteCommandResult(
++            returncode=completed.returncode,
++            stdout=completed.stdout,
++            stderr=completed.stderr,
++        )
++
++    def put(self, sandbox_id: str, local_path: Path, remote_path: str) -> None:
++        """
++        Copy a local file into the container via ``docker cp``.
++
++        Used to inject credentials (e.g. the codex ``auth.json``) into a
++        running managed host container.
++
++        :param sandbox_id: The container name/id.
++        :param local_path: Local file to read.
++        :param remote_path: Absolute destination path inside the container.
++        :raises click.ClickException: When the copy fails.
++        """
++        self._docker(
++            ["cp", str(local_path), f"{sandbox_id}:{remote_path}"],
++            check=True,
++            timeout=_DOCKER_OP_TIMEOUT_S,
++        )
++
++    def terminate(self, sandbox_id: str) -> None:
++        """
++        Force-remove the container, releasing its resources.
++
++        Idempotent: ``docker rm -f`` of a container that no longer exists is
++        treated as success (the desired end state — gone — already holds), so a
++        double teardown does not raise.
++
++        :param sandbox_id: The container to remove.
++        :raises click.ClickException: On a removal failure other than the
++            container already being absent.
++        """
++        completed = self._docker(
++            ["rm", "-f", sandbox_id], check=False, timeout=_DOCKER_OP_TIMEOUT_S
++        )
++        if completed.returncode == 0:
++            return
++        detail = (completed.stderr or completed.stdout or "").strip()
++        # `docker rm -f` of a missing container exits non-zero with "No such
++        # container" — idempotent success, not a failure.
++        if "no such container" in detail.lower():
++            return
++        raise click.ClickException(
++            f"docker rm failed for container '{sandbox_id}' "
++            f"(exit {completed.returncode}): {detail}"
++        )
+diff --git a/omnigent/server/managed_hosts.py b/omnigent/server/managed_hosts.py
+index a1d1b632..a2810916 100644
+--- a/omnigent/server/managed_hosts.py
++++ b/omnigent/server/managed_hosts.py
+@@ -140,10 +140,11 @@ SUPPORTED_SANDBOX_PROVIDERS: frozenset[str] = frozenset(
+         "e2b",
+         "openshell",
+         "kubernetes",
++        "docker",
+     }
+ )
+ PROVIDERS_WITH_MANAGED_LAUNCH: frozenset[str] = frozenset(
+-    {"modal", "daytona", "boxlite", "cwsandbox", "islo", "e2b", "openshell", "kubernetes"}
++    {"modal", "daytona", "boxlite", "cwsandbox", "islo", "e2b", "openshell", "kubernetes", "docker"}
+ )
+ 
+ # How long a managed launch waits for the sandboxed host to register
+@@ -198,6 +199,14 @@ OPENSHELL_MANAGED_TOKEN_TTL_S = 7 * 24 * 3600
+ # mints a fresh token (and the per-Pod token Secret is replaced).
+ KUBERNETES_MANAGED_TOKEN_TTL_S = 7 * 24 * 3600
+ 
++# Launch-token lifetime for the YAML docker path. Plain-Docker host containers
++# have no platform lifetime cap (they run until removed by managed-session
++# teardown), so the bound is policy, not platform: the same 7-day window as
++# Daytona/Kubernetes keeps a long-lived host re-authenticating across tunnel
++# reconnects while still expiring tokens of containers nobody removed. A
++# relaunch mints a fresh token.
++DOCKER_MANAGED_TOKEN_TTL_S = 7 * 24 * 3600
++
+ # The cwsandbox launch-token TTL is NOT a constant: CW Sandbox's lifetime is
+ # operator-overridable (OMNIGENT_CWSANDBOX_MAX_LIFETIME_S), so the TTL is
+ # derived from the resolved lifetime at parse time via
+@@ -708,6 +717,13 @@ def parse_sandbox_config(raw: object) -> ManagedSandboxConfig | None:
+             resources=_parse_kubernetes_resources(raw),
+         )
+         token_ttl_s = KUBERNETES_MANAGED_TOKEN_TTL_S
++    elif provider == "docker":
++        launcher_factory = _docker_launcher_factory(
++            image=_parse_provider_image(raw, "docker"),
++            network=_parse_provider_string(raw, "docker", "network"),
++            env=_parse_provider_env(raw, "docker"),
++        )
++        token_ttl_s = DOCKER_MANAGED_TOKEN_TTL_S
+     else:
+         launcher_factory = _unsupported_launcher_factory(provider)
+         # Never consulted (the factory rejects before any token is
+@@ -1687,6 +1703,36 @@ def _kubernetes_launcher_factory(
+     return _build
+ 
+ 
++def _docker_launcher_factory(
++    *,
++    image: str | None,
++    network: str | None,
++    env: list[str] | None,
++) -> Callable[[], SandboxLauncher]:
++    """
++    Build the launcher factory for the YAML ``provider: docker`` path.
++
++    :param image: Host image reference to run, e.g.
++        ``"docker.io/me/omnigent-host:latest"``, or ``None`` to resolve the
++        launcher's env-var override / dev default.
++    :param network: Docker network host containers attach to so they can reach
++        the server (the compose network, or ``"host"``), or ``None`` for the
++        launcher's env-var override / default.
++    :param env: Names of server-process environment variables (harness LLM
++        credentials, gateway URLs, ``GIT_TOKEN``) injected into every container
++        as literal env, e.g. ``["OPENAI_API_KEY", "GIT_TOKEN"]``, or ``None``.
++    :returns: A factory producing parameterized Docker launchers.
++    """
++
++    def _build() -> SandboxLauncher:
++        """Construct the Docker launcher (no optional SDK — the docker CLI)."""
++        from omnigent.onboarding.sandboxes.docker import DockerSandboxLauncher
++
++        return DockerSandboxLauncher(image=image, network=network, env=env)
++
++    return _build
++
++
+ async def launch_managed_host(
+     *,
+     config: ManagedSandboxConfig,
