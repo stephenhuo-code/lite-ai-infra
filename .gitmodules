@@ -1,0 +1,4 @@
+[submodule "third_party/omnigent"]
+	path = third_party/omnigent
+	url = https://github.com/stephenhuo-code/omnigent.git
+	branch = liteai-9a
