@@ -1,0 +1,23 @@
+name: omniprobe
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: {POSTGRES_DB: omnigent, POSTGRES_USER: omnigent, POSTGRES_PASSWORD: probe-pw}
+    healthcheck: {test: ["CMD-SHELL","pg_isready -U omnigent -d omnigent"], interval: 5s, timeout: 3s, retries: 20}
+  omnigent:
+    image: omnigent-server:probe
+    depends_on: {postgres: {condition: service_healthy}}
+    environment:
+      DATABASE_URL: postgresql+psycopg://omnigent:probe-pw@postgres:5432/omnigent
+      ARTIFACT_DIR: /data/artifacts
+      OMNIGENT_AUTH_ENABLED: "0"            # 探针先单用户验机制,OIDC 后加
+      OMNIGENT_CONFIG: /config.yaml
+      OMNIGENT_DOCKER_HOST_IMAGE: omnigent-host:dev
+      OMNIGENT_DOCKER_NETWORK: omniprobe_default
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?need subscription token}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config.yaml:/config.yaml:ro
+      - omniprobe-data:/data
+    ports: ["127.0.0.1:8900:8000"]
+volumes: {omniprobe-data: {}}

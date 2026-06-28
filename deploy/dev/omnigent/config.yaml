@@ -1,0 +1,7 @@
+sandbox:
+  provider: docker
+  server_url: http://omnigent:8000
+  docker:
+    image: omnigent-host:dev
+    network: omniprobe_default
+    env: [CLAUDE_CODE_OAUTH_TOKEN]   # 仅订阅 token,不注入 API key(否则 apiKeyHelper 冲突)
