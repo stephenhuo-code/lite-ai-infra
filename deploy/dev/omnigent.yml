@@ -32,11 +32,9 @@ services:
       HOST: 0.0.0.0
       PORT: "8000"
       OMNIGENT_ADMIN_CREDENTIALS_PATH: /data/admin-credentials
-      # 全容器化多用户(ADR-027):header-auth —— 身份来自可信代理头(BFF 注入 X-Forwarded-Email,
-      # 剥客户端伪造头 + omnigent 不可直达)。容器化 host 用 managed host token 认证(非用户凭据)。
-      # 数据控制链路(MCP 令牌+can())与 omnigent 身份正交,承重墙不变。
-      OMNIGENT_AUTH_ENABLED: "1"
-      OMNIGENT_AUTH_PROVIDER: header
+      # dev 单用户(host 免认证直连)——容器化只把 host/runner 挪进 docker,认证模型不动。
+      # 数据控制链路(MCP 令牌+can())与 omnigent 身份正交,承重墙不变。多用户=后续单独做。
+      OMNIGENT_AUTH_ENABLED: "0"
     volumes:
       - omnigent-data:/data
     ports:

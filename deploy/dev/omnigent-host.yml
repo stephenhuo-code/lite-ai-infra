@@ -1,0 +1,29 @@
+# omnigent host/runner 容器化(Plan 9 全容器化)。把原来 Mac 原生跑的 `omnigent host` 挪进容器,
+# 用我们自构建的 omnigent-host:dev 镜像(带 patch-queue:claude-native 注入会话 MCP + python-socks)。
+# runner 在本容器内 spawn。认证模型不动(server 单用户,host 免认证直连)。
+#
+# 网络:加入 server 的 compose 网络(liteai-omnigent_default),用服务名 omnigent:8000 连 server。
+# host.docker.internal:容器内 runner 访问 Mac 上原生跑的我们的 MCP server(:8910)。
+# CLAUDE_CODE_OAUTH_TOKEN:同原生——注入用户的 claude 订阅(由 ws-host-up 从 secrets/omnigent.token 读)。
+#
+# 起:CLAUDE_CODE_OAUTH_TOKEN=$(cat secrets/omnigent.token) docker compose -f deploy/dev/omnigent-host.yml up -d
+name: liteai-omnigent-host
+
+services:
+  omnigent-host:
+    image: ${OMNIGENT_HOST_IMAGE:-omnigent-host}:${OMNIGENT_IMAGE_TAG:-dev}
+    networks: [omnigent]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 容器内 runner → Mac 的 MCP(:8910)
+    environment:
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?need claude subscription token}
+      # tunnel 回连 server 走 docker 内网(omnigent 服务名),不经代理;外部(Anthropic)默认 NAT 出网。
+      NO_PROXY: localhost,127.0.0.1,::1,omnigent,host.docker.internal
+      no_proxy: localhost,127.0.0.1,::1,omnigent,host.docker.internal
+    command: ["omnigent", "host", "http://omnigent:8000"]
+    restart: unless-stopped
+
+networks:
+  omnigent:
+    external: true
+    name: liteai-omnigent_default
