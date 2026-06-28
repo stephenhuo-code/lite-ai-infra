@@ -133,41 +133,40 @@ git commit -m "build(9a): omnigent fork 作 submodule + 自编译 server/host �
 
 ---
 
-## Phase 2 — server 容器化部署 + KC OIDC 多用户
+## Phase 2 — server 容器化部署 + header-trust 多用户(KC OIDC 在 BFF)
 
-### Task 2:omnigent server compose(runtime)+ postgres + KC OIDC
+> **★ 探针补漏修订(2026-06-29,ADR-026 §3 已更新)**:omnigent 用 **header-trust** 模式(`AUTH_PROVIDER=header`),**不**在 omnigent 端跑 OIDC。理由:omnigent `oidc` 模式会让浏览器二次登录 + 持有 omnigent `ap_session` cookie(撞 FR-008)。KC OIDC **仍在,落在 BFF**(已实现);BFF 用已认证 KC 会话注入 `X-Forwarded-Email` 给 omnigent、剥伪造头(= Task 4)。**故 plan 原 Step 1「KC 注册 omnigent OIDC client」取消**(header 模式不需要;非静默砍——见此注 + ADR-026 §3)。
+
+### Task 2(=T3):omnigent server compose(runtime)+ postgres + header-trust
 
 **Files:**
-- Create: `deploy/dev/omnigent/docker-compose.yml`
-- Modify: `deploy/dev/keycloak/realm-lite-ai.json`(注册 omnigent OIDC client)
+- Modify: `deploy/dev/omnigent/docker-compose.yml`(探针级 → 正式化:header-trust 多用户 + `:dev` 镜像)
+- Modify: `deploy/dev/omnigent/config.yaml`(如需:固化默认 agent / sandbox)
 - Modify: `Makefile`(omnigent-up/down)
+- ~~Modify: `realm-lite-ai.json`~~ **取消**(header 模式不需 omnigent OIDC client)
 
-- [ ] **Step 1: KC 注册 omnigent client**
+- [ ] **Step 1: pin 默认 agent_id 来源**
 
-`realm-lite-ai.json` 加一个 confidential client `omnigent`(redirectUris=omnigent server 的 `/auth/callback`,标准 OIDC)。
+managed 建会话需 `agent_id`(`POST /v1/sessions {agent_id,host_type:managed}`)。探查运行中的 server:用 `GET /v1/agents`(内置 agent 发现)拿默认 agent,或在 server 启动/config 注册一个默认 agent。把"前端/BFF 怎么拿到一个可用 agent_id"钉死成事实(写进 compose 注释或 spike 附注)。
 
-- [ ] **Step 2: server compose**
+- [ ] **Step 2: server compose 正式化(header-trust)**
 
-`deploy/dev/omnigent/docker-compose.yml`:postgres + omnigent server(`omnigent-server:dev`),env:
+`deploy/dev/omnigent/docker-compose.yml`:postgres + omnigent server(`omnigent-server:dev`,**非 `:probe`**),env(env 名源码已核实,见 ADR-026 §3 / Explore 报告):
 ```yaml
 DATABASE_URL: postgresql+psycopg://...
 OMNIGENT_AUTH_ENABLED: "1"
-OMNIGENT_AUTH_PROVIDER: oidc
-OMNIGENT_OIDC_ISSUER: http://<kc>/realms/lite-ai
-OMNIGENT_OIDC_CLIENT_ID: omnigent
-OMNIGENT_OIDC_CLIENT_SECRET: <secret>
-OMNIGENT_OIDC_REDIRECT_URI: http://<server>/auth/callback
-OMNIGENT_OIDC_COOKIE_SECRET: <hex32>
-# sandbox provider=docker(Task0/3 的 launcher);挂 docker.sock
-sandbox: {provider: docker, server_url: http://<server>}
-volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+OMNIGENT_AUTH_PROVIDER: header
+OMNIGENT_AUTH_HEADER: X-Forwarded-Email      # omnigent 信任的身份头(BFF 注入)
+OMNIGENT_CONFIG: /config.yaml
+CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?}   # 仅订阅 token,勿混 ANTHROPIC_API_KEY
+# sandbox provider=docker(P1 launcher);挂 docker.sock
+volumes: ["/var/run/docker.sock:/var/run/docker.sock", "./config.yaml:/config.yaml:ro"]
 ```
-(精确 env 名以 P1 实测为准。)
 
-- [ ] **Step 3: 起 + 验证多用户登录**
+- [ ] **Step 3: 起 + 验证多用户隔离(live,无需 KC)**
 
-`make omnigent-up` → KC alice 登录 omnigent OIDC 通;bob 登录得到独立身份。
-Expected: 两用户各自 session,server 认得身份。
+`make omnigent-up` → 用 `X-Forwarded-Email: alice@test` 建会话/发消息;用 `X-Forwarded-Email: bob@test` 另一身份。
+Expected: 两身份各自 session + 各自 managed host 容器(`docker ps` 两个);alice 列表无 bob 会话;alice 拿 bob session_id 越权被拒(owner 校验)。**header 模式让 T3 可脱离 KC 独立 live 验证隔离。**
 
 - [ ] **Step 4: Commit**
 ```bash

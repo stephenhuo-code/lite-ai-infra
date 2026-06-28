@@ -20,9 +20,13 @@
 - **两层沙箱**:外层=managed host 容器(用户间隔离承重);内层=agent `os_env.sandbox`,9a 取 `none`(靠外层 + 无数据访问),9b 接数据后按需上 bwrap。
 - **不再**手动 `omnigent host` / 手动 launch_runner / 私改内部接线。
 
-### 3. 多用户:KC OIDC(认证)+ omnigent 鉴权(资源 + 行为)
-- omnigent `AUTH_PROVIDER=oidc` 接我们 Keycloak(标准 OIDC,原生零改码)。
-- **KC=认证**;**omnigent=鉴权两层**:permission store(谁能访问某会话/host)+ policy engine(已授权用户的 agent 行为)。
+### 3. 多用户:KC OIDC(BFF 认证)+ omnigent header-trust + omnigent 鉴权(资源 + 行为)
+
+> **探针补漏修订(2026-06-29,T3 前)**:P1 探针跑的是 `AUTH_ENABLED=0`,OIDC env 名从未实测。读 fork 源后定论:omnigent `AUTH_PROVIDER=oidc` 会让 omnigent **自己**对 KC 再跑一遍 OIDC、自颁 `ap_session` cookie ⇒ 浏览器二次登录并持有 omnigent token,**撞 FR-008(前端不持 omnigent token)+ 双登录**。改采 omnigent **header-trust 模式**(`OMNIGENT_AUTH_PROVIDER=header` + `OMNIGENT_AUTH_HEADER=X-Forwarded-Email`,fork 原生支持、managed 兼容):**KC OIDC 仍在,但落在 BFF**(已实现),BFF 用已认证 KC 会话解出身份 → 注入 `X-Forwarded-Email` 给 omnigent、剥客户端伪造的同名头;omnigent 信任该头。**正是本 plan Task 4「身份注入+剥伪造头」**。
+> 影响:① 单次登录;前端只持 BFF 会话(满足 FR-008)② omnigent 不可被客户端直达 ③ **不需在 KC realm 注册 omnigent OIDC client**(plan Task 2 Step 1 取消,非静默砍——见 plan 注)。决策人=owner 授权 AI 拍板(2026-06-29)。
+
+- **KC=认证(在 BFF)**;omnigent=**header-trust**(信任 BFF 注入的已认证身份头)。
+- **omnigent=鉴权两层**:permission store(谁能访问某会话/host)+ policy engine(已授权用户的 agent 行为)。
 - host 用户间隔离:`(owner,name)` 主键 + owner 过滤 + 跨用户 host_id 劫持挡(原生)。一用户可多 host。
 
 ### 4. harness = claude-native + 订阅(P1 实测回正)
