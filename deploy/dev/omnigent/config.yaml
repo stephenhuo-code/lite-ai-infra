@@ -1,7 +1,20 @@
+# omnigent sandbox 配置（Plan 9a / T3）。挂进 server 容器 /config.yaml，由 OMNIGENT_CONFIG 指向。
+# provider=docker：server 用 docker.sock 起 managed host 容器跑 agent runner。
+# network 必须与 compose project（omnigent-dev）的默认网络一致 = omnigent-dev_default，
+# 也与 OMNIGENT_DOCKER_NETWORK 一致；改 project name 时三处一起改。
+# 内置 agent 由 server 启动时自动 seed，无需在此声明 default agent；
+# 下游用 GET /v1/agents 取 claude-native-ui 的 id。
+# server_url = sandbox 里的 host/runner 回连本 server 的 URL。
+#   - host tunnel 用 per-launch token 认证 → http://omnigent:8000 直连即可（T3 实测连上）。
+#   - runner tunnel 不带 host token，认证靠"它能解析到的 *server* 凭据"：header-auth 下
+#     = 反代在每个请求（含 runner WS dial-back）注入的 X-Forwarded-Email。
+#     ⇒ 多用户要让 runner 真回复，server_url 必须指向**注入身份的反代(BFF/T4)**，不是裸 :8000。
+#     裸 :8000 时 runner tunnel 被拒 403（omnigent 文档明示的 header-auth managed 行为，非 bug）。
+#   T4 落地反代后：把此处改成反代地址（host/runner 容器可达），server 经反代信任注入头。
 sandbox:
   provider: docker
-  server_url: http://omnigent:8000
+  server_url: http://omnigent:8000   # T3 独立验证用直连;T4 接反代后改为反代地址(见上)
   docker:
     image: omnigent-host:dev
-    network: omniprobe_default
+    network: omnigent-dev_default
     env: [CLAUDE_CODE_OAUTH_TOKEN]   # 仅订阅 token,不注入 API key(否则 apiKeyHelper 冲突)

@@ -1,23 +1,48 @@
-name: omniprobe
+# omnigent server — dev compose（Plan 9a / T3，header-trust 多用户）
+#
+# 形态：header-trust 多用户。omnigent 不做 OIDC（那会让浏览器二次登 KC 并持 ap_session，违反 FR-008）；
+# KC OIDC 留在我们的 BFF，BFF（T4）向反代请求注入 X-Forwarded-Email，omnigent 信任该头即用户身份。
+# 这里只配 omnigent 服务端：开多用户 auth + header provider + 信任头名。
+#
+# 三处命名必须一致（host 容器回连 http://omnigent:8000；sandbox launcher 把 host 容器挂到同一 docker 网络）：
+#   - compose project name        : omnigent-dev          ← 决定默认网络名 <name>_default
+#   - OMNIGENT_DOCKER_NETWORK      : omnigent-dev_default  ← server 起 host 容器时挂的网络
+#   - config.yaml sandbox.docker.network : omnigent-dev_default
+# 改 project name 时，这三处一起改。
+#
+# 端口：127.0.0.1:8900:8000（仅本机回环；对外暴露由 BFF 反代负责，T4）。
+name: omnigent-dev
 services:
   postgres:
     image: postgres:16-alpine
-    environment: {POSTGRES_DB: omnigent, POSTGRES_USER: omnigent, POSTGRES_PASSWORD: probe-pw}
+    environment: {POSTGRES_DB: omnigent, POSTGRES_USER: omnigent, POSTGRES_PASSWORD: dev-pw}
     healthcheck: {test: ["CMD-SHELL","pg_isready -U omnigent -d omnigent"], interval: 5s, timeout: 3s, retries: 20}
+    volumes:
+      - omnigent-dev-pg:/var/lib/postgresql/data
   omnigent:
-    image: omnigent-server:probe
+    image: omnigent-server:dev
     depends_on: {postgres: {condition: service_healthy}}
     environment:
-      DATABASE_URL: postgresql+psycopg://omnigent:probe-pw@postgres:5432/omnigent
+      DATABASE_URL: postgresql+psycopg://omnigent:dev-pw@postgres:5432/omnigent
       ARTIFACT_DIR: /data/artifacts
-      OMNIGENT_AUTH_ENABLED: "0"            # 探针先单用户验机制,OIDC 后加
+      # 多用户 header-trust：开 auth + 选 header provider + 信任头名（= 用户 email，server 小写后作 sub）。
+      OMNIGENT_AUTH_ENABLED: "1"
+      OMNIGENT_AUTH_PROVIDER: header
+      OMNIGENT_AUTH_HEADER: X-Forwarded-Email
       OMNIGENT_CONFIG: /config.yaml
+      # sandbox=docker：server 用挂进来的 docker.sock 起 managed host 容器（镜像/网络如下）。
       OMNIGENT_DOCKER_HOST_IMAGE: omnigent-host:dev
-      OMNIGENT_DOCKER_NETWORK: omniprobe_default
-      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?need subscription token}
+      OMNIGENT_DOCKER_NETWORK: omnigent-dev_default
+      # 仅注入订阅 token（apiKeyHelper 走订阅）；绝不注入 ANTHROPIC_API_KEY（会破坏订阅 token）。
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?need subscription token (export from secrets/omnigent.token)}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.yaml:/config.yaml:ro
-      - omniprobe-data:/data
+      - omnigent-dev-data:/data
     ports: ["127.0.0.1:8900:8000"]
-volumes: {omniprobe-data: {}}
+# agent_id 来源（managed session create 需要）：server 启动时自动 seed 内置 agent（含 claude-native），
+# 无需在此或 config.yaml 声明。下游（BFF/前端）取法：GET /v1/agents → 选 claude-native-ui 那条的 id
+# （形如 ag_<32hex>，由名字确定性派生，跨重启稳定）。健康检查：GET /health → {"status":"ok"}（免 auth）。
+volumes:
+  omnigent-dev-data: {}
+  omnigent-dev-pg: {}

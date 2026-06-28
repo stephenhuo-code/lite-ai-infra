@@ -1,4 +1,4 @@
-.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog
+.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog omnigent-up omnigent-down
 EID ?= ent-demo
 sync:             ; uv sync --extra dev
 # dev/prod parity:建独立 .dj-venv(同云上 Data-Juicer+Ray);本地真跑数据管线前先 `make dj-setup` 一次
@@ -18,6 +18,9 @@ dev-down:         ; docker compose -f deploy/dev/gravitino.yml down; docker comp
 # 清空停(显式毁灭性):删三类命名卷;改 PG 密码 / 要干净重来时用
 dev-reset:        ; docker compose -f deploy/dev/gravitino.yml down -v; docker compose -f deploy/dev/docker-compose.yml down -v
 data-prep:        ; uv run python -m pipelines.data_prep $(ARGS)
+# omnigent server(Plan 9a):自编译 server+host:dev 镜像 → 起 header-trust 多用户 compose
+omnigent-up:      ; bash scripts/omnigent_build.sh dev && docker compose -f deploy/dev/omnigent/docker-compose.yml up -d
+omnigent-down:    ; docker compose -f deploy/dev/omnigent/docker-compose.yml down
 ENV ?= local
 export LITEAI_ENV = $(ENV)
 LOAD = uv run python scripts/load_env.py
