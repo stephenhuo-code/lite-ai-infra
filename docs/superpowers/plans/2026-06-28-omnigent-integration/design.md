@@ -30,10 +30,12 @@
 - **依赖方向**:前端 → BFF → omnigent;omnigent server → 它的 managed 沙箱(内部)。BFF 是唯一对外信任边界,omnigent 不可被客户端直达。
 - **宪法一致**:§5.3 parity(fork 自编译,dev/prod 同源);§1.6 隔离(omnigent 多用户 owner 隔离 + 沙箱隔离);§5.2 secret 不入库。**注**:9a agent 无数据访问,§2.4 can() 承重墙是 9b 的事。
 
-### harness 选型:SDK harness(非 claude-native 终端)
-- managed 沙箱里的 agent 用 **SDK 类 harness(claude-sdk / openai-agents,进程内跑)**,**不用 claude-native(tmux 终端)**。
-- 理由(上一轮实测教训):claude-native 是终端 TUI 模型,在容器里跑撞私有 mount-ns、首次运行 onboarding 等坑;**SDK harness 进程内执行、原生流式、容器友好**,正是 omnigent 官方容器/managed 场景的路子。
-- 代价:SDK harness 用 **API key/网关**(产品级凭据),不是个人订阅 CLI 登录 —— 与"managed 沙箱凭据由服务端统一提供"一致(见下)。个人订阅留待 9b+ 评估。
+### harness 选型:claude-native + 共享订阅(P1 实测回正)
+> 早稿写 claude-sdk + 产品 key(误判 claude-native 容器内不行)。**P1 探针推翻并回正**(见 [spike P1](./spikes/P1-managed-docker.md)):
+- managed 沙箱内 agent 用 **claude-native harness**——官方 managed docker 流程里终端正常(早先手搓那次卡死是手搓问题)。
+- **凭据 = 单一共享 claude 订阅 token**(`CLAUDE_CODE_OAUTH_TOKEN`,经 `sandbox.docker.env:[CLAUDE_CODE_OAUTH_TOKEN]` 注入所有沙箱,零 API 额度)。**勿混注 ANTHROPIC_API_KEY**(触发 apiKeyHelper 与订阅冲突)。**per-user 订阅推迟**(owner 决策 (b));多用户隔离仍在(每用户独立沙箱/会话,仅 token 共享)。
+- **流式**:claude-native executor `supports_streaming()=False`,但 transcript forwarder 旁路 → `response.output_text.delta`(best-effort,消息块级,时序滞后于 `response.completed`)。**前端读流别在 completed 停**;`response.output_item.done` 为权威完成项对账。
+- 备选:claude-sdk + 产品 key(要逐 token 细粒度流式);codex-native + codex 订阅(对称,可后续加)。
 
 ## 沙箱策略(两层)
 ```

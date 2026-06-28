@@ -25,10 +25,15 @@
 - **KC=认证**;**omnigent=鉴权两层**:permission store(谁能访问某会话/host)+ policy engine(已授权用户的 agent 行为)。
 - host 用户间隔离:`(owner,name)` 主键 + owner 过滤 + 跨用户 host_id 劫持挡(原生)。一用户可多 host。
 
-### 4. harness = SDK(非 claude-native 终端)
-- managed 沙箱内 agent 用 **SDK harness(进程内,原生流式,容器友好)**。
-- 否决 claude-native(tmux 终端):上一轮实测在容器内撞私有 mount-ns / 首次 onboarding,卡死无回复。
-- 凭据:managed 沙箱用 **产品级凭据**(API key/网关,经 server 注入沙箱 env),与 SDK harness 一致;个人订阅留 9b+ 评估。
+### 4. harness = claude-native + 订阅(P1 实测回正)
+
+> 早稿写 claude-sdk + 产品 key(误判 claude-native 容器内不行/不流式)。**P1 探针推翻**:claude-native 在官方 managed docker 容器里正常 + 流式 + 用订阅真回复。回正:
+
+- managed 沙箱内 agent 用 **claude-native harness**(官方 managed 流程里终端正常,非手搓那次的坑)。
+- **凭据 = 单一共享 claude 订阅 token**(`CLAUDE_CODE_OAUTH_TOKEN`,server 经 `sandbox.docker.env: [CLAUDE_CODE_OAUTH_TOKEN]` 注入所有沙箱)。**零 API 额度**(用订阅)。**坑**:勿同时注入 ANTHROPIC_API_KEY(会触发 apiKeyHelper 与订阅 token 冲突)。
+- **流式**:executor `supports_streaming()=False`,但 transcript forwarder 旁路把 MessageDisplay 增量 POST `external_output_text_delta` → server 转 `response.output_text.delta` 走 SSE(best-effort,消息块级,时序滞后于 completed)。前端读流**别在 completed 停**。
+- **per-user 订阅推迟**(owner 决策 (b)):9a 全员共用一个订阅 token;**多用户隔离仍成立**(每用户独立 managed 沙箱/会话,仅模型 token 共享)。per-user(vault 设置页 + fork-patch 按 owner 注入)留 9a 末尾 / 9b。
+- **claude-sdk + 产品 key** 作备选(要逐 token 细粒度流式时;实测链路通但需有额度 key)。codex-native + codex 订阅机制对称,可后续加。
 
 ### 5. omnigent 自维护 = 模型 C(fork 作 submodule,自编译)
 - fork omnigent 到我们自己的仓 → 在 fork 里正常 commit 改 → lite-ai 把 fork 当 submodule 钉 commit → `scripts/omnigent_build.sh` 自编译 server+host 镜像。
@@ -45,11 +50,13 @@
 ## 否决的备选
 - **手搓集成(上一轮)**:手动 host/launch_runner + 私改内部 → 一切坑的根源,已重置。
 - **BYO host**:用户自带机器,不适合平台托管多用户隔离;managed 更贴。
-- **claude-native 终端 harness**:容器内私有 mount-ns/onboarding 坑,实测卡死;改用 SDK harness。
-- **patch-queue(旧 ADR-026 思路)**:改一次重生成 patch、体验差;owner 要持续改 → 改用 fork-as-submodule。
-- **个人订阅凭据(每用户自己的)**:omnigent managed 沙箱凭据是 server 注入(全局),per-user 个人订阅无原生接缝且与 SDK harness 不合;9a 用产品级,个人订阅留后评估。
+- **claude-sdk + 产品 key 作 9a 默认**:虽逐 token 流式更细,但要有额度的 API key;owner 要用订阅 → 9a 走 claude-native + 订阅,claude-sdk 留备选。(早稿曾否决 claude-native,P1 已推翻——见决策 4。)
+- **patch-queue(旧思路)**:改一次重生成 patch、体验差;owner 要持续改 → 改用 fork-as-submodule。
+- **per-user 个人订阅(9a 就做)**:omnigent managed 沙箱凭据 server 全局注入,per-user 需我们加 vault + fork-patch 按 owner 注入;owner 决策 (b) 9a 先用共享订阅,per-user 推迟。
 - **9a 就把数据工具/承重墙做了**:scope 蔓延正是上一轮失败因;严格推迟 9b。
 
-## 待探针确认(进 writing-plans 前 / plan 首个 Task)
-- **P1(地基,关键)**:官方 managed 链路在**我们自托管 docker** 上跑通——server provision 隔离沙箱 + SDK harness 起 agent + 流式回 SSE + 产品凭据注入。决策规则:内置 provider(k8s 等)可用→用之;否则自写最小 docker SandboxLauncher(launcher-factory 接缝);都难→评估 BYO 退路(回 design)。
-- **P2**:BFF↔omnigent 的建会话/发消息/SSE 流端点与事件(用官方 managed 流程复核,钉死契约)。
+## 探针结论(2026-06-28~29,已跑通)
+- **P1 ✅ 跑通**:官方 managed 链路在自托管 docker 上端到端——server 经自写 `DockerSandboxLauncher` provision 隔离容器 host + claude-native 起 agent + **用共享 claude 订阅真回复** + **流式 `response.output_text.delta`** + 用户隔离。详见 [spike P1](../superpowers/plans/2026-06-28-omnigent-integration/spikes/P1-managed-docker.md)。
+  - 验证过的 fork 改动(Phase 1 提交进 fork):`DockerSandboxLauncher`(+ `run_background` 覆写修内联 env)、provider `docker` 注册、Dockerfile runtime 加 docker CLI。
+  - 坑钉死:managed create = JSON body `{agent_id, host_type:"managed"}`;server 挂 docker.sock;只注订阅 token(勿混 ANTHROPIC_API_KEY);前端读流别在 completed 停。
+- **P2(契约)**:建会话/发消息/SSE 端点已在 P1 实测钉死(见 spike);BFF 反代按此实现。
