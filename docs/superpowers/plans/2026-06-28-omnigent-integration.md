@@ -203,6 +203,24 @@ git commit -m "feat(9a): DockerSandboxLauncher 硬化 + 契约测试"
 
 ---
 
+## Phase 3.5 — fork 修 runner_tunnel(多用户 auth 下 managed runner 回连)
+
+### Task 3.5(=T3.5,fork):runner_tunnel 加 managed-token 旁路
+
+> **★ 探针补漏(2026-06-29,T3 实测 auth 开启后发现,ADR-026 探针结论已记)**:多用户 auth 开启时,自托管 docker managed 的 runner 回连 `runner_tunnel` 被 403(无 host_tunnel 那样的 token 旁路)。不修则 agent 回不了复(破 FR-002)。**与 header/oidc 无关**(任何 auth-on 都炸)。owner 拍板 = fork 修。
+
+**Files:**
+- Modify(fork): `third_party/omnigent/omnigent/server/routes/runner_tunnel.py`(加 managed-token 旁路,镜像 `host_tunnel.py:139-151` 模式)
+- 如需:fork runner 侧 env 转发(`omnigent/host/connect.py` / `runner/_entry.py`)让 runner 带上可解析 owner 的 token
+- Test(fork):runner_tunnel auth 单测(token 旁路命中 → owner 解出、不 403;无 token 且无身份头 → 仍拒)
+- Modify: `third_party/omnigent`(submodule 指针 bump)+ 重编译 `omnigent-server:dev`
+
+- [ ] **Step 1: fork 改 runner_tunnel**:binding-token 已能解出 runner_id(`runner_tunnel.py:286-305`)→ 由 runner→session→owner 服务端解出 owner,绕身份头(managed 场景);非 managed/无效 token 仍走原认证。循 host_tunnel 既有模式。
+- [ ] **Step 2: fork TDD 测试**:覆盖旁路命中/未命中两路。`uv run pytest`(在 fork 内或我们仓契约测试)。
+- [ ] **Step 3: 重编译 + bump**:`scripts/omnigent_build.sh dev` → fork commit → bump submodule 指针。
+- [ ] **Step 4: 重跑 T3 live(auth ON,agent 真回复)**:alice 发消息 → runner ONLINE(无 403)→ claude-native 流式回复 → SSE 收到 `response.output_text.delta`;bob 隔离仍成立。证据成文。
+- [ ] **Step 5: Commit**(fork commit + 我们仓 bump + 证据)。
+
 ## Phase 4 — BFF 反代 omnigent(REST + WS)
 
 ### Task 4:BFF 反代 + 身份注入 + 剥伪造头
