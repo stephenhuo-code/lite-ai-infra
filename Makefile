@@ -1,4 +1,4 @@
-.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog omnigent-up omnigent-down
+.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog omnigent-up omnigent-down ws-up ws-down provision-orgs
 EID ?= ent-demo
 sync:             ; uv sync --extra dev
 # dev/prod parity:建独立 .dj-venv(同云上 Data-Juicer+Ray);本地真跑数据管线前先 `make dj-setup` 一次
@@ -21,6 +21,13 @@ data-prep:        ; uv run python -m pipelines.data_prep $(ARGS)
 # omnigent server(Plan 9a):自编译 server+host:dev 镜像 → 起 header-trust 多用户 compose
 omnigent-up:      ; bash scripts/omnigent_build.sh dev && docker compose -f deploy/dev/omnigent/docker-compose.yml up -d
 omnigent-down:    ; docker compose -f deploy/dev/omnigent/docker-compose.yml down
+# KC 组织置备(realm 导入后把 alice/bob 加入企业 org + organization scope);幂等,可重复跑
+provision-orgs:   ; uv run python scripts/provision_orgs.py
+# Plan 9a Workspace 一键编排:deps-dev → provision-orgs → omnigent-up → services up,逐步等就绪(见 scripts/ws_up.sh)
+# 前端不后台化:脚本末尾打印 `cd frontend && npm run dev`(vite:5173,代理 /auth /v1 → gateway:8090)
+ws-up:            ; bash scripts/ws_up.sh
+# 反向停:services → omnigent → deps;再清理动态拉起、不在 compose 里的 managed host 容器(见 scripts/ws_down.sh)
+ws-down:          ; bash scripts/ws_down.sh
 ENV ?= local
 export LITEAI_ENV = $(ENV)
 LOAD = uv run python scripts/load_env.py

@@ -59,6 +59,14 @@ class _Gravitino:
 
 
 @dataclass
+class _Omnigent:
+    # 主机直跑 gateway 反代 omnigent 的地址(Plan 9a)。compose 服务名只在 omnigent 网络内可达,
+    # 主机进程必须走 127.0.0.1:8900。非 local 档暂不需要(test/prod 的 omnigent 接入留待后续),
+    # 故整段可选,缺省回退此默认值。
+    base_url: str = "http://127.0.0.1:8900"
+
+
+@dataclass
 class _Pipeline:
     jobs_dir: str
     dj_bin: str
@@ -74,6 +82,7 @@ class Settings:
     oss: _Oss
     gravitino: _Gravitino
     pipeline: _Pipeline
+    omnigent: _Omnigent
 
 
 def _expand(value, missing: list[str]):
@@ -115,6 +124,7 @@ def load_settings(env: str | None = None, root: Path | None = None) -> Settings:
             oss=_Oss(**grp("oss")),
             gravitino=_Gravitino(**grp("gravitino")),
             pipeline=_Pipeline(**grp("pipeline")),
+            omnigent=_Omnigent(**grp("omnigent")),  # 整段可选:无 omnigent 段时用默认 base_url
         )
     except TypeError as e:
         raise ConfigError(
@@ -166,6 +176,7 @@ def _flat(s: Settings) -> dict[str, str | None]:
         "AUDIT_BUCKET": s.oss.audit_bucket,
         "JOBS_DIR": _abs(p.jobs_dir),
         "DJ_BIN": _abs(p.dj_bin),
+        "OMNIGENT_BASE_URL": s.omnigent.base_url,
     }
 
 
@@ -179,7 +190,7 @@ SERVICE_ENV_KEYS: dict[str, list[str]] = {
                       "METADATA_URL"],   # S2a:submit 时按名查 metadata 解析源 location
     "gateway": ["IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
                 "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
-                "BFF_REDIRECT_URI"],
+                "BFF_REDIRECT_URI", "OMNIGENT_BASE_URL"],  # 反代 omnigent(Plan 9a):主机 gateway 走 127.0.0.1:8900
 }
 
 

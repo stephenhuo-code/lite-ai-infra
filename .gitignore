@@ -24,6 +24,7 @@ spikes/*/out/
 
 # Secrets / IaC state (NEVER commit)
 .env
+secrets/
 *.tfstate
 *.tfstate.*
 .terraform/

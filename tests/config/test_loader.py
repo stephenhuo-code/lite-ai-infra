@@ -110,7 +110,7 @@ _BASELINE = {
                       "METADATA_URL"},
     "gateway": {"IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
                 "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
-                "BFF_REDIRECT_URI"},
+                "BFF_REDIRECT_URI", "OMNIGENT_BASE_URL"},  # Plan 9a:反代 omnigent
 }
 
 @pytest.mark.parametrize("svc,keys", _BASELINE.items())

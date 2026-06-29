@@ -7,6 +7,10 @@ services:
   gateway_url: http://localhost:8090
 auth:
   jwks_url: http://localhost:8080/realms/lite-ai/protocol/openid-connect/certs
+omnigent:
+  # 主机直跑的 gateway 反代 omnigent 用此地址。compose 服务名 omnigent:8000 只在 omnigent 自己的
+  # compose 网络内可达;主机进程必须走 127.0.0.1:8900(compose 暴露的回环端口,见 deploy/dev/omnigent)。
+  base_url: http://127.0.0.1:8900
 bff:
   session_key: 5SetoEInIYji6K_tuQEB8pJ8NCaoC5yi2vNAxtPi7gg=
   redirect_uri: http://localhost:8090/auth/callback

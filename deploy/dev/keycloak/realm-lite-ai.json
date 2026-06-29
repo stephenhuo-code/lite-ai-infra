@@ -41,5 +41,11 @@
     "emailVerified": true, "requiredActions": [],
     "credentials": [{"type": "password", "value": "alice", "temporary": false}],
     "realmRoles": ["enterprise-admin"]
+  }, {
+    "username": "bob", "enabled": true, "email": "bob@acme.test",
+    "firstName": "Bob", "lastName": "Brown",
+    "emailVerified": true, "requiredActions": [],
+    "credentials": [{"type": "password", "value": "bob", "temporary": false}],
+    "realmRoles": []
   }]
 }

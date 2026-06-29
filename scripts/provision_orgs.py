@@ -24,7 +24,14 @@ ORG_ALIAS = "ent-demo"
 ORG_NAME = "Demo"
 ORG_DOMAINS = ["acme.test"]
 ORG_DISPLAY_NAME = "Demo 企业"
-MEMBER_USERNAMES = ["alice"]
+MEMBER_USERNAMES = ["alice", "bob"]  # bob = 第二测试用户(Plan 9a 双用户隔离验收;plain member)
+# dev 测试用户(幂等 ensure):realm 导入只在 KC 库空时发生,已存在 realm 再起 KC **不会**补进新用户。
+# 故这里经 Admin API 幂等补建 —— realm json 仍是首次导入的真相源,这只保证 ws-up 在持久化的 KC 库上也能拿到 bob。
+# (username, email, password, realm_roles)
+TEST_USERS = [
+    ("alice", "alice@acme.test", "alice", ["enterprise-admin"]),
+    ("bob", "bob@acme.test", "bob", []),
+]
 # 加 organization scope 为 default 的 client(BFF 走 lite-ai-web;direct-grant 走 gateway)。
 SCOPE_CLIENTS = ["lite-ai-web", "gateway"]
 # 旧两级 group 维度(身份降两级后移除);存在才删。
@@ -79,6 +86,27 @@ class KCAdmin:
         if not created:
             raise RuntimeError(f"org {alias} 创建后仍查不到")
         return created["id"]
+
+    # --- ②a 测试用户幂等补建(持久化 KC 库上 realm 不再重导时兜底)---
+    def ensure_user(self, *, username: str, email: str, password: str,
+                    realm_roles: list[str] | None = None) -> bool:
+        """已存在(by username)→ 不建,返回 False;缺失 → 建(emailVerified + 固定密码 + realm 角色),返回 True。"""
+        if self.find_user_id(username) is not None:
+            return False
+        body = {
+            "username": username, "email": email, "enabled": True, "emailVerified": True,
+            "firstName": username.capitalize(), "lastName": "Test",
+            "credentials": [{"type": "password", "value": password, "temporary": False}],
+        }
+        self._ok(self._c.post(self._r("/users"), json=body))
+        uid = self.find_user_id(username)
+        if uid is None:
+            raise RuntimeError(f"user {username} 创建后仍查不到")
+        for role in realm_roles or []:
+            rep = self._get(self._r(f"/roles/{role}")).json()
+            self._ok(self._c.post(self._r(f"/users/{uid}/role-mappings/realm"),
+                                  json=[{"id": rep["id"], "name": rep["name"]}]))
+        return True
 
     # --- ② members(UNMANAGED) ---
     def find_user_id(self, username: str) -> str | None:
@@ -155,12 +183,15 @@ def admin_token(base_url: str, user: str, password: str) -> str:
 def provision(kc: KCAdmin) -> dict:
     """跑全部置备步骤,返回大白话摘要(供 runbook 打印)。"""
     org_id = kc.ensure_org(alias=ORG_ALIAS, name=ORG_NAME, domains=ORG_DOMAINS, display_name=ORG_DISPLAY_NAME)
+    users_created = [u for (u, e, p, r) in TEST_USERS
+                     if kc.ensure_user(username=u, email=e, password=p, realm_roles=r)]
     added = [u for u in MEMBER_USERNAMES if kc.ensure_member(org_id, u)]
     scoped = [c for c in SCOPE_CLIENTS if kc.ensure_default_scope(c)]
     removed = [g for g in LEGACY_ENTERPRISE_GROUPS if kc.remove_legacy_group(g)]
     idf_disabled = kc.disable_org_identity_first()
-    return {"org_id": org_id, "members_added": added, "scoped_clients": scoped,
-            "legacy_groups_removed": removed, "identity_first_disabled": idf_disabled}
+    return {"org_id": org_id, "users_created": users_created, "members_added": added,
+            "scoped_clients": scoped, "legacy_groups_removed": removed,
+            "identity_first_disabled": idf_disabled}
 
 
 def main() -> int:
@@ -173,6 +204,7 @@ def main() -> int:
     finally:
         kc.close()
     print(f"org `{ORG_ALIAS}` 就绪(id={s['org_id']})")
+    print(f"  新建测试用户:{s['users_created'] or '无(已全部存在)'}")
     print(f"  新加入成员(UNMANAGED):{s['members_added'] or '无(已全部是成员)'}")
     print(f"  organization scope 已设为 default 的 client:{s['scoped_clients'] or '无'}")
     print(f"  已移除的旧 group 维度:{s['legacy_groups_removed'] or '无(已清理)'}")

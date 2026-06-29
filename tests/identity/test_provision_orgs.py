@@ -72,6 +72,53 @@ def test_ensure_org_missing_creates():
     assert "ent-demo" in body and "acme.test" in body and "Demo 企业" in body
 
 
+# ---- ensure_user 幂等(测试用户补建) ----
+
+def test_ensure_user_exists_no_post():
+    posts = []
+
+    def h(req):
+        p = req.url.path
+        if req.method == "GET" and p.endswith("/users"):
+            return httpx.Response(200, json=[{"id": "u-bob", "username": "bob"}])
+        if req.method == "POST":
+            posts.append(p)
+            return httpx.Response(201)
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    created = _admin(h).ensure_user(username="bob", email="bob@acme.test", password="bob")
+    assert created is False
+    assert posts == []  # 已存在 → 不建
+
+
+def test_ensure_user_missing_creates_with_role():
+    state = {"created": False}
+    posts = []
+
+    def h(req):
+        p = req.url.path
+        if req.method == "GET" and p.endswith("/users"):
+            return httpx.Response(200, json=([{"id": "u-bob", "username": "bob"}] if state["created"] else []))
+        if req.method == "POST" and p.endswith("/users"):
+            posts.append(("user", req.read().decode()))
+            state["created"] = True
+            return httpx.Response(201)
+        if req.method == "GET" and "/roles/" in p:
+            return httpx.Response(200, json={"id": "r-1", "name": "enterprise-admin"})
+        if req.method == "POST" and p.endswith("/role-mappings/realm"):
+            posts.append(("role", req.read().decode()))
+            return httpx.Response(204)
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    created = _admin(h).ensure_user(username="bob", email="bob@acme.test", password="bob",
+                                    realm_roles=["enterprise-admin"])
+    assert created is True
+    kinds = [k for (k, _) in posts]
+    assert kinds == ["user", "role"]
+    assert "bob@acme.test" in posts[0][1] and "bob" in posts[0][1]
+    assert "enterprise-admin" in posts[1][1]
+
+
 # ---- ensure_member 幂等(unmanaged) ----
 
 def test_ensure_member_exists_no_post():
