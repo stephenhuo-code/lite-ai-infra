@@ -5,8 +5,9 @@ import { Catalog } from './pages/Catalog'
 import { CreateJob } from './pages/CreateJob'
 import { Datasets } from './pages/Datasets'
 import { Pipelines } from './pages/Pipelines'
+import { Workspace } from './pages/Workspace'
 
-// 路由:Shell 套 6 屏(datasets/catalog/pipelines/create/account)。全部接真实页。
+// 路由:Shell 套 7 屏(datasets/catalog/pipelines/create/workspace/account)。全部接真实页。
 export default function App() {
   return (
     <Routes>
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/catalog" element={<Catalog />} />
         <Route path="/pipelines" element={<Pipelines />} />
         <Route path="/create" element={<CreateJob />} />
+        <Route path="/workspace" element={<Workspace />} />
         <Route path="/account" element={<Account />} />
         <Route path="*" element={<Navigate to="/datasets" replace />} />
       </Route>
