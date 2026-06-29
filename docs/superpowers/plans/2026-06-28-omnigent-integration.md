@@ -221,6 +221,10 @@ git commit -m "feat(9a): DockerSandboxLauncher 硬化 + 契约测试"
 - [ ] **Step 4: 重跑 T3 live(auth ON,agent 真回复)**:alice 发消息 → runner ONLINE(无 403)→ claude-native 流式回复 → SSE 收到 `response.output_text.delta`;bob 隔离仍成立。证据成文。
 - [ ] **Step 5: Commit**(fork commit + 我们仓 bump + 证据)。
 
+> **★ T3.5/T3.6 实测 + 独立审查结果(2026-06-29)**:fork 修分两处——① WS tunnel(`runner_tunnel.py` managed-token 旁路,fork `8322b356`)② REST + runner 侧(sessions 路由 binding-token→owner 回退 + runner `_make_auth_token_factory` 折入 binding token 作末位凭据,fork `2c4c36a1`)。**根因比预想深**:runner 有 6 个 `_runner_auth` + claude-native forwarder 都经 `_make_auth_token_factory`,故回退必须放该唯一 chokepoint(非仅 server_client)。**live 实测(header-trust,auth ON)**:alice→HELLO_9A、bob→BOB_OK 各自隔离容器、流式 `response.output_text.delta`(Red\nGreen\n/Blue)、零 401、跨用户 404。fork 测试 90/90 绿。**独立安全审查 = APPROVE-WITH-NITS**(7 项不变式逐一对抗式确认:fail-closed/不可伪造/present-identity-wins/managed 门控/无递归/blast-radius 受限/纯增量)。
+> **附带修**:host Dockerfile 的 antigravity `agy` 版本钉(1.0.10)随上游漂到 1.0.13 会硬失败——9a 不用 antigravity,改为非致命 WARNING(fork `b4f9d778`),否则每次 host 重编译都被无关 harness 卡住(破 parity)。
+> **遗留 Minor(非阻塞,审查建议,记此不静默)**:① REST `_binding_token_owner` 的 owner 查 DB 在事件循环同步执行(WS 路径用 `asyncio.to_thread`);改 async 需把 `_get_user_id`/`_require_user` 及 ~13 调用点改 async,MVP 阶段不划算 → 推迟。② 缺一条"external host(sandbox_provider=None)的 bound runner_id 被 `_resolve_managed_runner_owner` 拒"的直接单测(门控已被审查确认正确 + unknown-token 已覆盖,仅间接覆盖此分支)→ 推迟(无简单 external-host 建表 API)。
+
 ## Phase 4 — BFF 反代 omnigent(REST + WS)
 
 ### Task 4:BFF 反代 + 身份注入 + 剥伪造头
