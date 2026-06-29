@@ -15,6 +15,7 @@ from libs.identity.tokens import verify_and_decode
 from services._scaffold.auth import _as_list
 from services.gateway.bff import oidc
 from services.gateway.bff.orgs import OrgInviter
+from services.gateway.bff.omnigent_proxy import make_omnigent_router
 from services.gateway.bff.routes import make_auth_router
 from services.gateway.bff.session import (
     SESSION_COOKIE,
@@ -89,7 +90,8 @@ def _claim_org_roles(c: dict) -> tuple[list[str], list[str]]:
     return organization, realm_roles
 
 
-def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=None, inviter=None) -> None:
+def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=None, inviter=None,
+                omni_base_url=None, omni_transport=None) -> None:
     """把 BFF 装到 gateway app:auth 路由(login/callback/logout)+ 会话中间件 + /auth/me + 企业邀请。
     seam:
       exchange_code(code, verifier)->token  —— 默认真 KC code 交换(lite-ai-web)
@@ -110,6 +112,12 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
     claims = claims_fn or _default_claims
 
     app.include_router(make_auth_router(exchange_code=exchange_code))
+
+    # omnigent 反代(Plan 9a · T4):/v1/ws/* 受会话中间件保护 + CSRF;身份从会话注入,剥客户端伪造头。
+    app.include_router(make_omnigent_router(
+        claims=claims,
+        omni_base_url=omni_base_url or os.getenv("OMNIGENT_BASE_URL", "http://omnigent:8000"),
+        transport=omni_transport))
 
     @app.get("/auth/me")
     def auth_me(request: Request):
