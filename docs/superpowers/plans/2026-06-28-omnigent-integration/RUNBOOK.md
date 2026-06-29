@@ -14,9 +14,10 @@
 ## 0. 先把整套环境起起来
 
 **这步在验什么**:一条命令能不能把整套 9a 环境(登录系统 Keycloak + AI 后端 omnigent + 网关 + 前端)按正确顺序起齐。
-**你应该看到什么**:命令最后打印「ws-up 完成。栈就绪」,并列出四个地址都 OK;前端还要你**自己再开一个终端**跑一行命令把网页起起来。
+**你应该看到什么**:命令最后打印「ws-up 完成。栈就绪」,框出**唯一入口 `http://localhost:8090`**。前端已由网关在 8090 **同源发出**,**你不用再单独起任何前端服务、也没有第二个网址要记**。
 
-> 起栈顺序是有讲究的:先起登录系统和 AI 后端,**网关必须知道 AI 后端在哪**(否则对话发不出去),最后才是前端。`make ws-up` 已经把顺序和「等它真的起好了再起下一个」都安排好了。
+> 起栈顺序是有讲究的:先起登录系统和 AI 后端,**网关必须知道 AI 后端在哪**(否则对话发不出去);**前端要先 build 好,网关启动时才能把它发出来**。`make ws-up` 已经把顺序和「等它真的起好了再起下一个」都安排好了。
+> **只有一个入口:`http://localhost:8090`** —— 控制台、登录、Workspace 全在这。(登录时会被自动带去 Keycloak 填一下密码再弹回 8090,那不是另一个入口。)
 
 <details><summary>怎么做(命令)</summary>
 
@@ -27,22 +28,20 @@ make ws-up
 # 它会自动:① 起 Keycloak/MinIO 并等 Keycloak 就绪
 #          ② 把测试用户 alice/bob 补建好、加进企业(幂等,跑几次都行)
 #          ③ 自编译 omnigent server+host 镜像并起 omnigent,等 /health
-#          ④ 起网关(gateway:8090,已注入「AI 后端地址」OMNIGENT_BASE_URL=127.0.0.1:8900)
-#          ⑤ 打印让你手动起前端的命令
+#          ④ build 前端 dist + 起网关(gateway:8090,网关同源发前端 + 注入 OMNIGENT_BASE_URL=127.0.0.1:8900)
+#          ⑤ 打印唯一入口 http://localhost:8090
 
-# 前端要你自己再开一个终端起(它不被后台化,方便你看日志):
-cd frontend && npm run dev      # 浏览器入口 http://localhost:5173
+# 前端不用单独起 —— 网关已在 8090 同源把 build 好的前端发出来了,直接开浏览器即可。
+# (改了前端代码要重新生效:make fe-build 重 build;真·热更新延后,见计划。)
 
 # 关于 AI 模型凭据:omnigent 需要一个「订阅 token」才能让 agent 调用模型。
 # 它放在 secrets/omnigent.token(不进代码仓);ws-up 会自动从这个文件读出来注入,你不用管。
 # 万一报「缺订阅 token」,说明这个文件不在 —— 把你的 claude 订阅 token 放到 secrets/omnigent.token 即可。
 ```
 
-**就绪标志**(ws-up 末尾会打印,四个都要 OK):
-- Keycloak `http://localhost:8080`(登录系统)
-- omnigent `http://127.0.0.1:8900/health`(AI 后端)
-- gateway `http://localhost:8090/healthz`(网关)
-- 前端 `http://localhost:5173`(你 `npm run dev` 之后)
+**就绪标志**(ws-up 末尾会打印):
+- **唯一入口 `http://localhost:8090`** —— 控制台 + 登录 + Workspace 都在这(网关同源发前端)。脚本还会自检一行「✓ 网关已同源发前端」。
+- 后台依赖(不用直接开):Keycloak `:8080`(登录中转)、omnigent `:8900/health`、gateway healthz `:8090/healthz`。
 </details>
 
 ---
@@ -54,7 +53,7 @@ cd frontend && npm run dev      # 浏览器入口 http://localhost:5173
 **这步在验什么**:登录的用户能不能进对话窗、发条消息、看到 agent 回复;而且回复是**逐字/逐段冒出来**的,不是干等很久整段蹦出来。
 
 **你该看到什么**:
-1. 打开 `http://localhost:5173`,**没登录会被弹去 Keycloak 登录页**(用 `alice` / `alice` 登录)。
+1. 打开 **`http://localhost:8090`**(唯一入口),**没登录会被弹去 Keycloak 登录页**(用 `alice` / `alice` 登录),填完自动弹回 8090。
 2. 登录后进控制台,左侧菜单「工作台」下点 **Workspace**。
 3. 第一次进是空的,中间写着「选择或新建一个会话」。点左上角紫色按钮 **+ 新会话**。
 4. 下面对话框里输入「你好,简单介绍下你自己」并发送。
@@ -84,7 +83,7 @@ cd frontend && npm run dev      # 浏览器入口 http://localhost:5173
 **这步在验什么**:换一个账号登录,**他只能看到自己的会话,看不到、也打不开别人的会话**。这是多租户平台的底线 —— 没有它绝不能上线。
 
 **你该看到什么**:
-1. **另开一个无痕窗口**(或另一个浏览器),打开 `http://localhost:5173`,用 `bob` / `bob` 登录。
+1. **另开一个无痕窗口**(或另一个浏览器),打开 **`http://localhost:8090`**,用 `bob` / `bob` 登录。
 2. 进 Workspace —— bob 的会话列表是**空的**(他还没建过会话),**绝对不该出现 alice 刚才建的那两条会话**。
 3. bob 点 **+ 新会话**、发条消息,聊起来。回到 alice 的窗口刷新一下 —— alice 的列表里**也不该出现 bob 的会话**。
 4. **负向重点**:bob 看不到 alice 的会话标识,自然点不开;就算有人手里攥着 alice 的会话 id 想用 bob 的身份去开,也会被挡(后台已验证,见下方第 6 步)。
@@ -187,8 +186,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8900/v1/agents
 make ws-down
 # 它会按反向顺序停:网关进程 → omnigent server → Keycloak/MinIO,
 # 最后把残留的 omnigent-managed-* 沙箱容器一并删掉(它们是动态拉起、不在 compose 里的)。
-
-# 前端(npm run dev)在你自己那个终端里 Ctrl-C 停即可。
+# (前端不用单独停 —— 它是网关在 8090 同源发的,没有独立进程。)
 ```
 </details>
 
@@ -198,8 +196,9 @@ make ws-down
 
 | 动作 | 命令 |
 |---|---|
-| 起整套后端栈(等就绪) | `make ws-up` |
-| 起前端网页 | `cd frontend && npm run dev`(入口 http://localhost:5173) |
+| 起整套栈(含 build+发前端,等就绪) | `make ws-up` |
+| **唯一入口(浏览器开)** | **http://localhost:8090**(网关同源发前端,无需单独起前端) |
+| 改了前端代码要生效 | `make fe-build`(重 build dist;真·热更新延后) |
 | 停整套(含清理 managed 沙箱) | `make ws-down` |
 | 只补建/置备测试用户和企业(幂等) | `make provision-orgs` |
 | 自编译 omnigent 镜像 | `scripts/omnigent_build.sh dev` |
@@ -208,7 +207,7 @@ make ws-down
 | 看自编译镜像 | `docker images \| grep omnigent` |
 
 **测试账号**:`alice` / `alice`(企业管理员)、`bob` / `bob`(普通成员),同属企业 `ent-demo`(邮箱域 `acme.test`)。
-**地址**:Keycloak `:8080`、omnigent `:8900`、网关 `:8090`、前端 `:5173`。
+**地址**:**入口/网关 `:8090`(浏览器只开这个)**、Keycloak `:8080`(登录中转)、omnigent `:8900`。(不再有独立的前端 `:5173` —— 网关 8090 同源发前端。)
 **订阅 token**:`secrets/omnigent.token`(不进代码仓;ws-up 自动读出注入为 `CLAUDE_CODE_OAUTH_TOKEN`)。
 
 > **哪些是 owner 亲自做、哪些执行者代跑**:
