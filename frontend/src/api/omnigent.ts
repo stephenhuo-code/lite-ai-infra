@@ -14,7 +14,10 @@ export const DEFAULT_AGENT_ID = 'ag_58a1bc5bf0bba6d31ceeb7661f8d751c'
 // omnigent 列表响应统一 { data: [...] }(反代原状透传)。
 interface DataEnvelope<T> { data?: T[] }
 
-// 会话条目:assistant/user role + content:[{type:'text'|'output_text', text}]。
+// 会话条目:message 条目带 role(user/assistant)+ content 块。实测内容类型:
+// user→`input_text`、assistant→`output_text`(也容忍裸 `text`);非 message 条目
+// (resource_event 等)无 role,在 mapItems 里按 role 丢弃。
+const TEXT_CONTENT_TYPES = new Set(['text', 'input_text', 'output_text'])
 interface OmniContent { type?: string; text?: string }
 interface OmniItem { id?: string; role?: string; content?: OmniContent[] }
 
@@ -45,7 +48,7 @@ export function mapItems(raw: OmniItem[]): ChatItem[] {
     const kind = it?.role === 'user' ? 'user' : it?.role === 'assistant' ? 'assistant' : null
     if (!kind) continue
     const text = (it?.content ?? [])
-      .filter(c => c?.type === 'text' || c?.type === 'output_text')
+      .filter(c => TEXT_CONTENT_TYPES.has(c?.type ?? ''))
       .map(c => c?.text ?? '')
       .join('')
     out.push({ kind, text })

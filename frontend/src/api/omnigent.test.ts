@@ -25,6 +25,20 @@ it('丢弃非 user/assistant role(tool/system 等),9a = 纯文本对话', () => 
   expect(mapItems(raw)).toEqual([{ kind: 'assistant', text: 'ok' }])
 })
 
+it('实测形状:user 用 input_text、assistant 用 output_text,非 message 条目(resource_event)丢弃', () => {
+  // 取自真实 omnigent /items 响应:user content 是 `input_text`(非 `text`),
+  // assistant 是 `output_text`,且历史里夹带无 role 的 resource_event 条目。
+  const raw = [
+    { id: 'rse_1', type: 'resource_event', event_type: 'session.resource.created', resource_type: 'terminal' },
+    { id: 'm1', type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Reply with: HELLO_9A' }] },
+    { id: 'm2', type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'HELLO_9A' }] },
+  ]
+  expect(mapItems(raw)).toEqual([
+    { kind: 'user', text: 'Reply with: HELLO_9A' },   // 回归守卫:input_text 不得被丢
+    { kind: 'assistant', text: 'HELLO_9A' },
+  ])
+})
+
 it('忽略非 text 类型的 content,缺 content 视作空文本', () => {
   const raw = [
     { id: 'i1', role: 'assistant', content: [
