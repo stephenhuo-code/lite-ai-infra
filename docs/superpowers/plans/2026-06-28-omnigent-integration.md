@@ -323,14 +323,18 @@ git commit -m "feat(9a): ws-up 编排 + 双用户对话验收 runbook"
 ---
 
 ## DoD(完成定义)
-- [ ] Task 0 探针跑通 + owner 研判(官方 managed+docker 链路端到端,含 SDK harness 流式)
-- [ ] omnigent server 独立容器 + KC OIDC 多用户登录
-- [ ] host=managed:server 经 DockerSandboxLauncher 在自托管 docker 拉隔离容器,用户间隔离(双用户互不可见 + 越权被拒,负向测试绿)
-- [ ] agent SDK harness 流式回复(对话窗渐进出现)
-- [ ] omnigent = 我们 fork 自编译(改一行→重编译→生效);dev/prod 同源 parity
-- [ ] 9a **无数据访问**(无 MCP/can()/catalog/文件终端)
-- [ ] `make test` + `make lint` + 前端 lint/test/build 全绿
-- [ ] 双用户 live 验收 runbook 通过
+- [x] Task 0 探针跑通 + owner 研判(官方 managed+docker 链路端到端,含 harness 流式)
+- [x] omnigent server 独立容器 + **header-trust** 多用户(KC OIDC 在 BFF;非 omnigent oidc —— 见 ADR-026 §3 修订)
+- [x] host=managed:server 经 DockerSandboxLauncher 在自托管 docker 拉隔离容器,用户间隔离(双用户各自容器 + 越权 404,live 实测;负向测试绿)
+- [x] agent claude-native 流式回复(`response.output_text.delta` 实测 Red\nGreen\n/Blue;对话窗渐进出现)
+- [x] omnigent = 我们 fork 自编译(T3.x 多次改 fork→重编译→生效已证);dev/prod 同源 parity(`:dev` 自编译镜像)
+- [x] 9a **无数据访问**(无 MCP/can()/catalog/文件终端 —— 最终交叉审查确认无 9b 渗入,且有守卫测试)
+- [x] `make test`(251 passed) + `make lint`(lint-imports KEPT + ci_guards exit 0) + 前端 lint/test(50)/build 全绿(独立复跑确认)
+- [ ] 双用户 live 验收 runbook 通过 —— **runbook 已写(owner-readable);执行者代跑步骤(4 沙箱容器 / 5 改码生效 / 6 负向 curl)已实测;steps 1~3 浏览器双用户隔离 = owner 亲自验收(constitution §3.4 ⑤,待 owner)**
+
+## 完成状态(2026-06-29)
+**全部实现 + 逐任务独立审查 + 最终交叉审查 = SHIP。** 六任务(T3 compose / T3.5 runner-tunnel fork / T3.6 runner-auth fork / T4 BFF 反代 / T5 前端 / T6 编排+runbook)均 done + reviewed + gate 绿。两道闸:**① 独立 code review 已完成**(T3.5/T3.6 安全 7 不变式对抗式确认 APPROVE-WITH-NITS、T4 trust-boundary APPROVE-WITH-NITS、T5 APPROVE-WITH-NITS、最终交叉审查 SHIP);**② owner 照 runbook 双用户浏览器验收 = 待 owner**(合并前最后一闸)。
+**遗留 Minor(非阻塞,记此不静默)**:① BFF turn content block 发 `{type:"text"}`,omnigent 规范 user 类型是 `input_text`——**实测 `text` 一路可用**(server 按 `text` 字段取值,不卡 type),改 `input_text` 属规范对齐但 input 侧未实测,故保留已证路径、仅记。② T3.6 REST owner 查 DB 在事件循环同步(WS 用 to_thread)——改 async 需传染 ~13 调用点,MVP 不划算。③ T5 跨会话 in-flight fetch race(React19 下良性,~400ms 自纠)。
 
 ## 显式不做(Plan 9b)
 左树 catalog/git、文件 monaco/终端 xterm、MCP 数据工具 + 企业/owner `can()` 承重墙、Data-Juicer 管线、工作目录 OSS 持久化、个人订阅模型凭据评估。
