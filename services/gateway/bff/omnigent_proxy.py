@@ -32,6 +32,9 @@ def _resolve(request: Request, claims):
     ctx = parse_context(sub=c["sub"], organization=_as_list(c.get("organization")),
                         realm_roles=(c.get("realm_access") or {}).get("roles", []))
     email = c.get("email") or c.get("preferred_username") or ctx.user
+    if not email:
+        # fail closed:绝不把空 X-Forwarded-Email 发给 header-trust omnigent(身份歧义=拒绝)。
+        return None, JSONResponse(status_code=401, content={"reason": "empty identity"})
     return email, None
 
 
@@ -61,13 +64,22 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
             content = {"raw": r.text}
         return JSONResponse(status_code=r.status_code, content=content)
 
+    def _call(fn) -> JSONResponse:
+        # 包住到 omnigent 的一次 REST 调用:omnigent 不可达/传输失败(httpx.RequestError)
+        # → 干净 502 + 明确 reason,而非未捕获 500(健壮性:失败显式,绝不静默卡死)。
+        # 注:_passthru 仍保留上游非 2xx 原状态码 —— 只翻译"连不上/传输断"这一类。
+        try:
+            with _client() as cli:
+                return _passthru(fn(cli))
+        except httpx.RequestError:
+            return JSONResponse(status_code=502, content={"reason": "omnigent unreachable"})
+
     @router.get("/v1/ws/agents")
     def agents(request: Request):
         email, err = _resolve(request, claims)
         if err:
             return err
-        with _client() as cli:
-            return _passthru(cli.get("/v1/agents", headers=_headers(email)))
+        return _call(lambda cli: cli.get("/v1/agents", headers=_headers(email)))
 
     @router.get("/v1/ws/sessions")
     def list_sessions(request: Request):
@@ -75,8 +87,7 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         email, err = _resolve(request, claims)
         if err:
             return err
-        with _client() as cli:
-            return _passthru(cli.get("/v1/sessions", headers=_headers(email)))
+        return _call(lambda cli: cli.get("/v1/sessions", headers=_headers(email)))
 
     @router.post("/v1/ws/sessions")
     async def create_session(request: Request):
@@ -90,8 +101,7 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
             body = {}
         agent_id = (body or {}).get("agent_id") or DEFAULT_AGENT_ID
         payload = {"agent_id": agent_id, "host_type": "managed"}
-        with _client() as cli:
-            return _passthru(cli.post("/v1/sessions", json=payload, headers=_headers(email)))
+        return _call(lambda cli: cli.post("/v1/sessions", json=payload, headers=_headers(email)))
 
     @router.post("/v1/ws/sessions/{session_id}/turn")
     async def turn(session_id: str, request: Request):
@@ -105,18 +115,16 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         text = (body or {}).get("text", "")
         event = {"type": "message",
                  "data": {"role": "user", "content": [{"type": "text", "text": text}]}}
-        with _client() as cli:
-            return _passthru(cli.post(f"/v1/sessions/{session_id}/events", json=event,
-                                      headers=_headers(email)))
+        return _call(lambda cli: cli.post(f"/v1/sessions/{session_id}/events", json=event,
+                                          headers=_headers(email)))
 
     @router.get("/v1/ws/sessions/{session_id}/items")
     def items(session_id: str, request: Request):
         email, err = _resolve(request, claims)
         if err:
             return err
-        with _client() as cli:
-            return _passthru(cli.get(f"/v1/sessions/{session_id}/items",
-                                     params={"order": "asc"}, headers=_headers(email)))
+        return _call(lambda cli: cli.get(f"/v1/sessions/{session_id}/items",
+                                         params={"order": "asc"}, headers=_headers(email)))
 
     @router.get("/v1/ws/sessions/{session_id}/stream")
     async def stream(session_id: str, request: Request):
@@ -129,12 +137,29 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         if send_identity:
             headers[_IDENTITY_HEADER] = email
 
+        # 在 commit 200 event-stream 之前先打开上游并检查状态 —— 否则上游不可达/非 2xx
+        # 时客户端只会拿到一个断掉的 200 流(前端静默卡死)。健壮性:失败显式为真正的 JSON 502。
+        ac = httpx.AsyncClient(timeout=None, trust_env=False, transport=transport)
+        try:
+            req = ac.build_request("GET", url, headers=headers)
+            r = await ac.send(req, stream=True)
+        except httpx.RequestError:
+            await ac.aclose()
+            return JSONResponse(status_code=502, content={"reason": "omnigent unreachable"})
+        if r.status_code != 200:
+            await r.aread()
+            await r.aclose()
+            await ac.aclose()
+            return JSONResponse(status_code=502,
+                                content={"reason": "omnigent stream error", "status": r.status_code})
+
         async def gen():
-            async with httpx.AsyncClient(timeout=None, trust_env=False,
-                                         transport=transport) as ac:
-                async with ac.stream("GET", url, headers=headers) as r:
-                    async for chunk in r.aiter_raw():
-                        yield chunk
+            try:
+                async for chunk in r.aiter_raw():
+                    yield chunk
+            finally:
+                await r.aclose()
+                await ac.aclose()
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 

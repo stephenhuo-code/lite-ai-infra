@@ -177,3 +177,90 @@ def test_sse_passthrough_all_events_and_injects_identity(monkeypatch):
     assert b"response.output_text.delta" in body
     assert b"response.output_item.done" in body
     assert body == _SSE_BODY
+
+
+# ---- (e) 健壮性:omnigent 不可达 / 上游报错 → 明确失败,绝不静默卡死 ----
+
+def test_rest_route_omnigent_unreachable_returns_502(monkeypatch):
+    # REST 路由:到 omnigent 的连接失败(httpx.ConnectError)→ 干净 502 + reason,而非未捕获 500。
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    _env(monkeypatch)
+    transport = httpx.MockTransport(handler)
+    app = build_gateway(routes={}, with_request_id=False)
+    install_bff(app, refresh_fn=lambda rt: {}, claims_fn=_claims,
+                omni_transport=transport, omni_base_url="http://omnigent:8000")
+    c = TestClient(app)
+    r = c.get("/v1/ws/sessions/conv_123/items",
+              cookies={SESSION_COOKIE: _cookie(_valid_sd())})
+    assert r.status_code == 502
+    assert r.json().get("reason")   # 明确 reason,非伪装成功
+
+
+def test_rest_create_omnigent_unreachable_returns_502(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    _env(monkeypatch)
+    transport = httpx.MockTransport(handler)
+    app = build_gateway(routes={}, with_request_id=False)
+    install_bff(app, refresh_fn=lambda rt: {}, claims_fn=_claims,
+                omni_transport=transport, omni_base_url="http://omnigent:8000")
+    c = TestClient(app)
+    r = c.post("/v1/ws/sessions", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"}, json={"agent_id": AGENT_ID})
+    assert r.status_code == 502
+    assert r.json().get("reason")
+
+
+def test_sse_upstream_non_200_returns_502_not_stream(monkeypatch):
+    # SSE:上游在 /stream 上返回 5xx → 在 commit 200 流之前就检查并返回真正的 JSON 502,
+    # 而不是给客户端一个断掉的 200 event-stream(否则前端会静默卡死)。
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"reason": "no sandbox"})
+
+    _env(monkeypatch)
+    transport = httpx.MockTransport(handler)
+    app = build_gateway(routes={}, with_request_id=False)
+    install_bff(app, refresh_fn=lambda rt: {}, claims_fn=_claims,
+                omni_transport=transport, omni_base_url="http://omnigent:8000")
+    c = TestClient(app)
+    r = c.get("/v1/ws/sessions/conv_123/stream",
+              cookies={SESSION_COOKIE: _cookie(_valid_sd())})
+    assert r.status_code == 502
+    assert "text/event-stream" not in r.headers.get("content-type", "")
+    assert r.json().get("reason")
+
+
+def test_sse_upstream_unreachable_returns_502(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    _env(monkeypatch)
+    transport = httpx.MockTransport(handler)
+    app = build_gateway(routes={}, with_request_id=False)
+    install_bff(app, refresh_fn=lambda rt: {}, claims_fn=_claims,
+                omni_transport=transport, omni_base_url="http://omnigent:8000")
+    c = TestClient(app)
+    r = c.get("/v1/ws/sessions/conv_123/stream",
+              cookies={SESSION_COOKIE: _cookie(_valid_sd())})
+    assert r.status_code == 502
+    assert "text/event-stream" not in r.headers.get("content-type", "")
+    assert r.json().get("reason")
+
+
+# ---- (f) 空身份 → fail closed(绝不把空 X-Forwarded-Email 发给 header-trust omnigent) ----
+
+def test_empty_identity_fails_closed_no_request_to_omnigent(monkeypatch):
+    cap = _Capture()
+
+    def _empty_claims(_token):
+        # claims 里没有 email/preferred_username,且 sub 为空 → 解析出的身份为空。
+        return {"sub": "", "organization": ["ent-demo"],
+                "realm_access": {"roles": ["member"]}}
+
+    c = TestClient(_app(monkeypatch, cap, claims_fn=_empty_claims))
+    r = c.get("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())})
+    assert r.status_code in (401, 500)   # fail closed
+    assert cap.requests == []            # 绝不把空身份打到 omnigent
