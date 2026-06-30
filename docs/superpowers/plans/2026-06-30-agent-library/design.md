@@ -35,9 +35,14 @@ omnigent server(我们 fork)
 
 ### 智能体(omnigent 原生 + 我们打标签)
 - omnigent `Agent`(原生):`id / name / description / harness / version / ...`;store **无 owner/tenant 字段**;`GET /v1/agents` 返回 `name/description/harness` 等(**无 labels/metadata**,探针实测)。
-- **企业归属编码**(§1.5"归属编码在资源自身"):**BFF 在创建时把 enterprise alias 编进 omnigent agent 的 `name`**,作结构化前缀(如内部名 `ent-abc123␟客服助手`,`␟` 为分隔符)。
-  - **不变量**:有前缀 = 属该企业、仅该企业可见;**无前缀 = 内置模板(全局共享)**。
-  - 前缀**由 BFF 据已认证会话的企业设置/解析**,前端永不发也永不见(BFF 列表时**剥前缀**只回展示名)。⇒ 用户无法伪造归属(BFF 是唯一写入/过滤点,omnigent 不可直达)。
+- **企业归属编码**(§1.5"归属编码在资源自身"):**BFF 在创建时把 enterprise alias 编进 omnigent agent 的 `name`**,作结构化前缀。
+  - **实测约束**:omnigent 的 name 校验器 = `^[a-zA-Z0-9_-]+$`(**仅 ASCII** 字母数字 + `_` + `-`;无点/斜杠/空白/控制符/非 ASCII)。故:
+    - (a) **分隔符 SEP = `_`**(ASCII 下划线)。早先设想的 `␟`(U+001F)是控制符,会被 omnigent 400 拒;
+    - (b) **`name = "<alias>_<ascii-id>"`** —— name 只承载【企业归属】+ 一个 ASCII id(无人类展示名);
+    - (c) **人类展示名(任意 Unicode,可含中文)落 `description`**:首行 = 展示名,空行后(可选)= 用户描述,读时拆回(展示名根本进不了 name 字段);
+    - (d) **不变量:enterprise alias 必须 `_`-free**(`^[a-zA-Z0-9-]+$`)—— 否则 `name.partition("_")[0]` 会错切前缀、可能跨企业泄漏。由 BFF `_resolve_ctx` 的 guard 强制(不符 → 409),覆盖 create/list/session-create。
+  - **不变量**:有前缀(`_` 分隔)= 属该企业、仅该企业可见;**无前缀 = 内置模板(全局共享)**(内置名如 `*-native-ui` 用连字符,不含 `_` → 不误判)。
+  - 前缀**由 BFF 据已认证会话的企业设置/解析**,前端永不发也永不见(BFF 列表时**剥前缀**只回 description 首行的展示名)。⇒ 用户无法伪造归属(BFF 是唯一写入/过滤点,omnigent 不可直达)。
   - (备选,延后:fork 加 `agent_labels` 表 + AgentObject 返回 labels;或 BFF 文件映射。MVP 用名字前缀最小、BFF 无状态。)
 - **会话↔智能体**:omnigent 建会话绑定 `agent_id` 不可变;**"开始后锁定" = BFF 不暴露 `switch-agent`/`PUT .../agent`**。
 
@@ -49,7 +54,7 @@ omnigent server(我们 fork)
 ### 流程 A:管理员建智能体
 1. 前端(管理员)提交 `{name, template(harness), model?, instructions?}`。
 2. BFF:① 解会话 → `ctx` + 企业 alias;② **`can(ctx, "agent:create", Resource(kind="agent", enterprise_id=alias, owner=None))`**,拒则 403。
-3. BFF 搭 **bundle**(`config.yaml`:`spec_version` + `name=<alias>␟<name>` + `executor.harness=<template>` + `instructions?` + `llm.model?`)→ multipart `POST omnigent /v1/agents`。
+3. BFF 搭 **bundle**(`config.yaml`:`spec_version` + `name="<alias>_<ascii-id>"`(仅企业归属 + ASCII id)+ `description`(首行=展示名,空行后=用户描述)+ `executor.harness=<template>` + `instructions?` + `llm.model?`)→ multipart `POST omnigent /v1/agents`。
 4. omnigent 注册可复用模板 → 返回 `agent_id`。
 5. BFF 写**审计**(`agent:create`,actor/企业/agent_id)→ 回前端(展示名剥前缀)。
 
@@ -89,7 +94,7 @@ omnigent server(我们 fork)
 ## ★ DoR 自检(逐项三态)
 - [x] **1 范围与出口**:**已决定**。In=库页+建(admin)+对话选+锁+每企业隔离;Out/推迟=per-agent 凭据/vault/多 provider/编辑内置/共享授予。可证伪=spec SC + 隔离负向。
 - [ ] **2 接口契约**:**部分待 plan 细化**。对外=智能体库 UI(第一个消费者=该页,仿 Datasets 低保真已有)。BFF↔omnigent:`POST /v1/agents`(bundle 格式)、`GET /v1/agents`、JSON managed 建会话——**探针已钉死端点**;**bundle 最小可用格式 + BFF 搭 bundle 建出能跑的 claude-native 自定义 agent,Task A 首步 live 验证**(续探针)。错误形态:非 admin 403、跨企业拒、重名提示、不可用 harness 明确报。
-- [x] **3 数据模型**:**已决定**。企业归属=omnigent agent name 前缀(BFF 写/解/剥);内置=无前缀=全局;不变量见上;不新增 PG。
+- [x] **3 数据模型**:**已决定**。企业归属=omnigent agent name 前缀 `"<alias>_<ascii-id>"`(SEP=`_`,因 omnigent name 仅许 `^[a-zA-Z0-9_-]+$`;BFF 写/解/剥);人类展示名落 `description` 首行;内置=无前缀=全局;**alias 必须 `_`-free**(guard 强制)；不变量见上;不新增 PG。
 - [x] **4 外部依赖事实**:**已实测**(spikes/agent-create.md):omnigent 无建 agent 端点(405)、`_ensure_builtin_agent` 可暴露、AgentObject 字段、switch-agent 存在。**决策=小 fork POST /v1/agents**(owner 已拍)。
 - [x] **5 行为·边界·并发·威胁**:**已决定**。边界(建会话失败/重名/进行中换/不可用 harness/非 admin 直调/未登录)见 spec Edge Cases;红线=隔离负向 + 锁定。
 - [x] **6 NFR**:**已决定**。parity(fork 自编译)、隔离(BFF 过滤+校验)、无状态 BFF、无新 secret、可用 harness 限制。

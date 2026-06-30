@@ -14,9 +14,13 @@
 - 端点走 omnigent 现有 header-auth;**"谁能建"的把关在 BFF**(omnigent 租户/角色无关)。
 
 ### 2. 企业归属:BFF 在 omnigent agent name 编结构化前缀
-- AgentObject 无 labels/metadata 字段(探针实测)。**BFF 创建时把 enterprise alias 编进 agent `name`** 作前缀(`<alias>␟<显示名>`);**无前缀 = 内置模板 = 全局共享**。
+- AgentObject 无 labels/metadata 字段(探针实测)。**BFF 创建时把 enterprise alias 编进 agent `name`** 作前缀;**无前缀 = 内置模板 = 全局共享**。
+- **name 编码(as-built)**:SEP = ASCII 下划线 **`_`**,`name = "<alias>_<ascii-id>"` —— name 只承载【企业归属】+ 一个 ASCII id。**人类展示名(任意 Unicode)落 `description`**(首行=展示名,空行后=用户描述,读时拆回)。
+- **不变量:enterprise alias 必须 `_`-free**(`^[a-zA-Z0-9-]+$`)—— 否则 `name.partition("_")[0]` 会错切前缀、可能跨企业泄漏(违 §1)。由 BFF `_resolve_ctx` 的 guard 强制(alias 不符 → 409 `enterprise alias incompatible with agent library`),覆盖 create/list/session-create。内置名(`*-native-ui` 等)用连字符不含 `_` → 不误判成某企业所有。
 - 前缀由 **BFF 据已认证会话设置/解析/剥离**,前端永不发也永不见 → 用户无法伪造归属(BFF 唯一写入+过滤点,omnigent 不可直达)。符合 §1.5"归属编码在资源自身"。
 - 备选(延后):fork 加 `agent_labels` 表 + AgentObject 返回 labels;或 BFF 文件映射。
+
+> **实现修订(2026-06-30)**:原 ADR 写 SEP=`␟`(U+001F)且把显示名编进 name(`<alias>␟<显示名>`)。Task A live 验证发现 omnigent 的 name 校验器 = `^[a-zA-Z0-9_-]+$`(仅 ASCII 字母数字+`_`+`-`):`␟` 是控制符会被 400 拒,中文展示名也根本进不了 name。故改为 **SEP=`_` + `name="<alias>_<ascii-id>"` + 展示名落 `description`**,并新增 **alias `_`-free guard**(`_`-分隔归属还原的正确性前提)。隔离/授权逻辑不变,仅归属编码载体与分隔符随实测约束修订。
 
 ### 3. 授权:扩 `can()` 加 agent 规则(§2.4)
 - `libs/authz/engine.py` 加一条:`action ∈ {agent:create, agent:configure, agent:delete}` 要求该企业 **enterprise-admin**(类比已有 `job.submit gpu>4` 规则);`agent:use`/列表 = 企业成员(can() 默认隔离)。新代码经 `can()`,不散落角色判断。

@@ -235,6 +235,37 @@ def test_create_rejects_client_supplied_sep_prefix_forgery(monkeypatch):
     assert sink.events == []
 
 
+# ===== (2b) 红线 §1:alias 含 "_" 与 "_"-分隔归属方案不兼容 → fail-loud 拒(create + list) =====
+
+# alias "ent_foo" 含 "_" → partition("_")[0] 会截成 "ent",可能让 "ent" 误见到 "ent_foo" 的 agent
+# (跨企业泄漏)→ BFF 必须 fail-loud 拒,绝不静默错隔离。
+ADMIN_BAD = _claims_for(sub="eve", org="ent_foo", roles=["enterprise-admin"])
+MEMBER_BAD = _claims_for(sub="frank", org="ent_foo", roles=["member"])
+
+
+def test_create_rejects_alias_with_underscore(monkeypatch):
+    cap = _Capture()
+    sink = _FakeSink()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_BAD, sink=sink))
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"}, json={"name": "助手"})
+    assert r.status_code == 409, r.text
+    assert r.json()["reason"] == "enterprise alias incompatible with agent library"
+    # 绝不打到 omnigent(guard 在反代前拦),也不落审计、不建任何 agent
+    assert cap.requests == []
+    assert sink.events == []
+
+
+def test_list_rejects_alias_with_underscore(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=MEMBER_BAD))
+    r = c.get("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())})
+    assert r.status_code == 409, r.text
+    assert r.json()["reason"] == "enterprise alias incompatible with agent library"
+    # 绝不拉 omnigent 全量(否则按错前缀过滤 = 可能跨企业泄漏)
+    assert cap.requests == []
+
+
 # ===== (3) 列表过滤:内置 + 本企业(剥前缀);他企业不可见 =====
 
 def test_list_filters_per_enterprise_and_strips_prefix(monkeypatch):

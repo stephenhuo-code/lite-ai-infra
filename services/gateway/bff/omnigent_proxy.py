@@ -45,6 +45,12 @@ _IDENTITY_HEADER = "X-Forwarded-Email"
 # 不变量:有前缀("_" 分隔)= 属该企业、仅该企业可见;无前缀 = 内置模板(全局共享)。
 # 前缀只由 BFF 据已认证会话写入/解析/剥离,客户端从不发也不见。
 _ENT_SEP = "_"
+# 企业归属编码不变量(红线 §1 硬隔离):alias 编进 omnigent name 作 "_"-分隔前缀,
+# 归属靠 name.partition("_")[0] 还原 —— 这只在 alias **绝不含 "_"** 时才正确。
+# 若某 alias 含 "_"(如 "ent_foo"),partition 会把它截断、可能让前缀 "ent" 误见到
+# "ent_foo" 的 agent(跨企业泄漏)。故对【已认证会话的 alias】强制 ^[a-zA-Z0-9-]+$
+# (ASCII 字母数字 + 连字符,无 "_" 无其它),不符则 fail-loud 拒(绝不静默错隔离)。
+_ALIAS_RE = re.compile(r"^[a-zA-Z0-9-]+$")
 # 仅 claude-native 系 harness 注入了全局共享订阅(ADR-027 §4);其余建出来不可用,先限于此。
 _ALLOWED_HARNESSES = {"claude-native"}
 _DEFAULT_HARNESS = "claude-native"
@@ -177,7 +183,13 @@ def _resolve_ctx(request: Request, claims):
     if len(aliases) != 1:   # v1 单企业:0/多企业显式拒
         return None, None, None, JSONResponse(status_code=400,
                                               content={"reason": "ambiguous enterprise membership"})
-    return email, ctx, aliases[0], None
+    alias = aliases[0]
+    if not _ALIAS_RE.fullmatch(alias):
+        # fail-loud(红线 §1):alias 含 "_"(或非 [a-zA-Z0-9-])→ 与 "_"-分隔归属前缀方案不兼容,
+        # partition("_") 会错切前缀、可能跨企业泄漏 → 直接拒,绝不静默错隔离。覆盖 create/list/session-create。
+        return None, None, None, JSONResponse(
+            status_code=409, content={"reason": "enterprise alias incompatible with agent library"})
+    return email, ctx, alias, None
 
 
 def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
