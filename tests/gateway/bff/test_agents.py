@@ -112,6 +112,10 @@ class _Capture:
         return httpx.Response(404, json={"reason": "nf"})
 
 
+def _bundle_posts(cap: _Capture) -> list[httpx.Request]:
+    return [q for q in cap.requests if q.url.path == "/v1/agents" and q.method == "POST"]
+
+
 def _app(monkeypatch, capture: _Capture, *, claims_fn, sink=None):
     _env(monkeypatch)
     transport = httpx.MockTransport(capture.handler)
@@ -341,3 +345,177 @@ def test_session_create_rejects_unknown_agent(monkeypatch):
                headers={"X-CSRF-Token": "csrf-xyz"}, json={"agent_id": "ag_does_not_exist"})
     assert r.status_code in (403, 404)
     assert not any(q.url.path == "/v1/sessions" and q.method == "POST" for q in cap.requests)
+
+
+# ===== (5) per-agent API key(ADR-027 §4'):SDK harness 带字面 key → executor.auth;key 绝不审计 =====
+
+def test_create_sdk_harness_with_api_key_emits_executor_auth(monkeypatch):
+    cap = _Capture()
+    sink = _FakeSink()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A, sink=sink))
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"name": "SDK 助手", "harness": "claude-sdk", "api_key": "sk-x",
+                     "base_url": "https://api.example.com"})
+    assert r.status_code == 200, r.text
+    cfg = _unpack_bundle(_bundle_posts(cap)[0])
+    # executor.auth 字面 key(omnigent fork 白名单只收字面值)
+    assert cfg["executor"]["config"]["harness"] == "claude-sdk"
+    assert cfg["executor"]["auth"]["type"] == "api_key"
+    assert cfg["executor"]["auth"]["api_key"] == "sk-x"
+    assert cfg["executor"]["auth"]["base_url"] == "https://api.example.com"
+    # 审计落 create / allow,且**绝不含 key 值**(仅 has_api_key 布尔)。
+    assert len(sink.events) == 1
+    ev = sink.events[0]
+    assert ev["action"] == "agent:create"
+    assert ev["metadata"]["has_api_key"] is True
+    assert ev["metadata"]["harness"] == "claude-sdk"
+    # 整条审计事件序列化里**不出现** key 值
+    assert "sk-x" not in json.dumps(ev)
+    # 回前端的 body 也不回显 key 值
+    assert "sk-x" not in r.text
+
+
+def test_create_sdk_harness_without_api_key_400_no_omnigent(monkeypatch):
+    cap = _Capture()
+    sink = _FakeSink()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A, sink=sink))
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"name": "SDK 助手", "harness": "codex"})
+    assert r.status_code == 400, r.text
+    assert "API key" in r.json()["reason"]
+    # SDK harness 没配 key → 建不出可用 agent,绝不打到 omnigent、不落审计
+    assert cap.requests == []
+    assert sink.events == []
+
+
+def test_create_rejects_env_ref_in_api_key(monkeypatch):
+    cap = _Capture()
+    sink = _FakeSink()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A, sink=sink))
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"name": "SDK 助手", "harness": "claude-sdk", "api_key": "${SECRET}"})
+    assert r.status_code == 400, r.text
+    assert "literal" in r.json()["reason"]
+    # ${} 引用(外泄面)→ BFF 先拒,绝不转发给 fork、不落审计
+    assert cap.requests == []
+    assert sink.events == []
+
+
+def test_create_native_harness_no_executor_auth(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"name": "原生助手", "harness": "claude-native"})
+    assert r.status_code == 200, r.text
+    cfg = _unpack_bundle(_bundle_posts(cap)[0])
+    # claude-native 用全局共享订阅 → bundle 绝不含 executor.auth
+    assert "auth" not in cfg["executor"]
+
+
+def test_create_native_harness_rejects_api_key(monkeypatch):
+    # claude-native 不读 executor.auth(用全局订阅)→ 配 key 无用 → 拒(避免误以为生效)。
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"name": "原生助手", "harness": "claude-native", "api_key": "sk-x"})
+    assert r.status_code == 400, r.text
+    assert cap.requests == []
+
+
+def test_create_unknown_harness_400(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"name": "助手", "harness": "bogus-harness"})
+    assert r.status_code == 400, r.text
+    assert cap.requests == []
+
+
+# ===== (6) 编辑 PUT(ADR-027 §4'):admin 门 + 本企业 own + 同名 re-POST + 审计 configure =====
+
+def test_edit_non_admin_403_no_omnigent(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=MEMBER_A))  # entA member(非 admin)
+    r = c.put(f"/v1/ws/agents/{AGENTA_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+              headers={"X-CSRF-Token": "csrf-xyz"}, json={"name": "改名"})
+    assert r.status_code == 403, r.text
+    # can() 在反代前拦 → 完全没打到 omnigent
+    assert cap.requests == []
+
+
+def test_edit_builtin_rejected(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.put(f"/v1/ws/agents/{BUILTIN_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+              headers={"X-CSRF-Token": "csrf-xyz"}, json={"name": "改内置"})
+    assert r.status_code == 403, r.text
+    assert "built-in" in r.json()["reason"]
+    # 内置(全局)绝不可编辑 → 绝不 re-POST bundle
+    assert _bundle_posts(cap) == []
+
+
+def test_edit_cross_enterprise_rejected(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))  # entA admin 改 entB 的 agent
+    r = c.put(f"/v1/ws/agents/{AGENTB_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+              headers={"X-CSRF-Token": "csrf-xyz"}, json={"name": "越界改"})
+    assert r.status_code == 403, r.text
+    # 他企业 agent 不可见/不可编辑(隔离)→ 绝不 re-POST bundle
+    assert _bundle_posts(cap) == []
+
+
+def test_edit_own_agent_reposts_same_name_with_new_fields_and_audit(monkeypatch):
+    cap = _Capture()
+    sink = _FakeSink()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A, sink=sink))  # entA admin 改本企业 agent
+    r = c.put(f"/v1/ws/agents/{AGENTA_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+              headers={"X-CSRF-Token": "csrf-xyz"},
+              json={"name": "新客服", "instructions": "新提示词",
+                    "harness": "claude-sdk", "api_key": "sk-new"})
+    assert r.status_code == 200, r.text
+    posts = _bundle_posts(cap)
+    assert len(posts) == 1
+    cfg = _unpack_bundle(posts[0])
+    # **同 omnigent name**(复用旧的 → omnigent upsert/bump version,绝不另建)
+    assert cfg["name"] == AGENTA_NAME
+    assert cfg["instructions"] == "新提示词"
+    # 新展示名落 description 首行;新 key 进 executor.auth(字面)
+    assert cfg["description"].split("\n", 1)[0] == "新客服"
+    assert cfg["executor"]["auth"]["api_key"] == "sk-new"
+    # 审计 configure / allow,绝不含 key 值
+    assert len(sink.events) == 1
+    ev = sink.events[0]
+    assert ev["action"] == "agent:configure"
+    assert ev["decision"] == "allow"
+    assert ev["metadata"]["has_api_key"] is True
+    assert "sk-new" not in json.dumps(ev)
+    assert "sk-new" not in r.text
+
+
+def test_edit_blank_key_clears_executor_auth(monkeypatch):
+    # Key-on-edit:留空 api_key → 切到 claude-native(全局订阅)→ 新 bundle 无 executor.auth(旧 key 清)。
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.put(f"/v1/ws/agents/{AGENTA_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+              headers={"X-CSRF-Token": "csrf-xyz"},
+              json={"name": "回原生", "harness": "claude-native"})
+    assert r.status_code == 200, r.text
+    cfg = _unpack_bundle(_bundle_posts(cap)[0])
+    assert cfg["name"] == AGENTA_NAME
+    assert "auth" not in cfg["executor"]
+    assert r.json()["has_api_key"] is False
+
+
+def test_edit_unknown_agent_404(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.put("/v1/ws/agents/ag_nope", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+              headers={"X-CSRF-Token": "csrf-xyz"}, json={"name": "x"})
+    assert r.status_code == 404, r.text
+    assert _bundle_posts(cap) == []

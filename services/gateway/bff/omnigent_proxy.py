@@ -51,9 +51,40 @@ _ENT_SEP = "_"
 # "ent_foo" 的 agent(跨企业泄漏)。故对【已认证会话的 alias】强制 ^[a-zA-Z0-9-]+$
 # (ASCII 字母数字 + 连字符,无 "_" 无其它),不符则 fail-loud 拒(绝不静默错隔离)。
 _ALIAS_RE = re.compile(r"^[a-zA-Z0-9-]+$")
-# 仅 claude-native 系 harness 注入了全局共享订阅(ADR-027 §4);其余建出来不可用,先限于此。
-_ALLOWED_HARNESSES = {"claude-native"}
+# Harness 集合(ADR-027 §4'):
+#   - claude-native:用平台全局共享订阅(不读 executor.auth)→ 绝不需要也绝不接受 per-agent key。
+#   - SDK harness(claude-sdk/codex/qwen/pi):读 omnigent 原生 executor.auth → 必须配 per-agent api_key。
 _DEFAULT_HARNESS = "claude-native"
+# claude-native 用全局订阅(无 key);SDK harness 读 executor.auth(必须 key)。
+_NATIVE_HARNESSES = {"claude-native"}
+_SDK_HARNESSES = {"claude-sdk", "codex", "qwen", "pi"}
+_ALLOWED_HARNESSES = _NATIVE_HARNESSES | _SDK_HARNESSES
+
+# fork 的安全白名单只接受 executor.auth 的【字面值】,任何 ${}/$VAR 引用都会被 fork 400 拒
+# (堵 expand_env 把 ${服务器密钥} 展开外泄)。BFF 先在本侧 fail-fast 拒掉引用——绝不把 fork
+# 会 400 的引用转发过去(也绝不让一个误以为成功的引用悄悄漏服务端 env)。
+_ENV_REF_RE = re.compile(r"\$\{|\$[A-Za-z_]")
+
+
+def _is_env_ref(value: str) -> bool:
+    """字符串是否含 ${...} / $VAR 形式的 env 引用(fork 白名单会拒,BFF 也先拒)。"""
+    return bool(_ENV_REF_RE.search(value))
+
+
+def _validate_credential(harness: str, api_key: str | None, base_url: str | None) -> str | None:
+    """校验 harness 与 per-agent 凭据组合;返回错误 reason(str)或 None(通过)。
+      - SDK harness(读 executor.auth):必须有 api_key,否则建不出可用 agent。
+      - claude-native(全局订阅,不读 auth):配 key 无用 → 禁(避免误以为生效)。
+      - api_key/base_url 必须字面值;含 ${}/$VAR 引用即拒(fork 会 400 + 外泄面)。"""
+    if api_key and _is_env_ref(api_key):
+        return "api_key must be a literal value (no ${} / $VAR refs)"
+    if base_url and _is_env_ref(base_url):
+        return "base_url must be a literal value (no ${} / $VAR refs)"
+    if harness in _SDK_HARNESSES and not api_key:
+        return "this harness needs an API key"
+    if harness in _NATIVE_HARNESSES and api_key:
+        return "claude-native uses the global subscription; it does not accept a per-agent api_key"
+    return None
 
 
 class _QuotedStr(str):
@@ -115,16 +146,33 @@ def _decode_description(raw: str) -> tuple[str, str]:
     return display.strip(), rest.strip()
 
 
+class _EnvRefError(ValueError):
+    """api_key/base_url 含 ${}/$VAR 引用——fork 白名单会拒,BFF 先 fail-fast(防外泄/防 fork 400)。"""
+
+
 def _build_bundle_bytes(*, name: str, instructions: str | None, harness: str,
-                        model: str | None, description: str | None) -> bytes:
-    """搭只含【安全字段】的 .tar.gz(内含 config.yaml)。绝不写 mcp/env/auth/capability —
-    fork 的安全白名单只允许 name/description/instructions/executor(type+harness)/llm.model。"""
+                        model: str | None, description: str | None,
+                        api_key: str | None = None, base_url: str | None = None) -> bytes:
+    """搭只含【安全字段】的 .tar.gz(内含 config.yaml)。绝不写 mcp/env/capability —
+    fork 的安全白名单允许 name/description/instructions/executor(type+harness[+auth 字面值])/llm.model。
+    api_key 提供时(仅 SDK harness)写 executor.auth(type=api_key);**字面值**,含 ${}/$VAR 引用即拒
+    (_EnvRefError)——绝不把 fork 会 400 的引用转发,也绝不让引用悄悄漏服务端 env。"""
     spec: dict = {
         "spec_version": 1,
         # name 强制双引号 → 值无歧义(分隔符 "_" 也显式落在引号内,绝不被 YAML 解析吃掉)。
         "name": _QuotedStr(name),
         "executor": {"type": "omnigent", "config": {"harness": harness}},
     }
+    if api_key:
+        # 只接受字面凭据;任何 ${}/$VAR 引用拒(expand_env 不展开字面 sk-... → 安全)。
+        if _is_env_ref(api_key):
+            raise _EnvRefError("api_key must be a literal value (no ${} / $VAR refs)")
+        auth: dict = {"type": "api_key", "api_key": api_key}
+        if base_url:
+            if _is_env_ref(base_url):
+                raise _EnvRefError("base_url must be a literal value (no ${} / $VAR refs)")
+            auth["base_url"] = base_url
+        spec["executor"]["auth"] = auth
     if description:
         spec["description"] = description
     if instructions:
@@ -246,14 +294,17 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         items = body.get("data") if isinstance(body, dict) else body
         return items if isinstance(items, list) else []
 
-    def _audit_create(ctx: Context, alias: str, agent_id: str, display: str, harness: str) -> None:
+    def _audit_agent(action: str, ctx: Context, alias: str, agent_id: str,
+                     display: str, harness: str, has_api_key: bool) -> None:
+        # 审计绝不落 api_key 值(红线 §5.2);仅记 has_api_key 布尔(便于审计"配过 per-agent 凭据")。
         if audit_writer is None:
             return
         audit_writer.write(AuditEvent(
             ts=datetime.now(timezone.utc).isoformat(), enterprise_id=alias,
             actor_user=ctx.user, actor_role=ctx.role_in(EnterpriseId(alias)) or "none",
-            action="agent:create", resource_uri=f"agent/{agent_id}", decision="allow",
-            override=False, reason="", metadata={"name": display, "harness": harness}))
+            action=action, resource_uri=f"agent/{agent_id}", decision="allow",
+            override=False, reason="",
+            metadata={"name": display, "harness": harness, "has_api_key": has_api_key}))
 
     @router.get("/v1/ws/agents")
     def agents(request: Request):
@@ -302,18 +353,31 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         if _ENT_SEP in display:   # 客户端绝不能在展示名里带分隔符 "_"(防越界伪造企业前缀;纵深防御)
             return JSONResponse(status_code=400, content={"reason": "invalid name"})
         harness = ((body or {}).get("harness") or _DEFAULT_HARNESS).strip()
-        if harness not in _ALLOWED_HARNESSES:   # 只允许已注入全局凭据的可用 harness
+        if harness not in _ALLOWED_HARNESSES:   # 只允许已知可用 harness(claude-native + SDK 系)
             return JSONResponse(status_code=400,
                                 content={"reason": f"unsupported harness: {harness}"})
+        api_key = ((body or {}).get("api_key") or "").strip() or None
+        base_url = ((body or {}).get("base_url") or "").strip() or None
+        # 凭据校验:SDK harness 必须配 api_key(读 executor.auth);claude-native 用全局订阅 → 禁配 key。
+        cred_err = _validate_credential(harness, api_key, base_url)
+        if cred_err:
+            return JSONResponse(status_code=400, content={"reason": cred_err})
+        if harness in _NATIVE_HARNESSES:
+            api_key, base_url = None, None   # claude-native 不读 auth → 绝不写进 bundle
         instructions = (body or {}).get("instructions") or None
         model = ((body or {}).get("model") or "").strip() or None
         user_desc = (body or {}).get("description") or None
         # 企业前缀来自【已认证会话】alias,绝非客户端输入 → 归属不可伪造。
         # name 只承载企业归属 + ASCII slug;人类展示名(可含中文)落 description 首行。
         ent_name = _enterprise_name(alias, display)
-        bundle = _build_bundle_bytes(name=ent_name, instructions=instructions, harness=harness,
-                                     model=model,
-                                     description=_encode_description(display, user_desc))
+        try:
+            bundle = _build_bundle_bytes(name=ent_name, instructions=instructions, harness=harness,
+                                         model=model,
+                                         description=_encode_description(display, user_desc),
+                                         api_key=api_key, base_url=base_url)
+        except _EnvRefError as e:
+            # 引用(${}/$VAR)在 _validate_credential 已拦;此为纵深防御(绝不外泄/绝不让 fork 400)。
+            return JSONResponse(status_code=400, content={"reason": str(e)})
         files = {"bundle": ("bundle.tar.gz", bundle, "application/gzip")}
         try:
             with _client() as cli:
@@ -333,11 +397,100 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         except Exception:
             obj = {}
         agent_id = obj.get("id", "")
-        _audit_create(ctx, alias, agent_id, display, harness)
+        _audit_agent("agent:create", ctx, alias, agent_id, display, harness,
+                     has_api_key=bool(api_key))
         # 回前端:展示名(人类名,非 omnigent 的内部 name)+ 用户描述;前端永不见企业前缀/内部 name。
+        # has_api_key 仅布尔(绝不回显 key 值);供前端标记"已配 per-agent 凭据"。
         return JSONResponse(status_code=200, content={
             "id": agent_id, "name": display, "harness": obj.get("harness", harness),
-            "description": user_desc or "",
+            "description": user_desc or "", "has_api_key": bool(api_key),
+            "builtin": False, "enterprise_owned": True})
+
+    @router.put("/v1/ws/agents/{agent_id}")
+    async def edit_agent(agent_id: str, request: Request):
+        # 编辑(ADR-027 §4'):can(agent:configure) enterprise-admin 门 → 本企业 own 校验 →
+        # 用新字段重搭 bundle、**同 omnigent name** re-POST(omnigent 按 name upsert / bump version)→ 审计。
+        # 内置模板(无前缀,全局)绝不可编辑;他企业 agent 绝不可见/不可编辑(隔离)。
+        email, ctx, alias, err = _resolve_ctx(request, claims)
+        if err:
+            return err
+        d = can(ctx, "agent:configure", Resource(kind="agent", enterprise_id=EnterpriseId(alias),
+                                                 owner=None))
+        if not d.allow:           # 非企业管理员 → 403,绝不打到 omnigent(can() 先于反代)
+            return JSONResponse(status_code=403, content={"reason": d.reason})
+        # 拉全量 → 按 id 查该 agent 的 omnigent name → 校验归属(必须本企业前缀;内置/他企业拒)。
+        raw = _fetch_agents_raw(email)
+        if isinstance(raw, JSONResponse):
+            return raw
+        match = next((a for a in raw if a.get("id") == agent_id), None)
+        if match is None:
+            return JSONResponse(status_code=404, content={"reason": "agent not found"})
+        omni_name = match.get("name", "")
+        owner, _ = _split_enterprise(omni_name)
+        if owner is None:
+            # 内置模板(无前缀,全局共享)→ 改了影响所有企业 → 永不可编辑。
+            return JSONResponse(status_code=403, content={"reason": "built-in agents are not editable"})
+        if owner != alias:
+            # 他企业 agent → 不可见/不可编辑(隔离),与 list/session-create 一致的归属判定。
+            return JSONResponse(status_code=403, content={"reason": "agent not available"})
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        # 展示名:新 name 优先;留空则沿用旧 description 首行编码的展示名(再不行回退旧 omnigent name)。
+        old_display, _ = _decode_description(match.get("description", "") or "")
+        display = ((body or {}).get("name") or "").strip() or old_display or omni_name
+        if _ENT_SEP in display:   # 客户端展示名绝不能带分隔符(防越界伪造企业前缀;纵深防御)
+            return JSONResponse(status_code=400, content={"reason": "invalid name"})
+        harness = ((body or {}).get("harness") or _DEFAULT_HARNESS).strip()
+        if harness not in _ALLOWED_HARNESSES:
+            return JSONResponse(status_code=400,
+                                content={"reason": f"unsupported harness: {harness}"})
+        api_key = ((body or {}).get("api_key") or "").strip() or None
+        base_url = ((body or {}).get("base_url") or "").strip() or None
+        # Key-on-edit 语义(MVP,见 §4'):BFF 重搭整 bundle,提交字段即新状态。api_key 留空 →
+        # 新 bundle 无 executor.auth → 旧 key 被清除(我们读不回旧 key,也绝不回显)。前端提示"留空=清除/需重填"。
+        cred_err = _validate_credential(harness, api_key, base_url)
+        if cred_err:
+            return JSONResponse(status_code=400, content={"reason": cred_err})
+        if harness in _NATIVE_HARNESSES:
+            api_key, base_url = None, None
+        instructions = (body or {}).get("instructions") or None
+        model = ((body or {}).get("model") or "").strip() or None
+        user_desc = (body or {}).get("description") or None
+        try:
+            # **复用旧 omnigent name** → omnigent 按 name upsert(bump version),绝不另建新 agent。
+            bundle = _build_bundle_bytes(name=omni_name, instructions=instructions, harness=harness,
+                                         model=model,
+                                         description=_encode_description(display, user_desc),
+                                         api_key=api_key, base_url=base_url)
+        except _EnvRefError as e:
+            return JSONResponse(status_code=400, content={"reason": str(e)})
+        files = {"bundle": ("bundle.tar.gz", bundle, "application/gzip")}
+        try:
+            with _client() as cli:
+                r = cli.post("/v1/agents", files=files, headers=_headers(email))
+        except httpx.RequestError:
+            return JSONResponse(status_code=502, content={"reason": "omnigent unreachable"})
+        if r.status_code >= 400:
+            try:
+                detail = r.json()
+            except Exception:
+                detail = {"raw": r.text}
+            return JSONResponse(status_code=r.status_code if r.status_code < 500 else 502,
+                                content={"reason": "edit failed", "detail": detail})
+        try:
+            obj = r.json()
+        except Exception:
+            obj = {}
+        new_id = obj.get("id", agent_id)
+        _audit_agent("agent:configure", ctx, alias, new_id, display, harness,
+                     has_api_key=bool(api_key))
+        # has_api_key 仅布尔(绝不回显 key)。re-enter-to-keep(MVP):新 bundle 即新状态,
+        # 无 key → 无 executor.auth → 旧 key 已清(读不回旧 key 也绝不回显);claude-native 本就无 key。
+        return JSONResponse(status_code=200, content={
+            "id": new_id, "name": display, "harness": obj.get("harness", harness),
+            "description": user_desc or "", "has_api_key": bool(api_key),
             "builtin": False, "enterprise_owned": True})
 
     @router.get("/v1/ws/sessions")

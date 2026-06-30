@@ -25,9 +25,17 @@
 ### 3. 授权:扩 `can()` 加 agent 规则(§2.4)
 - `libs/authz/engine.py` 加一条:`action ∈ {agent:create, agent:configure, agent:delete}` 要求该企业 **enterprise-admin**(类比已有 `job.submit gpu>4` 规则);`agent:use`/列表 = 企业成员(can() 默认隔离)。新代码经 `can()`,不散落角色判断。
 
-### 4. 凭据:一律全局共享订阅(无 per-agent 凭据)
-- 本版智能体**只差模板/模型/提示词/名字**;**全用平台全局共享订阅**(9a 的 `CLAUDE_CODE_OAUTH_TOKEN`)。**不引入 per-agent 凭据 / secret vault**。
-- 故库的"基底模板"先限**已注入凭据的 harness**(claude-native 系);codex/openai 等需全局注入对应凭据才可用(可选扩展,本版不做)。
+### 4. 凭据(初版):一律全局共享订阅 → **增量(2026-07-01)部分推翻,见 §4'**
+- 初版智能体**只差模板/模型/提示词/名字**;**全用平台全局共享订阅**(9a 的 `CLAUDE_CODE_OAUTH_TOKEN`),不引入 per-agent 凭据。
+- ~~故库的"基底模板"先限 claude-native~~ —— 见 §4'。
+
+### 4'. 增量(2026-07-01,owner 拍板"按推荐"):per-agent **API key** + 编辑
+> owner 要"给每个智能体设 harness + apikey/订阅"。本增量做 **per-agent API key + 编辑本企业 agent**;**per-agent 订阅仍推迟**(omnigent native 只认全局 token,要更大 fork)。
+- **per-agent API key 走 omnigent 原生 `executor.auth`**(SDK harness:claude-sdk/codex/qwen/pi… 读它)。管理员在建/编辑表单填 harness + api_key(+ base_url),BFF 写进 bundle 的 `executor.auth`。**claude-native 仍用全局共享订阅**(它不读 executor.auth);**per-agent 订阅 token 不做**(推迟)。
+- **安全:fork 白名单"安全放开" executor.auth**。当初无条件拒 executor.auth 是为堵"HTTP 上传的 built-in 在 `expand_env=True` 下把 `${服务器密钥}` 展开外泄"(Critical,见 §2 探针/审查)。放开方式:**允许 executor.auth/connection 的字面值,但仍用 `_contains_env_ref` 扫描拦掉任何 `${}`/`$VAR` 引用** —— 字面 key(`sk-...`)无 `${}` → expand_env 不展开任何东西 → 安全;`${SERVER_SECRET}` 仍被拒 → 外泄面不变。mcp_servers / 能力位(spawn/timers/…)仍**拒**(不在本增量需求内)。
+- **凭据存哪**:进 omnigent 的 agent bundle(其 postgres,明文)——满足 owner"不进 git";**生产再上 KMS**(推迟)。**仍无我们自己的 secret store**。
+- **编辑** = 复用幂等 `POST /v1/agents`(按 name upsert):BFF 新 `PUT /v1/ws/agents/{id}` → can(`agent:configure`)+ 本企业 own 校验 → 查该 agent 的 omnigent name → 用新字段重搭 bundle、**同名 re-POST**(omnigent bump version)。内置模板(全局)**不可编辑**(改了影响所有企业)。
+- 可用性:配了有效 key 的 SDK agent 真能跑;claude-native 用全局订阅;其它 harness 没配 key 则建不出/标不可用。
 
 ### 5. "对话开始后不能改" = BFF 不反代 switch-agent
 - omnigent 原生有 `POST /v1/sessions/{id}/switch-agent`、`PUT .../agent`(允许会话内换 agent)。**BFF 不暴露这两个端点** ⇒ 默认锁定,零成本。
