@@ -15,6 +15,7 @@ EADMIN = (["e-0001"], ["enterprise-admin"])  # 企业管理员
 PADM   = ([], ["platform-admin"])            # 平台管理员(无企业)
 JOB = lambda **k: Resource(kind="job", enterprise_id="e-0001", **k)
 DATASET = lambda **k: Resource(kind="dataset", enterprise_id="e-0001", **k)
+AGENT = lambda **k: Resource(kind="agent", enterprise_id="e-0001", **k)
 
 @pytest.mark.parametrize("name,context,action,resource,expect_allow,reason_sub", [
   # 企业硬隔离:alice(e-0001) 访 e-0002 资源 → deny
@@ -41,6 +42,16 @@ DATASET = lambda **k: Resource(kind="dataset", enterprise_id="e-0001", **k)
 
   # platform-admin 走业务路径 → deny(必须 /admin/*)
   ("PADM-BIZ",  ctx(PADM),   "job.delete",     Resource(kind="job", enterprise_id="e-0001", owner="x"), False, "admin"),
+
+  # 智能体库(ADR-027):create/configure/delete 须 enterprise-admin(企业共享资源 owner=None)
+  ("AGENT-CREATE-MEMBER-DENY", ctx(ALICE),  "agent:create",    AGENT(owner=None), False, "enterprise-admin"),
+  ("AGENT-CREATE-EADM-OK",     ctx(EADMIN), "agent:create",    AGENT(owner=None), True,  ""),
+  ("AGENT-CONFIG-MEMBER-DENY", ctx(ALICE),  "agent:configure", AGENT(owner=None), False, "enterprise-admin"),
+  ("AGENT-CONFIG-EADM-OK",     ctx(EADMIN), "agent:configure", AGENT(owner=None), True,  ""),
+  ("AGENT-DELETE-MEMBER-DENY", ctx(ALICE),  "agent:delete",    AGENT(owner=None), False, "enterprise-admin"),
+  ("AGENT-DELETE-EADM-OK",     ctx(EADMIN), "agent:delete",    AGENT(owner=None), True,  ""),
+  # 跨企业:e-0001 的 enterprise-admin 对 e-0002 的 agent → 仍 deny(企业硬隔离先于角色门)
+  ("AGENT-CREATE-XENT", ctx(EADMIN), "agent:create", Resource(kind="agent", enterprise_id="e-0002", owner=None), False, "cross-enterprise"),
 ])
 def test_can_owner_matrix(name, context, action, resource, expect_allow, reason_sub):
     d = can(context, action, resource)

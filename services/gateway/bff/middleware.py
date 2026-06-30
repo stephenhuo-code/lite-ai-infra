@@ -82,6 +82,27 @@ class RefreshCoordinator:
             return tok
 
 
+def _default_audit_writer():
+    """生产:OSS append-only 审计(同 data-pipeline);env 未配 AUDIT_BUCKET → None(测试/dev 无审计)。
+    构造失败(缺 boto3/env)不阻塞 BFF 启动 —— 审计是尽力写(ADR-010/013)。"""
+    bucket = os.getenv("AUDIT_BUCKET")
+    if not bucket:
+        return None
+    try:
+        import boto3
+        from libs.audit.oss_audit import AuditWriter, OssAuditSink, oss_boto3_config
+        endpoint = os.environ["OSS_ENDPOINT"]
+        s3 = boto3.client("s3", endpoint_url=endpoint,
+                          aws_access_key_id=os.environ["OSS_ACCESS_KEY"],
+                          aws_secret_access_key=os.environ["OSS_SECRET_KEY"],
+                          aws_session_token=os.getenv("OSS_SESSION_TOKEN"),
+                          region_name=os.getenv("OSS_REGION", "cn-hangzhou"),
+                          config=oss_boto3_config(endpoint))
+        return AuditWriter(OssAuditSink(bucket=bucket, client=s3))
+    except Exception:
+        return None
+
+
 def _claim_org_roles(c: dict) -> tuple[list[str], list[str]]:
     """从 token claims 取 organization(alias 数组,multivalued=false 单字符串归一)+ realm 角色。
     organization 归一与 scaffold/auth 共用 _as_list(含 None 守卫:RESULTS F3 多-org bug 可能发 null)。"""
@@ -91,7 +112,7 @@ def _claim_org_roles(c: dict) -> tuple[list[str], list[str]]:
 
 
 def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=None, inviter=None,
-                omni_base_url=None, omni_transport=None) -> None:
+                omni_base_url=None, omni_transport=None, audit_writer=None) -> None:
     """把 BFF 装到 gateway app:auth 路由(login/callback/logout)+ 会话中间件 + /auth/me + 企业邀请。
     seam:
       exchange_code(code, verifier)->token  —— 默认真 KC code 交换(lite-ai-web)
@@ -117,6 +138,7 @@ def install_bff(app: FastAPI, *, exchange_code=None, refresh_fn=None, claims_fn=
     app.include_router(make_omnigent_router(
         claims=claims,
         omni_base_url=omni_base_url or os.getenv("OMNIGENT_BASE_URL", "http://omnigent:8000"),
+        audit_writer=audit_writer or _default_audit_writer(),
         transport=omni_transport))
 
     @app.get("/auth/me")

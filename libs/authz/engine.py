@@ -24,6 +24,11 @@ def can(ctx: Context, action: str, resource: Resource) -> Decision:
     if action == "job.submit" and (resource.attrs or {}).get("gpu", 0) > 4 and not ent_admin:
         return Decision(False, "> 4 GPU job requires enterprise-admin")
 
+    # 智能体库(ADR-027):建/改/删智能体须本企业 enterprise-admin。
+    # agent 是企业共享资源(owner=None),故不能靠下方 owner-only 默认放行——显式门槛。
+    if action in ("agent:create", "agent:configure", "agent:delete") and not ent_admin:
+        return Decision(False, "agent create/configure/delete requires enterprise-admin")
+
     # owner-only(v1):owner 或 enterprise-admin;group 访问/跨用户共享 → Cerbos v2。
     # owner=None(资源无主,如 S0 stub 解析不出 owner)放行本企业成员——企业隔离已强制。
     is_owner = resource.owner in (None, ctx.user)
