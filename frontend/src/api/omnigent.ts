@@ -19,15 +19,18 @@ export interface LibraryAgent {
   enterprise_owned?: boolean
 }
 
-// 创建智能体入参(仅企业管理员;服务端 can() 强制,非管理员 403)。
-// 9a 范围:只 name(必填)/ instructions / model / harness(仅 claude-native)。
-// 无 MCP/工具/数据/per-agent 凭据(那是 9b)。
+// 创建/编辑智能体入参(仅企业管理员;服务端 can() 强制,非管理员 403)。
+// harness ∈ claude-native(默认,平台全局订阅,无需 key)| claude-sdk | codex | qwen | pi
+// (SDK harness 需自带 api_key)。base_url 可选(自定义 endpoint)。
+// 服务端门:SDK harness 缺 api_key → 400;claude-native 带 api_key → 400;key 含 ${}/$VAR → 400。
 export interface CreateAgentInput {
   name: string
   instructions?: string
   model?: string
   harness?: string
   description?: string
+  api_key?: string
+  base_url?: string
 }
 
 // omnigent 列表响应统一 { data: [...] }(反代原状透传)。
@@ -51,14 +54,29 @@ export async function listLibraryAgents(): Promise<LibraryAgent[]> {
   return r?.data ?? []
 }
 
-// 创建智能体(企业管理员)。harness 默认 claude-native(唯一注入全局订阅的)。
-// 失败时 api.post 抛 Error(`${status}`)——含 403(非管理员)/4xx(重名/字段门),由调用方提示。
-export async function createAgent(input: CreateAgentInput): Promise<LibraryAgent> {
+// 提交体构造(create/edit 共用):去空白、harness 默认 claude-native、空可选项不发。
+// api_key/base_url 仅在非空时下发(claude-native 不应带 key,由调用方/服务端门控)。
+function buildAgentBody(input: CreateAgentInput): CreateAgentInput {
   const body: CreateAgentInput = { name: input.name.trim(), harness: input.harness || 'claude-native' }
   if (input.instructions?.trim()) body.instructions = input.instructions.trim()
   if (input.model?.trim()) body.model = input.model.trim()
   if (input.description?.trim()) body.description = input.description.trim()
-  return api.post('/v1/ws/agents', body)
+  if (input.api_key?.trim()) body.api_key = input.api_key.trim()
+  if (input.base_url?.trim()) body.base_url = input.base_url.trim()
+  return body
+}
+
+// 创建智能体(企业管理员)。harness 默认 claude-native(唯一注入全局订阅的)。
+// 失败时 api.post 抛 Error(`${status}`)——含 403(非管理员)/4xx(重名/字段门),由调用方提示。
+export async function createAgent(input: CreateAgentInput): Promise<LibraryAgent> {
+  return api.post('/v1/ws/agents', buildAgentBody(input))
+}
+
+// 编辑智能体(企业管理员 + 本企业;内置不可编辑)。
+// ⚠ BFF 语义:用提交字段整体重建 bundle —— 未下发的字段会被清除(留空 = 清空)。
+// api_key 不可回读;留空提交 → key 被清除。响应含 has_api_key: bool。
+export async function updateAgent(id: string, input: CreateAgentInput): Promise<LibraryAgent> {
+  return api.put(`/v1/ws/agents/${encodeURIComponent(id)}`, buildAgentBody(input))
 }
 
 export async function listSessions(): Promise<Session[]> {

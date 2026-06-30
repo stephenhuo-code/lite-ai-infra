@@ -1,5 +1,5 @@
 import { it, expect, vi, afterEach } from 'vitest'
-import { mapItems, listLibraryAgents, createAgent } from './omnigent'
+import { mapItems, listLibraryAgents, createAgent, updateAgent } from './omnigent'
 
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -63,6 +63,42 @@ it('createAgent POST body:trim + harness 默认 claude-native + 省略空可选�
   expect(body.harness).toBe('claude-native')  // 红线:仅 claude-native
   expect('model' in body).toBe(false)         // 空 model 不发
   expect('description' in body).toBe(false)
+})
+
+// createAgent:SDK harness 透传 harness + api_key + base_url(去空白)。
+it('createAgent 透传 harness/api_key/base_url(SDK harness)', async () => {
+  let body: any = null
+  let calledUrl = ''
+  let calledMethod = ''
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (u: any, init?: any) => {
+    calledUrl = String(u); calledMethod = init?.method
+    body = JSON.parse(init.body)
+    return new Response(JSON.stringify({ id: 'ag_new', name: body.name }), { status: 200 })
+  })
+  await createAgent({ name: 'sdk助手', harness: 'claude-sdk', api_key: '  sk-abc  ', base_url: ' https://x.test ' })
+  expect(calledUrl).toBe('/v1/ws/agents')
+  expect(calledMethod).toBe('POST')
+  expect(body.harness).toBe('claude-sdk')
+  expect(body.api_key).toBe('sk-abc')
+  expect(body.base_url).toBe('https://x.test')
+})
+
+// updateAgent:PUT /v1/ws/agents/{id},body 与 create 同形(trim + 默认 harness)。
+it('updateAgent PUT 到 /v1/ws/agents/{id} 且 body 同形', async () => {
+  let body: any = null
+  let calledUrl = ''
+  let calledMethod = ''
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (u: any, init?: any) => {
+    calledUrl = String(u); calledMethod = init?.method
+    body = JSON.parse(init.body)
+    return new Response(JSON.stringify({ id: 'ag1', name: body.name, has_api_key: true }), { status: 200 })
+  })
+  await updateAgent('ag 1', { name: ' 改名 ', harness: 'codex', api_key: 'sk-z' })
+  expect(calledUrl).toBe('/v1/ws/agents/ag%201') // id 经 encodeURIComponent
+  expect(calledMethod).toBe('PUT')
+  expect(body.name).toBe('改名')
+  expect(body.harness).toBe('codex')
+  expect(body.api_key).toBe('sk-z')
 })
 
 it('忽略非 text 类型的 content,缺 content 视作空文本', () => {

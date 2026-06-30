@@ -101,6 +101,67 @@ it('管理员提交创建 → POST body 正确(harness=claude-native)且刷新�
   await waitFor(() => expect(screen.getByText('销售助手')).toBeTruthy())
 })
 
+it('「编辑」按钮仅在本企业卡片出现(内置卡片无),且管理员可见', async () => {
+  mockApis('enterprise-admin')
+  render(<Agents />)
+  await waitFor(() => expect(screen.getByText('客服助手')).toBeTruthy())
+
+  const ownedCard = screen.getByText('客服助手').closest('.rounded-2xl') as HTMLElement
+  expect(within(ownedCard).getByText('编辑')).toBeTruthy()
+
+  const builtinCard = screen.getByText('claude-native-ui').closest('.rounded-2xl') as HTMLElement
+  expect(within(builtinCard).queryByText('编辑')).toBeNull() // 内置不可编辑
+})
+
+it('普通成员【不见】「编辑」按钮(仅 UX 门)', async () => {
+  mockApis('member')
+  render(<Agents />)
+  await waitFor(() => expect(screen.getByText('客服助手')).toBeTruthy())
+  await new Promise(r => setTimeout(r, 0))
+  expect(screen.queryByText('编辑')).toBeNull()
+})
+
+it('点「编辑」→ 编辑弹窗(预填 name/harness + 覆盖告警),提交走 PUT 后刷新', async () => {
+  let putBody: any = null
+  let putUrl = ''
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init?: any) => {
+    const u = String(url)
+    if (u === '/v1/me/orgs') {
+      return new Response(JSON.stringify({
+        user: 'alice', is_platform_admin: false,
+        memberships: [{ enterprise_id: 'e-1', role: 'enterprise-admin' }],
+        enterprises: [{ alias: 'e-1', display_name: '企业一' }],
+      }), { status: 200 })
+    }
+    if (init?.method === 'PUT') {
+      putUrl = u; putBody = JSON.parse(init.body)
+      return new Response(JSON.stringify({ id: 'ag_owned', name: putBody.name, has_api_key: false }), { status: 200 })
+    }
+    if (u === '/v1/ws/agents') {
+      const renamed = { ...OWNED, name: putBody?.name ?? OWNED.name }
+      return new Response(JSON.stringify({ data: [BUILTIN, putBody ? renamed : OWNED] }), { status: 200 })
+    }
+    return new Response('', { status: 404 })
+  })
+  render(<Agents />)
+  await waitFor(() => expect(screen.getByText('客服助手')).toBeTruthy())
+
+  const ownedCard = screen.getByText('客服助手').closest('.rounded-2xl') as HTMLElement
+  fireEvent.click(within(ownedCard).getByText('编辑'))
+
+  // 编辑弹窗:标题 + 预填 + 覆盖告警
+  await screen.findByText('编辑智能体')
+  expect((screen.getByLabelText('名字 *') as HTMLInputElement).value).toBe('客服助手')
+  expect(screen.getByText(/整体覆盖/)).toBeTruthy()
+
+  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: '客服助手V2' } })
+  fireEvent.click(screen.getByText('保存'))
+
+  await waitFor(() => expect(putUrl).toBe('/v1/ws/agents/ag_owned'))
+  expect(putBody.name).toBe('客服助手V2')
+  await waitFor(() => expect(screen.getByText('客服助手V2')).toBeTruthy())
+})
+
 it('非管理员后端 403 兜底:创建接口被拒时弹窗显可理解提示', async () => {
   // 即便绕过 UI(此处直接验证 modal 的 403 文案路径),前端不靠藏按钮兜底。
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init?: any) => {

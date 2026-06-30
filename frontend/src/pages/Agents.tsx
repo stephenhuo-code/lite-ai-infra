@@ -21,8 +21,15 @@ function dash(v: string | null | undefined): string {
 }
 
 // 单张智能体卡片(展示型)。圆角软卡 + 首字母头像 + 来源徽标 + 基底 + 描述(≤3 行)。
-function AgentCard({ agent }: { agent: LibraryAgent }) {
+// 仅企业管理员 + 本企业创建的卡片(enterprise_owned,非内置)展示「编辑」入口;
+// 服务端对 PUT 独立强制(仅 UX 门)。
+function AgentCard({ agent, canEdit, onEdit }: {
+  agent: LibraryAgent
+  canEdit: boolean
+  onEdit: (a: LibraryAgent) => void
+}) {
   const initial = (agent.name?.trim()?.[0] ?? '?').toUpperCase()
+  const editable = canEdit && agent.enterprise_owned === true && !agent.builtin
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col">
       <div className="flex items-start gap-3">
@@ -46,6 +53,16 @@ function AgentCard({ agent }: { agent: LibraryAgent }) {
           {/* 基底 harness:小号 mono 次要标签 */}
           <div className="mt-0.5 text-xs font-mono text-slate-400">{dash(agent.harness)}</div>
         </div>
+        {/* 编辑入口:仅本企业卡片 + 管理员可见(右上,低调) */}
+        {editable && (
+          <button
+            onClick={() => onEdit(agent)}
+            aria-label={`编辑 ${agent.name}`}
+            className="shrink-0 text-xs font-medium text-slate-500 hover:text-[#4F46E5] px-2 py-1 rounded-lg hover:bg-[#EEF0FF] transition-colors"
+          >
+            编辑
+          </button>
+        )}
       </div>
       {/* 描述,≤3 行截断 */}
       <p className="mt-3 text-sm text-slate-600 line-clamp-3">{dash(agent.description)}</p>
@@ -77,6 +94,7 @@ export function Agents() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [editAgent, setEditAgent] = useState<LibraryAgent | null>(null)
   const { orgs } = useOrgs()
   const canCreate = isEnterpriseAdmin(orgs)
 
@@ -132,14 +150,26 @@ export function Agents() {
       {/* 列表:响应式卡片网格(移动端单列) */}
       {!loading && !error && agents.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {agents.map(a => <AgentCard key={a.id} agent={a} />)}
+          {agents.map(a => (
+            <AgentCard key={a.id} agent={a} canEdit={canCreate} onEdit={setEditAgent} />
+          ))}
         </div>
       )}
 
       {showCreate && (
         <CreateAgentModal
+          mode="create"
           onClose={() => setShowCreate(false)}
           onDone={() => { setShowCreate(false); setLoading(true); setError(''); void load() }}
+        />
+      )}
+
+      {editAgent && (
+        <CreateAgentModal
+          mode="edit"
+          agent={editAgent}
+          onClose={() => setEditAgent(null)}
+          onDone={() => { setEditAgent(null); setLoading(true); setError(''); void load() }}
         />
       )}
     </div>
