@@ -1,5 +1,7 @@
-import { it, expect } from 'vitest'
-import { mapItems } from './omnigent'
+import { it, expect, vi, afterEach } from 'vitest'
+import { mapItems, listLibraryAgents, createAgent } from './omnigent'
+
+afterEach(() => { vi.restoreAllMocks() })
 
 // mapItems:omnigent 会话条目 → ChatItem[](role→kind,拼接 text/output_text content)。
 it('映射 user/assistant role,拼接 text + output_text content', () => {
@@ -37,6 +39,30 @@ it('实测形状:user 用 input_text、assistant 用 output_text,非 message 条
     { kind: 'user', text: 'Reply with: HELLO_9A' },   // 回归守卫:input_text 不得被丢
     { kind: 'assistant', text: 'HELLO_9A' },
   ])
+})
+
+// listLibraryAgents:GET /v1/ws/agents → 解 { data: [...] }(含 builtin/enterprise_owned 标志)。
+it('listLibraryAgents 解出 data 数组及标志', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    data: [{ id: 'ag1', name: '客服', harness: 'claude-native', builtin: false, enterprise_owned: true }],
+  }), { status: 200 }))
+  const ags = await listLibraryAgents()
+  expect(ags).toEqual([{ id: 'ag1', name: '客服', harness: 'claude-native', builtin: false, enterprise_owned: true }])
+})
+
+// createAgent:POST /v1/ws/agents,body 去空白、harness 默认 claude-native、空可选项不发。
+it('createAgent POST body:trim + harness 默认 claude-native + 省略空可选项', async () => {
+  let body: any = null
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (_u: any, init?: any) => {
+    body = JSON.parse(init.body)
+    return new Response(JSON.stringify({ id: 'ag_new', name: body.name }), { status: 200 })
+  })
+  await createAgent({ name: '  客服助手  ', instructions: '  你是客服  ', model: '' })
+  expect(body.name).toBe('客服助手')
+  expect(body.instructions).toBe('你是客服')
+  expect(body.harness).toBe('claude-native')  // 红线:仅 claude-native
+  expect('model' in body).toBe(false)         // 空 model 不发
+  expect('description' in body).toBe(false)
 })
 
 it('忽略非 text 类型的 content,缺 content 视作空文本', () => {

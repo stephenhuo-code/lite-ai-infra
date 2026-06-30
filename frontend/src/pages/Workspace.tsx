@@ -1,46 +1,77 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AgentChat } from './devws/AgentChat'
 import { useSessionStream } from './devws/useSessionStream'
-import { listAgents, listSessions, createSession, sendTurn, DEFAULT_AGENT_ID, type Session } from '../api/omnigent'
+import { listLibraryAgents, listSessions, createSession, sendTurn, type LibraryAgent, type Session } from '../api/omnigent'
 
-// Workspace 对话页(Plan 9a · Task T5)。左侧会话列表(新建 + 切换),右侧单个对话窗。
-// 全经 BFF 同源 /v1/ws/*(会话 cookie + CSRF);前端不持 omnigent token。
-// UX 取舍:进页拉用户自己的会话;不自动建会话(空态显引导,由用户点「新会话」建,
-// 避免每次进页都凭空造 managed 容器);会话标题取 title,缺省回退短 id。
+// Workspace 对话页(Plan 9a · Task T5 + 智能体库 ADR-027)。左侧会话列表(新建 + 切换),
+// 右侧单个对话窗。全经 BFF 同源 /v1/ws/*(会话 cookie + CSRF);前端不持 omnigent token。
+// 智能体库:新建会话时先从库里【选一个智能体】(替换原写死默认),选定后建会话;
+// 会话创建后【锁定】到该智能体——界面无"换智能体"入口(BFF 也不暴露 switch-agent)。
+// UX:进页拉用户自己的会话 + 库智能体;空态显引导,由用户点「新会话」→ 选智能体 → 建。
 const BRAND = '#6366F1'
 
 function sessionLabel(s: Session): string {
   return s.title?.trim() || `会话 ${s.id.slice(0, 8)}`
 }
 
+// 默认预选:优先 claude-native-ui 内置模板,否则第一个 builtin,否则第一个。
+function pickDefault(agents: LibraryAgent[]): string {
+  const preferred = agents.find(a => a.name === 'claude-native-ui')
+    ?? agents.find(a => a.builtin)
+    ?? agents[0]
+  return preferred?.id ?? ''
+}
+
 export function Workspace() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [current, setCurrent] = useState<string | null>(null)
-  const [agentId, setAgentId] = useState<string>(DEFAULT_AGENT_ID)
+  const [agents, setAgents] = useState<LibraryAgent[]>([])
+  // 选择器选中的 agentId(新会话用);进页用默认预选(库加载后填)。
+  const [selectedAgent, setSelectedAgent] = useState<string>('')
+  // 已创建会话 → 其绑定的智能体(锁定,仅展示,不可改)。
+  const [sessionAgent, setSessionAgent] = useState<Record<string, LibraryAgent | undefined>>({})
+  const [picking, setPicking] = useState(false) // 是否在显示智能体选择器
   const [creating, setCreating] = useState(false)
   const { items, addUser } = useSessionStream(current)
 
-  // 进页:拉默认 agent(claude-native-ui)+ 用户自己的会话。
+  // 进页:拉库智能体(供选择器 + 默认预选)+ 用户自己的会话。
   useEffect(() => {
-    listAgents()
+    listLibraryAgents()
       .then(ags => {
-        const preferred = ags.find(a => a.name === 'claude-native-ui') ?? ags[0]
-        if (preferred) setAgentId(preferred.id)
+        setAgents(ags)
+        setSelectedAgent(prev => prev || pickDefault(ags))
       })
       .catch(() => {})
     listSessions().then(setSessions).catch(() => {})
   }, [])
 
-  async function newSession() {
+  const agentById = useMemo(() => {
+    const m = new Map<string, LibraryAgent>()
+    for (const a of agents) m.set(a.id, a)
+    return m
+  }, [agents])
+
+  // 当前会话绑定的智能体(展示用;锁定)。
+  const currentAgent = current ? sessionAgent[current] : undefined
+
+  function openPicker() {
     if (creating) return
+    setSelectedAgent(prev => prev || pickDefault(agents))
+    setPicking(true)
+  }
+
+  async function confirmNewSession() {
+    if (creating || !selectedAgent) return
     setCreating(true)
     try {
-      const s = await createSession(agentId)
+      const s = await createSession(selectedAgent)
       if (s.id) {
         setSessions(prev => [s, ...prev.filter(x => x.id !== s.id)])
+        setSessionAgent(prev => ({ ...prev, [s.id]: agentById.get(selectedAgent) }))
         setCurrent(s.id)
+        setPicking(false)
       }
-    } catch { /* best-effort:建会话失败保持当前态 */ } finally {
+    } catch { /* best-effort:建会话失败保持当前态,不残留半成品会话 */ } finally {
       setCreating(false)
     }
   }
@@ -57,7 +88,7 @@ export function Workspace() {
       <aside className="w-64 shrink-0 bg-white border border-slate-200/70 rounded-2xl flex flex-col overflow-hidden">
         <div className="p-3 border-b border-slate-100">
           <button
-            onClick={newSession}
+            onClick={openPicker}
             disabled={creating}
             className="w-full text-white text-sm font-medium px-3 py-2 rounded-xl cursor-pointer disabled:opacity-50"
             style={{ background: BRAND }}
@@ -69,25 +100,41 @@ export function Workspace() {
           {sessions.length === 0 && (
             <p className="text-xs text-slate-400 px-2 py-3">还没有会话,点上方「新会话」开始。</p>
           )}
-          {sessions.map(s => (
-            <button
-              key={s.id}
-              onClick={() => setCurrent(s.id)}
-              className={`w-full text-left text-sm px-3 py-2 rounded-xl truncate transition-colors ${
-                current === s.id ? 'bg-[#EEF0FF] text-[#4F46E5] font-medium' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-              title={sessionLabel(s)}
-            >
-              {sessionLabel(s)}
-            </button>
-          ))}
+          {sessions.map(s => {
+            const a = sessionAgent[s.id]
+            return (
+              <button
+                key={s.id}
+                onClick={() => setCurrent(s.id)}
+                className={`w-full text-left text-sm px-3 py-2 rounded-xl truncate transition-colors ${
+                  current === s.id ? 'bg-[#EEF0FF] text-[#4F46E5] font-medium' : 'text-slate-600 hover:bg-slate-50'
+                }`}
+                title={sessionLabel(s)}
+              >
+                <span className="block truncate">{sessionLabel(s)}</span>
+                {a && <span className="block text-[11px] text-slate-400 truncate">{a.name}</span>}
+              </button>
+            )
+          })}
         </nav>
       </aside>
 
       {/* 对话窗 */}
-      <section className="flex-1 min-w-0 bg-slate-50 border border-slate-200/70 rounded-2xl overflow-hidden">
+      <section className="flex-1 min-w-0 bg-slate-50 border border-slate-200/70 rounded-2xl overflow-hidden flex flex-col">
         {current ? (
-          <AgentChat items={items} onSend={onSend} />
+          <>
+            {/* 会话绑定的智能体(锁定展示,无"换智能体"入口) */}
+            {currentAgent && (
+              <div className="px-5 py-2.5 border-b border-slate-200/70 bg-white/70 flex items-center gap-2 text-sm">
+                <span className="text-slate-400">智能体</span>
+                <span className="font-medium text-slate-700">{currentAgent.name}</span>
+                <span className="text-[11px] text-slate-400 bg-slate-100 rounded px-1.5 py-0.5">已锁定</span>
+              </div>
+            )}
+            <div className="flex-1 min-h-0">
+              <AgentChat items={items} onSend={onSend} />
+            </div>
+          </>
         ) : (
           <div className="h-full grid place-items-center text-center px-6">
             <div>
@@ -95,11 +142,60 @@ export function Workspace() {
                 <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>
               </div>
               <h2 className="text-lg font-semibold text-slate-800">选择或新建一个会话</h2>
-              <p className="text-sm text-slate-500 mt-2">在左侧选一个已有会话,或点「新会话」开始和 agent 对话。</p>
+              <p className="text-sm text-slate-500 mt-2">在左侧选一个已有会话,或点「新会话」从智能体库选一个智能体开始对话。</p>
             </div>
           </div>
         )}
       </section>
+
+      {/* 智能体选择器:新建会话前选一个智能体(选定后建会话,会话锁定到它) */}
+      {picking && (
+        <div className="fixed inset-0 z-40 grid place-items-center px-4">
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" onClick={() => !creating && setPicking(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-semibold text-lg">选择智能体</h2>
+              <button onClick={() => !creating && setPicking(false)} aria-label="关闭" className="text-slate-400 hover:text-slate-700">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">该会话将固定用此智能体,开始后不可更换。</p>
+
+            <label className="block text-xs font-medium text-slate-600 mb-1.5" htmlFor="ws-agent">智能体</label>
+            <select
+              id="ws-agent"
+              aria-label="选择智能体"
+              value={selectedAgent}
+              onChange={e => setSelectedAgent(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-[#6366F1] outline-none bg-white"
+            >
+              {agents.length === 0 && <option value="">(暂无可用智能体)</option>}
+              {agents.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.name}{a.enterprise_owned ? '(本企业)' : a.builtin ? '(内置)' : ''}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => setPicking(false)}
+                disabled={creating}
+                className="text-sm text-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-100 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmNewSession}
+                disabled={creating || !selectedAgent}
+                className="text-sm font-medium text-white bg-[#6366F1] hover:bg-[#4F46E5] px-4 py-2.5 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {creating ? '创建中…' : '开始对话'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -23,7 +23,10 @@ const NAV: NavItem[] = [
   { to: '/create', label: '创建作业', icon: (
     <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
   ) },
-  { to: '/workspace', label: 'Workspace', group: '工作台', icon: (
+  { to: '/agents', label: '智能体库', group: '工作台', icon: (
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 7V5a3 3 0 016 0v2M9 13h.01M15 13h.01"/></svg>
+  ) },
+  { to: '/workspace', label: 'Workspace', icon: (
     <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
   ) },
   { to: '/account', label: '我的账户', group: '账户', icon: (
