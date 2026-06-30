@@ -176,6 +176,124 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8900/v1/agents
 
 ---
 
+# 「智能体库」验收(Plan 9a · 智能体库 / ADR-027)
+
+> **这一段验什么(大白话)**:平台多了一个「智能体库」页 —— 企业管理员能在里面**自己造一个 AI 角色**(比如"客服助手",给它起名字、写一段它该怎么说话的提示词);
+> 同企业的普通成员进对话窗时能**从库里挑这个角色**来聊,聊起来后**这个会话就锁定用它、中途换不了**;
+> 别的企业的人**既看不到、也用不了**你造的角色;普通成员**根本没有"新建"按钮**,就算他绕过界面直接调接口,服务端也会**拒绝**。
+> 内置的几个现成模板(claude-native-ui 等)对**所有企业**都看得见、能用,且共用平台那一份订阅,**不需要给每个角色单独配凭据**。
+>
+> **对应需求**:SC-001 ~ SC-005、FR-001 ~ FR-008、User Story 1/2/3(见 `../2026-06-30-agent-library/spec.md`)。每步标了编号。
+> **前置**:第 0 步那套环境已起好(`make ws-up`,唯一入口 `http://localhost:8090`),`alice`/`alice`(企业管理员)、`bob`/`bob`(普通成员)都在企业 `ent-demo`。
+
+---
+
+## 智-1. alice(企业管理员)建一个"客服助手"
+
+**对应**:SC-001、FR-003、FR-004、User Story 2。
+
+**这步在验什么**:企业管理员能不能在「智能体库」里**自己新建一个智能体**(名字 + 系统提示词),建完**立刻在列表里出现、标着「本企业」**。
+
+**你该看到什么**:
+1. 用 `alice` / `alice` 登录 `http://localhost:8090`,左侧菜单进 **「智能体库」**。
+2. 因为 alice 是**企业管理员**,页面右上能看到一个 **「新建智能体」** 按钮(普通成员看不到这个,下一步验)。
+3. 点「新建智能体」,在弹窗里填:
+   - **名字**:`客服助手`
+   - **系统提示词**:`你是友好的客服,只用中文简短回答`
+   - 模型留空(用模板默认即可);基底固定是 `claude-native`(平台已注入全局共享订阅,唯一能跑的)。
+4. 点「创建」。弹窗关掉,**列表里立刻出现「客服助手」这一条,带「本企业」标记**(说明它归 ent-demo、只有本企业可见)。内置模板那几条仍在(带「内置」标记)。
+
+> 如果创建报错(比如"重名""无权限""不可用"),那是**明确的中文提示**,不会静默卡住 —— 看到提示按提示处理即可,别当成功。
+
+---
+
+## 智-2. bob(同企业普通成员)用这个"客服助手"聊 + 会话锁定
+
+**对应**:SC-002、FR-002、FR-003(UX 面)、User Story 1。
+
+**这步在验什么**:同企业的**普通成员**进库**看不到「新建」按钮**(只有管理员能建);但他能在对话窗**选用** alice 建的"客服助手";选定开聊后**这个会话锁定用它、没有"换智能体"的入口**。
+
+**你该看到什么**:
+1. **另开无痕窗口**,用 `bob` / `bob` 登录,进 **「智能体库」**。
+2. **关键(FR-003 UX)**:bob **看不到「新建智能体」按钮**(他不是管理员)。但他**能在列表里看到「客服助手」**(同企业可见)+ 内置模板。
+3. bob 进 **Workspace** → 点 **+ 新会话** → 弹出的智能体选择器里**选「客服助手」**(下拉里它标「本企业」)→ 点「开始对话」。
+4. 发一条消息,比如「帮我查下退款要多久?」—— **回复应符合那段提示词**:**中文、简短、客服口吻**(这就是 SC-002 / US1:选的角色真的生效了)。
+5. **关键(FR-002 锁定)**:会话开始后,对话窗顶部显示**绑定的智能体名 + 「已锁定」**标记,**界面上没有任何"换/切换/更换智能体"的入口**;新建另一个会话才能重新选。
+
+> 如果建会话失败(沙箱起不来等),选择器里会**明确报错、保持开着可重试**,不会静默卡死、也不残留半成品会话(spec Edge Case;前端 `Workspace.test.tsx` 有覆盖)。
+
+---
+
+## 智-3. 跨企业隔离:别人看不到、用不了"客服助手"〔dev 单企业 → 执行者代跑负向〕
+
+**对应**:SC-003、FR-005、User Story 3。
+
+**这步在验什么**:**另一个企业**的用户在「智能体库」里**看不到** alice 建的"客服助手";就算他**猜到/攥着**这个智能体的 id 想拿去建会话,也会被服务端**拒掉**(403/404)。
+
+**你该看到什么**:
+- **若有第二个企业的账号**:用它登录 → 进「智能体库」→ 列表里**没有"客服助手"**(只有内置模板 + 他自己企业的);拿"客服助手"的 id 去建会话 → **被拒**。
+- **dev 默认只有一个企业 `ent-demo`** —— 造第二个企业要在 Keycloak 多开一个 Organization,dev 没默认配。**故此条由执行者用直连 BFF 的负向 curl 代跑**:伪造"另一个企业前缀"、或用一个**本企业不可见的 agent_id**去建会话 → 服务端 **403**,且**不创建任何 managed 会话**。
+
+> **说明**:双企业的完整端到端隔离演示需要多一个 KC org;dev 默认单企业 ent-demo,所以这条用执行者的负向验证代跑。隔离的**红线不变式**(列表只含内置+本企业、建会话校验 agent 归属、跨企业 agent_id 被拒)在 BFF 单元测试里已钉死:`tests/gateway/bff/test_agents.py`(`test_list_filters_per_enterprise_and_strips_prefix` / `test_session_create_rejects_other_enterprise_agent` / `test_session_create_rejects_unknown_agent`)。
+
+<details><summary>怎么做(命令,执行者跑)</summary>
+
+```bash
+# 前提:用真实登录会话拿到 BFF 会话 cookie(略;同 9a 负向段做法)。
+# A) 用"本企业看不到的 agent_id"(模拟他企业 agent)建会话 → 403/404,且不建 managed 会话:
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8090/v1/ws/sessions \
+  -H "X-CSRF-Token: <csrf>" -b "<session-cookie>" \
+  -H "Content-Type: application/json" -d '{"agent_id":"ag_other_enterprise_or_unknown"}'
+# 期望:403(或 404);后台 omnigent 无新增 /v1/sessions 调用。
+
+# B) 普通成员伪造"企业前缀分隔符"想越界造他企业角色 → BFF 400,绝不打到 omnigent:
+#    (前缀只能由 BFF 据已认证会话写入;客户端供 U+001F = 伪造,直接拒。)
+printf 'name=%s\n' "ent-bbb"$'\x1f'"伪造助手"   # 仅演示载荷里的 U+001F
+# 单元测试已钉死:tests/gateway/bff/test_agents.py::test_create_rejects_client_supplied_sep_prefix_forgery
+```
+</details>
+
+---
+
+## 智-4. 非管理员被服务端拒(不靠前端藏按钮)〔执行者代跑〕
+
+**对应**:SC-004、FR-003、FR-008、User Story 2 验收 2。
+
+**这步在验什么**:**安全不靠前端藏按钮兜底**。就算 bob(普通成员)绕过界面、**直接拿他自己的登录会话去调创建接口**,服务端的统一授权 `can()` 也会**拒绝**(403)。
+
+**你该看到什么(执行者把结果摆给你)**:bob 带着他**真实的登录会话** + CSRF 头,直接 `POST /v1/ws/agents` 建智能体 → 网关回 **403**(理由含 `enterprise-admin`),**根本没打到 omnigent**、**没建任何 agent**。
+
+<details><summary>怎么做(命令,执行者跑)</summary>
+
+```bash
+# bob(普通成员)带真实会话直接调创建接口 → 403(服务端 can() 拒,不靠前端):
+curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8090/v1/ws/agents \
+  -H "X-CSRF-Token: <bob-csrf>" -b "<bob-session-cookie>" \
+  -H "Content-Type: application/json" -d '{"name":"bob想建的"}'
+# 期望:403  {"reason":"... requires enterprise-admin"};后台 omnigent 无新增 /v1/agents POST。
+```
+
+> 单元测试已钉死(无需起栈即可证):
+> - `tests/gateway/bff/test_agents.py::test_non_admin_create_403_no_omnigent`(非 admin 建 → 403 且**不打到 omnigent**)
+> - `tests/authz/test_can.py`(`AGENT-CREATE-MEMBER-DENY` 普通成员被拒;`PADM-AGENT-CREATE` 连**平台管理员**调 agent:create 也被拒,必须走 `/admin/*`,证明 agent 规则永不被平台管理员触达)
+</details>
+
+---
+
+## 智-5. 内置模板全局可见 + 无 per-agent 凭据(parity 引用 9a 第 5 步)
+
+**对应**:SC-005、FR-006、FR-001。
+
+**这步在验什么**:内置的现成模板(claude-native-ui 等)对**任何企业的任何用户**都看得见、能用;它们**共用平台那一份全局订阅**,**没有给每个智能体单独配凭据/vault**(本版红线:无 per-agent 凭据)。
+
+**你该看到什么**:
+1. alice、bob(以及任何企业的任何用户)在「智能体库」里**都能看到内置模板**(带「内置」标记),且都能拿它建会话正常对话 —— 用的就是平台那份全局共享订阅(`secrets/omnigent.token`),**没有任何"给这个智能体配 token"的步骤**。
+2. **parity(改 fork 重编译生效)**:智能体库的"建可复用 agent"靠 omnigent fork 新加的 `POST /v1/agents`(ADR-027,复用其内部 `_ensure_builtin_agent`);**改 fork → `scripts/omnigent_build.sh dev` 重编译 → 改动生效**,与 dev/prod 同源。这条的演示与"我们自编译镜像"**完全复用上面第 5 步**(改一行 omnigent → 重编译 → 生效 → 镜像是本地 `:dev`),不再重复跑。
+
+> 单元测试佐证:`tests/gateway/bff/test_agents.py::test_list_builtin_visible_to_other_enterprise`(内置对他企业仍可见);建 bundle **只含安全字段、不含 per-agent 凭据/auth**(`test_admin_create_prefixed_safe_bundle_and_audit`)。
+
+---
+
 ## 7. 收尾:停掉整套环境
 
 **这步在验什么**:一条命令能不能干净地停掉整套环境,**包括那些动态拉起来、不在 compose 文件里的 `omnigent-managed-*` 沙箱容器**(否则它们会残留、占资源)。
@@ -211,5 +329,5 @@ make ws-down
 **订阅 token**:`secrets/omnigent.token`(不进代码仓;ws-up 自动读出注入为 `CLAUDE_CODE_OAUTH_TOKEN`)。
 
 > **哪些是 owner 亲自做、哪些执行者代跑**:
-> - **你(owner)亲自做**:第 0 步起栈、第 1~3 步浏览器登录 + 点击 + 双用户隔离(SC-001/002/003 的核心)。
-> - **执行者代跑、把结果摆给你**:第 4 步(沙箱容器)、第 5 步(改码重编译生效)、第 6 步(负向 curl)。
+> - **你(owner)亲自做**:第 0 步起栈、第 1~3 步浏览器登录 + 点击 + 双用户隔离(SC-001/002/003 的核心);**智能体库**第 智-1 步(alice 建客服助手)、智-2 步(bob 选用 + 锁定)、智-5 步(内置全局可见)。
+> - **执行者代跑、把结果摆给你**:第 4 步(沙箱容器)、第 5 步(改码重编译生效)、第 6 步(负向 curl);**智能体库**第 智-3 步(跨企业隔离,dev 单企业故负向 curl 代跑)、智-4 步(非管理员直调接口 → 403)。

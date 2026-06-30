@@ -79,3 +79,26 @@ it('默认预选 claude-native-ui 内置模板', async () => {
   const select = await screen.findByLabelText('选择智能体') as HTMLSelectElement
   expect(select.value).toBe('ag_builtin') // claude-native-ui
 })
+
+it('建会话失败 → 明确反馈,不静默卡死(spec Edge Case)', async () => {
+  // POST /v1/ws/sessions 返回 403(如跨企业/无权)→ createSession 抛 → 选择器显错、可重试。
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init?: any) => {
+    const u = String(url)
+    if (u === '/v1/ws/agents') return new Response(JSON.stringify({ data: AGENTS }), { status: 200 })
+    if (u === '/v1/ws/sessions' && init?.method === 'POST') return new Response('', { status: 403 })
+    if (u === '/v1/ws/sessions') return new Response(JSON.stringify({ data: [] }), { status: 200 })
+    return new Response('', { status: 404 })
+  })
+  render(<Workspace />)
+
+  await waitFor(() => expect(screen.getByText('+ 新会话')).toBeTruthy())
+  fireEvent.click(screen.getByText('+ 新会话'))
+  fireEvent.click(await screen.findByText('开始对话'))
+
+  // 错误被明确呈现(alert),选择器仍开着、按钮回到可点(可重试),不残留半成品会话(无"已锁定")
+  await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+  expect(screen.getByRole('alert').textContent).toMatch(/无权限|不属于本企业|建会话失败/)
+  expect(screen.getByLabelText('选择智能体')).toBeTruthy()       // 选择器没关
+  expect(screen.queryByText('已锁定')).toBeNull()                // 没残留会话
+  expect((screen.getByText('开始对话') as HTMLButtonElement).disabled).toBe(false)
+})

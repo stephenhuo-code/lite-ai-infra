@@ -32,6 +32,7 @@ export function Workspace() {
   const [sessionAgent, setSessionAgent] = useState<Record<string, LibraryAgent | undefined>>({})
   const [picking, setPicking] = useState(false) // 是否在显示智能体选择器
   const [creating, setCreating] = useState(false)
+  const [pickErr, setPickErr] = useState('') // 建会话失败 → 明确反馈(不静默卡死)
   const { items, addUser } = useSessionStream(current)
 
   // 进页:拉库智能体(供选择器 + 默认预选)+ 用户自己的会话。
@@ -57,21 +58,33 @@ export function Workspace() {
   function openPicker() {
     if (creating) return
     setSelectedAgent(prev => prev || pickDefault(agents))
+    setPickErr('')
     setPicking(true)
+  }
+
+  // BFF 错误 → 大白话提示(api.post 失败时抛 Error(`${status}`))。
+  function sessionErrMessage(e: unknown): string {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg === '403') return '无法用该智能体建会话(无权限或它不属于本企业),请换一个再试。'
+    if (msg === '404') return '该智能体已不可用,请刷新后换一个再试。'
+    return `建会话失败(${msg}),请重试或换一个智能体。`
   }
 
   async function confirmNewSession() {
     if (creating || !selectedAgent) return
     setCreating(true)
+    setPickErr('')
     try {
       const s = await createSession(selectedAgent)
-      if (s.id) {
-        setSessions(prev => [s, ...prev.filter(x => x.id !== s.id)])
-        setSessionAgent(prev => ({ ...prev, [s.id]: agentById.get(selectedAgent) }))
-        setCurrent(s.id)
-        setPicking(false)
-      }
-    } catch { /* best-effort:建会话失败保持当前态,不残留半成品会话 */ } finally {
+      if (!s.id) throw new Error('empty')   // 没拿到 id = 半成品,显式失败不静默
+      setSessions(prev => [s, ...prev.filter(x => x.id !== s.id)])
+      setSessionAgent(prev => ({ ...prev, [s.id]: agentById.get(selectedAgent) }))
+      setCurrent(s.id)
+      setPicking(false)
+    } catch (e) {
+      // 建会话失败:明确反馈、保持选择器开着、按钮可重试,不残留半成品会话(spec Edge Case)。
+      setPickErr(sessionErrMessage(e))
+    } finally {
       setCreating(false)
     }
   }
@@ -176,6 +189,12 @@ export function Workspace() {
                 </option>
               ))}
             </select>
+
+            {pickErr && (
+              <div role="alert" className="mt-3.5 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
+                {pickErr}
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 mt-6">
               <button

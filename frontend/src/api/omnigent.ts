@@ -30,9 +30,6 @@ export interface CreateAgentInput {
   description?: string
 }
 
-// claude-native-ui 默认 agent(探针 live-pinned);无显式选择时回退此。
-export const DEFAULT_AGENT_ID = 'ag_58a1bc5bf0bba6d31ceeb7661f8d751c'
-
 // omnigent 列表响应统一 { data: [...] }(反代原状透传)。
 interface DataEnvelope<T> { data?: T[] }
 

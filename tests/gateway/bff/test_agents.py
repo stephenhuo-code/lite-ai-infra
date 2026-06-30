@@ -203,6 +203,21 @@ def test_create_name_required(monkeypatch):
     assert cap.requests == []
 
 
+def test_create_rejects_client_supplied_sep_prefix_forgery(monkeypatch):
+    # 客户端在 name 里塞分隔符(U+001F)试图伪造企业前缀 → BFF 400,绝不打到 omnigent。
+    # (前缀只能由 BFF 据已认证会话 alias 写入;客户端供 SEP = 越界伪造,直接拒。)
+    cap = _Capture()
+    sink = _FakeSink()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A, sink=sink))  # 用 admin:过了 can() 门也仍拒
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"name": f"{ENTB}{SEP}伪造助手"})  # 伪造他企业前缀
+    assert r.status_code == 400, r.text
+    # 没建任何 agent / 没打到 omnigent(SEP 门在反代前拦),也不落审计
+    assert cap.requests == []
+    assert sink.events == []
+
+
 # ===== (3) 列表过滤:内置 + 本企业(剥前缀);他企业不可见 =====
 
 def test_list_filters_per_enterprise_and_strips_prefix(monkeypatch):

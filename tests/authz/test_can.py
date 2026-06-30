@@ -42,6 +42,9 @@ AGENT = lambda **k: Resource(kind="agent", enterprise_id="e-0001", **k)
 
   # platform-admin 走业务路径 → deny(必须 /admin/*)
   ("PADM-BIZ",  ctx(PADM),   "job.delete",     Resource(kind="job", enterprise_id="e-0001", owner="x"), False, "admin"),
+  # platform-admin 调 agent:create → deny(is_platform_admin 早返回先于 agent 规则;
+  # 证明 agent 规则永不被 platform-admin 触达,建智能体须企业 enterprise-admin 走 /admin/* 之外业务路径)
+  ("PADM-AGENT-CREATE", ctx(PADM), "agent:create", AGENT(owner=None), False, "/admin/*"),
 
   # 智能体库(ADR-027):create/configure/delete 须 enterprise-admin(企业共享资源 owner=None)
   ("AGENT-CREATE-MEMBER-DENY", ctx(ALICE),  "agent:create",    AGENT(owner=None), False, "enterprise-admin"),
