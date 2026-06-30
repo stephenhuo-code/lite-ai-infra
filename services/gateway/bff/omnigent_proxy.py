@@ -7,7 +7,10 @@
 from __future__ import annotations
 
 import io
+import re
+import secrets
 import tarfile
+import unicodedata
 from datetime import datetime, timezone
 
 import httpx
@@ -26,23 +29,45 @@ from services._scaffold.auth import _as_list
 DEFAULT_AGENT_ID = "ag_58a1bc5bf0bba6d31ceeb7661f8d751c"
 _IDENTITY_HEADER = "X-Forwarded-Email"
 
-# 智能体库(ADR-027)企业归属前缀分隔符 = ASCII Unit Separator(U+001F)。
-# omnigent agent name 是自由 str(fork 仅校验"安全字段集",不限 name 字符集 —— 实测
-# third_party/omnigent .../builtin_agents.py 只在 name 缺失时 400)。U+001F 不可能出现在
-# KC org alias 或用户展示名(均可打印)里 → 企业归属不可伪造、不会与展示名相撞。
-# 不变量:有前缀 = 属该企业、仅该企业可见;无前缀 = 内置模板(全局共享)。
+# 智能体库(ADR-027)企业归属前缀分隔符 = ASCII 下划线("_")。
+# 实测(third_party/omnigent .../spec/validator.py:16):omnigent agent name **不是**自由 str,
+# 必须匹配 ^[a-zA-Z0-9_-]+$(无点/斜杠/空白/控制符/非 ASCII)。故旧的 U+001F(控制符)
+# 会被 omnigent 400 拒(invalid_input);而企业展示名(可含中文)也根本进不了 name 字段。
+# 因此本 BFF:
+#   - name = "<alias>_<ascii-slug>"(仅承载【企业归属】+ 一个人类可读 ASCII 标识),
+#   - 人类展示名(任意 Unicode)落 description 字段(实测 description 原样 round-trip)。
+# "_" 选作分隔符的理由(round-trip 实测验证):
+#   (a) YAML/omnigent name 校验全允许(可打印 ASCII,非控制符);
+#   (b) KC org alias 形如 ent-demo / ent-<random>(ASCII 字母数字 + 连字符,**绝不含 "_"**)
+#       → partition("_")[0] 必精确还原 alias,归属不可伪造;
+#   (c) omnigent 内置模板名(debby/polly/*-native-ui/live-safe-helper…)用连字符,**绝不含 "_"**
+#       → 无前缀(无 "_")= 内置(全局共享),不会把内置误判成某企业所有。
+# 不变量:有前缀("_" 分隔)= 属该企业、仅该企业可见;无前缀 = 内置模板(全局共享)。
 # 前缀只由 BFF 据已认证会话写入/解析/剥离,客户端从不发也不见。
-_ENT_SEP = "\x1f"
+_ENT_SEP = "_"
 # 仅 claude-native 系 harness 注入了全局共享订阅(ADR-027 §4);其余建出来不可用,先限于此。
 _ALLOWED_HARNESSES = {"claude-native"}
 _DEFAULT_HARNESS = "claude-native"
 
 
+class _QuotedStr(str):
+    """str 子类 → 在 config.yaml 里强制双引号输出(name 值无歧义、分隔符显式落引号内)。"""
+
+
+def _represent_quoted(dumper: yaml.Dumper, data: _QuotedStr):
+    return dumper.represent_scalar("tag:yaml.org,2002:str", str(data), style='"')
+
+
+yaml.SafeDumper.add_representer(_QuotedStr, _represent_quoted)
+
+
 def _split_enterprise(name: str) -> tuple[str | None, str]:
-    """解 omnigent agent name → (enterprise_alias|None, 展示名)。无前缀 = 内置(全局)。"""
+    """解 omnigent agent name → (enterprise_alias|None, 剩余部分)。无前缀 = 内置(全局)。
+    注:企业 agent 的「剩余部分」是 ASCII slug(非人类展示名 —— 展示名在 description);
+    内置 agent 无前缀,剩余部分即其 omnigent name(也就是内置的展示名)。归属判定只看前缀。"""
     if _ENT_SEP in name:
-        alias, _, display = name.partition(_ENT_SEP)
-        return alias, display
+        alias, _, rest = name.partition(_ENT_SEP)
+        return alias, rest
     return None, name
 
 
@@ -52,13 +77,46 @@ def _visible_to(name: str, alias: str) -> bool:
     return owner is None or owner == alias
 
 
+def _ascii_slug(display: str) -> str:
+    """把(任意 Unicode)展示名压成 ASCII slug,供 omnigent name 后缀(name 仅许 [a-zA-Z0-9_-])。
+    非 ASCII 字符无损映射不到则丢弃 → 可能为空(纯中文名);为空时由调用方兜底。"""
+    folded = unicodedata.normalize("NFKD", display).encode("ascii", "ignore").decode("ascii")
+    # name 后缀绝不含 "_"(那是企业前缀分隔符,会被 partition 误切)→ 只留字母数字与连字符。
+    slug = re.sub(r"[^a-zA-Z0-9-]+", "-", folded).strip("-")
+    return slug[:32]
+
+
+def _enterprise_name(alias: str, display: str) -> str:
+    """据【已认证会话】alias 构造 omnigent agent name = "<alias>_<ascii-slug>-<rand>"。
+    omnigent name 只承载【企业归属】+ 人类可读 ASCII 标识(展示名落 description);随机尾防撞。
+    结果保证匹配 ^[a-zA-Z0-9_-]+$(alias 本身 ASCII 字母数字+连字符,slug 已净化)。"""
+    base = _ascii_slug(display)
+    token = secrets.token_hex(3)   # 6 位 hex(ASCII)→ 重名/纯非 ASCII 名也得唯一 name
+    suffix = f"{base}-{token}" if base else f"agent-{token}"
+    return f"{alias}{_ENT_SEP}{suffix}"
+
+
+# 人类展示名(任意 Unicode)进不了 omnigent name(只许 [a-zA-Z0-9_-])→ 落 description。
+# description 编码:首行 = 展示名,空行后(可选)= 用户描述。读时拆回。
+def _encode_description(display: str, user_desc: str | None) -> str:
+    return f"{display}\n\n{user_desc}" if user_desc else display
+
+
+def _decode_description(raw: str) -> tuple[str, str]:
+    """description → (展示名, 用户描述)。首行 = 展示名;空行后余下 = 用户描述。
+    内置模板的 description 无此编码(无展示名行约定)→ 调用方对内置不取展示名。"""
+    display, _, rest = raw.partition("\n\n")
+    return display.strip(), rest.strip()
+
+
 def _build_bundle_bytes(*, name: str, instructions: str | None, harness: str,
                         model: str | None, description: str | None) -> bytes:
     """搭只含【安全字段】的 .tar.gz(内含 config.yaml)。绝不写 mcp/env/auth/capability —
     fork 的安全白名单只允许 name/description/instructions/executor(type+harness)/llm.model。"""
     spec: dict = {
         "spec_version": 1,
-        "name": name,
+        # name 强制双引号 → 值无歧义(分隔符 "_" 也显式落在引号内,绝不被 YAML 解析吃掉)。
+        "name": _QuotedStr(name),
         "executor": {"type": "omnigent", "config": {"harness": harness}},
     }
     if description:
@@ -199,9 +257,16 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
             name = a.get("name", "")
             if not _visible_to(name, alias):
                 continue            # 他企业 agent → 不可见(隔离)
-            owner, display = _split_enterprise(name)
+            owner, _ = _split_enterprise(name)   # 归属判定仍纯靠 name 前缀(隔离逻辑不变)
+            raw_desc = a.get("description", "") or ""
+            if owner is None:
+                # 内置模板:无展示名编码,直接用 omnigent name 当展示名 + 原样 description。
+                display, user_desc = name, raw_desc
+            else:
+                # 本企业 agent:展示名(可含中文)在 description 首行,空行后为用户描述。
+                display, user_desc = _decode_description(raw_desc)
             out.append({"id": a.get("id"), "name": display, "harness": a.get("harness"),
-                        "description": a.get("description", ""),
+                        "description": user_desc,
                         "builtin": owner is None, "enterprise_owned": owner == alias})
         return JSONResponse(status_code=200, content={"data": out})
 
@@ -222,7 +287,7 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         display = (body or {}).get("name", "").strip()
         if not display:
             return JSONResponse(status_code=400, content={"reason": "name required"})
-        if _ENT_SEP in display:   # 客户端绝不能注入分隔符(防越界伪造前缀)
+        if _ENT_SEP in display:   # 客户端绝不能在展示名里带分隔符 "_"(防越界伪造企业前缀;纵深防御)
             return JSONResponse(status_code=400, content={"reason": "invalid name"})
         harness = ((body or {}).get("harness") or _DEFAULT_HARNESS).strip()
         if harness not in _ALLOWED_HARNESSES:   # 只允许已注入全局凭据的可用 harness
@@ -230,10 +295,13 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
                                 content={"reason": f"unsupported harness: {harness}"})
         instructions = (body or {}).get("instructions") or None
         model = ((body or {}).get("model") or "").strip() or None
-        description = (body or {}).get("description") or None
+        user_desc = (body or {}).get("description") or None
         # 企业前缀来自【已认证会话】alias,绝非客户端输入 → 归属不可伪造。
-        bundle = _build_bundle_bytes(name=f"{alias}{_ENT_SEP}{display}", instructions=instructions,
-                                     harness=harness, model=model, description=description)
+        # name 只承载企业归属 + ASCII slug;人类展示名(可含中文)落 description 首行。
+        ent_name = _enterprise_name(alias, display)
+        bundle = _build_bundle_bytes(name=ent_name, instructions=instructions, harness=harness,
+                                     model=model,
+                                     description=_encode_description(display, user_desc))
         files = {"bundle": ("bundle.tar.gz", bundle, "application/gzip")}
         try:
             with _client() as cli:
@@ -254,10 +322,10 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
             obj = {}
         agent_id = obj.get("id", "")
         _audit_create(ctx, alias, agent_id, display, harness)
-        # 回前端:展示名剥前缀(前端永不见企业前缀)
+        # 回前端:展示名(人类名,非 omnigent 的内部 name)+ 用户描述;前端永不见企业前缀/内部 name。
         return JSONResponse(status_code=200, content={
             "id": agent_id, "name": display, "harness": obj.get("harness", harness),
-            "description": obj.get("description", description or ""),
+            "description": user_desc or "",
             "builtin": False, "enterprise_owned": True})
 
     @router.get("/v1/ws/sessions")

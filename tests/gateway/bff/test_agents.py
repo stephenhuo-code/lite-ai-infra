@@ -21,9 +21,11 @@ from services.gateway.bff.session import SESSION_COOKIE, SessionCodec, SessionDa
 
 KEY = Fernet.generate_key()
 
-# omnigent agent name 企业前缀分隔符 = ASCII Unit Separator(U+001F)。
-# 不可能出现在 KC org alias 或用户展示名里 → 不可伪造、不会撞。BFF 唯一写入/解析点。
-SEP = "\x1f"
+# omnigent agent name 企业前缀分隔符 = ASCII 下划线("_")。
+# 实测 omnigent name 必须匹配 ^[a-zA-Z0-9_-]+$(无控制符/无非 ASCII),旧 U+001F 会被 400 拒;
+# 故 BFF:name = "<alias>_<ascii-slug>" 承载企业归属,人类展示名(可含中文)落 description 首行。
+# KC org alias(ent-aaa)与 omnigent 内置名(*-native-ui 等)均不含 "_" → 归属不可伪造、内置不误判。
+SEP = "_"
 
 ENTA = "ent-aaa"
 ENTB = "ent-bbb"
@@ -31,6 +33,12 @@ ENTB = "ent-bbb"
 BUILTIN_ID = "ag_builtin_x"
 AGENTA_ID = "ag_enta_1"
 AGENTB_ID = "ag_entb_1"
+
+# 企业 agent:name 是 "<alias>_<slug>"(无人类展示名),展示名落 description 首行。
+AGENTA_NAME = f"{ENTA}{SEP}kefu-aa11bb"
+AGENTB_NAME = f"{ENTB}{SEP}coder-cc22dd"
+AGENTA_DISPLAY = "客服助手"
+AGENTB_DISPLAY = "代码助手"
 
 
 def _env(monkeypatch):
@@ -81,9 +89,13 @@ class _Capture:
         self.requests: list[httpx.Request] = []
         # omnigent GET /v1/agents 返回的全量(含他企业,模拟 omnigent 租户无关)
         self._agents = agents if agents is not None else [
-            {"id": BUILTIN_ID, "name": "claude-native-ui", "harness": "claude-native"},
-            {"id": AGENTA_ID, "name": f"{ENTA}{SEP}客服助手", "harness": "claude-native"},
-            {"id": AGENTB_ID, "name": f"{ENTB}{SEP}代码助手", "harness": "claude-native"},
+            {"id": BUILTIN_ID, "name": "claude-native-ui", "harness": "claude-native",
+             "description": "Built-in Claude template"},
+            # 企业 agent:name=<alias>_<slug>(无中文),展示名在 description 首行(omnigent 原样存)。
+            {"id": AGENTA_ID, "name": AGENTA_NAME, "harness": "claude-native",
+             "description": f"{AGENTA_DISPLAY}\n\nentA 的客服"},
+            {"id": AGENTB_ID, "name": AGENTB_NAME, "harness": "claude-native",
+             "description": f"{AGENTB_DISPLAY}\n\nentB 的代码助手"},
         ]
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -157,8 +169,12 @@ def test_admin_create_prefixed_safe_bundle_and_audit(monkeypatch):
     posts = [q for q in cap.requests if q.url.path == "/v1/agents" and q.method == "POST"]
     assert len(posts) == 1
     cfg = _unpack_bundle(posts[0])
-    # 名字带【会话企业】前缀(不可伪造,客户端从没发过前缀)
-    assert cfg["name"] == f"{ENTA}{SEP}客服助手"
+    # name 带【会话企业】前缀(不可伪造,客户端从没发过前缀)+ 是合法 omnigent 标识(^[a-zA-Z0-9_-]+$)。
+    import re
+    assert cfg["name"].partition(SEP)[0] == ENTA          # 前缀 == 会话企业
+    assert re.fullmatch(r"[a-zA-Z0-9_-]+", cfg["name"])    # omnigent name 校验:无控制符/非 ASCII
+    # 人类展示名(中文)进不了 name → 落 description 首行(omnigent 原样 round-trip)。
+    assert cfg["description"].split("\n", 1)[0] == "客服助手"
     # 只含安全字段
     assert cfg["instructions"] == "你是客服"
     assert cfg["executor"]["type"] == "omnigent"
@@ -177,8 +193,9 @@ def test_admin_create_prefixed_safe_bundle_and_audit(monkeypatch):
     assert ev["decision"] == "allow"
     assert ev["enterprise_id"] == ENTA
     assert ev["actor_user"] == "alice"
-    # 前端拿到的展示名剥了前缀
-    assert SEP not in json.dumps(r.json())
+    # 前端拿到的展示名是干净人类名(无企业前缀/无内部 slug),且不泄露内部 omnigent name。
+    assert r.json()["name"] == "客服助手"
+    assert SEP not in r.json()["name"]
 
 
 def test_admin_create_default_harness(monkeypatch):
@@ -231,9 +248,10 @@ def test_list_filters_per_enterprise_and_strips_prefix(monkeypatch):
     assert BUILTIN_ID in by_id
     assert AGENTA_ID in by_id
     assert AGENTB_ID not in by_id
-    # 剥前缀:展示名干净,无 SEP
+    # 展示名干净(从 description 首行还原),无内部 slug/无 SEP;用户描述拆出(空行后那段)
     assert by_id[AGENTA_ID]["name"] == "客服助手"
     assert SEP not in by_id[AGENTA_ID]["name"]
+    assert by_id[AGENTA_ID]["description"] == "entA 的客服"
     # builtin / enterprise_owned 标志供 UI
     assert by_id[BUILTIN_ID]["builtin"] is True
     assert by_id[BUILTIN_ID]["enterprise_owned"] is False
