@@ -49,10 +49,11 @@ it('列出智能体并标 内置/本企业 徽标', async () => {
   await waitFor(() => expect(screen.getByText('claude-native-ui')).toBeTruthy())
   expect(screen.getByText('客服助手')).toBeTruthy()
 
-  const builtinRow = screen.getByText('claude-native-ui').closest('tr')!
-  expect(within(builtinRow).getByText('内置')).toBeTruthy()
-  const ownedRow = screen.getByText('客服助手').closest('tr')!
-  expect(within(ownedRow).getByText('本企业')).toBeTruthy()
+  // 卡片化后:徽标与名称同处一张卡(标题的最近 .rounded-2xl 卡容器)。
+  const builtinCard = screen.getByText('claude-native-ui').closest('.rounded-2xl') as HTMLElement
+  expect(within(builtinCard).getByText('内置')).toBeTruthy()
+  const ownedCard = screen.getByText('客服助手').closest('.rounded-2xl') as HTMLElement
+  expect(within(ownedCard).getByText('本企业')).toBeTruthy()
 })
 
 it('企业管理员见「新建智能体」入口', async () => {

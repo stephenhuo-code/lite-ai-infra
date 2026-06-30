@@ -20,6 +20,58 @@ function dash(v: string | null | undefined): string {
   return v === null || v === undefined || v === '' ? '—' : String(v)
 }
 
+// 单张智能体卡片(展示型)。圆角软卡 + 首字母头像 + 来源徽标 + 基底 + 描述(≤3 行)。
+function AgentCard({ agent }: { agent: LibraryAgent }) {
+  const initial = (agent.name?.trim()?.[0] ?? '?').toUpperCase()
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+      <div className="flex items-start gap-3">
+        {/* 首字母头像(品牌靛蓝),纯视觉 */}
+        <div
+          aria-hidden="true"
+          className="shrink-0 w-10 h-10 rounded-xl bg-[#EEF0FF] text-[#4F46E5] font-semibold flex items-center justify-center"
+        >
+          {initial}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h2 className="font-semibold text-slate-800 truncate">{agent.name}</h2>
+            {/* 来源徽标:本企业 = 品牌靛蓝;内置 = 中性 slate */}
+            {agent.enterprise_owned
+              ? <span className="shrink-0 text-[11px] font-medium text-[#4F46E5] bg-[#EEF0FF] rounded px-1.5 py-0.5">本企业</span>
+              : agent.builtin
+                ? <span className="shrink-0 text-[11px] font-medium text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">内置</span>
+                : null}
+          </div>
+          {/* 基底 harness:小号 mono 次要标签 */}
+          <div className="mt-0.5 text-xs font-mono text-slate-400">{dash(agent.harness)}</div>
+        </div>
+      </div>
+      {/* 描述,≤3 行截断 */}
+      <p className="mt-3 text-sm text-slate-600 line-clamp-3">{dash(agent.description)}</p>
+    </div>
+  )
+}
+
+// 加载态骨架卡(与卡片同尺寸,避免布局抖动)。
+function SkeletonCard() {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm animate-pulse">
+      <div className="flex items-start gap-3">
+        <div className="shrink-0 w-10 h-10 rounded-xl bg-slate-100" />
+        <div className="flex-1 space-y-2 pt-1">
+          <div className="h-4 w-1/2 bg-slate-100 rounded" />
+          <div className="h-3 w-1/3 bg-slate-100 rounded" />
+        </div>
+      </div>
+      <div className="mt-3 space-y-2">
+        <div className="h-3 w-full bg-slate-100 rounded" />
+        <div className="h-3 w-4/5 bg-slate-100 rounded" />
+      </div>
+    </div>
+  )
+}
+
 export function Agents() {
   const [agents, setAgents] = useState<LibraryAgent[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,45 +108,33 @@ export function Agents() {
         )}
       </div>
 
-      <div className="bg-white border border-slate-200/70 rounded-2xl overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50/70 text-slate-500 text-xs">
-            <tr className="text-left">
-              <th className="font-medium px-5 py-3">名称</th>
-              <th className="font-medium px-5 py-3">来源</th>
-              <th className="font-medium px-5 py-3">基底</th>
-              <th className="font-medium px-5 py-3">描述</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading && (
-              <tr><td colSpan={4} className="px-5 py-8 text-center text-slate-400">加载中…</td></tr>
-            )}
-            {!loading && error && (
-              <tr><td colSpan={4} className="px-5 py-8 text-center text-red-500">加载失败:{error}</td></tr>
-            )}
-            {!loading && !error && agents.length === 0 && (
-              <tr><td colSpan={4} className="px-5 py-8 text-center text-slate-400">暂无可用智能体</td></tr>
-            )}
-            {!loading && !error && agents.map(a => (
-              <tr key={a.id} className="hover:bg-slate-50">
-                <td className="px-5 py-3">
-                  <span className="font-medium text-[#4F46E5]">{a.name}</span>
-                </td>
-                <td className="px-5 py-3">
-                  {a.enterprise_owned
-                    ? <span className="text-[11px] font-medium text-[#4F46E5] bg-[#EEF0FF] rounded px-1.5 py-0.5">本企业</span>
-                    : a.builtin
-                      ? <span className="text-[11px] font-medium text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">内置</span>
-                      : <span className="text-slate-400">—</span>}
-                </td>
-                <td className="px-5 py-3 text-slate-500">{dash(a.harness)}</td>
-                <td className="px-5 py-3 text-slate-600">{dash(a.description)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* 加载态:骨架卡网格 */}
+      {loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      )}
+
+      {/* 错误态:居中卡片提示 */}
+      {!loading && error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-sm text-red-600">
+          加载失败:{error}
+        </div>
+      )}
+
+      {/* 空态:居中卡片提示 */}
+      {!loading && !error && agents.length === 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-400">
+          暂无可用智能体
+        </div>
+      )}
+
+      {/* 列表:响应式卡片网格(移动端单列) */}
+      {!loading && !error && agents.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {agents.map(a => <AgentCard key={a.id} agent={a} />)}
+        </div>
+      )}
 
       {showCreate && (
         <CreateAgentModal
