@@ -54,6 +54,7 @@ function ConfigModal({ def, status, onClose, onDone }: {
   onDone: () => void
 }) {
   const configured = status?.configured === true
+  const platformDefault = !configured && status?.platform_default === true
   const [authType, setAuthType] = useState<AuthType>(def.authOptions[0])
   const [value, setValue] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
@@ -94,7 +95,7 @@ function ConfigModal({ def, status, onClose, onDone }: {
       <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" onClick={onClose} />
       <div className="relative bg-white w-full max-w-lg rounded-2xl shadow-xl border border-slate-200 p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-semibold text-lg">{configured ? '修改' : '配置'} · {def.label}</h2>
+          <h2 className="font-semibold text-lg">{configured ? '修改' : platformDefault ? '覆盖' : '配置'} · {def.label}</h2>
           <button onClick={onClose} aria-label="关闭" className="text-slate-400 hover:text-slate-700">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
@@ -103,6 +104,12 @@ function ConfigModal({ def, status, onClose, onDone }: {
         {configured && (
           <div className="mb-5 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
             该 provider <strong>已配置</strong>。为安全起见已存的值不会回显;保存新值将<strong>整体替换</strong>当前凭据。
+          </div>
+        )}
+
+        {platformDefault && (
+          <div className="mb-5 text-sm text-slate-600 bg-[#EEF0FF] border border-[#C7CBFF] rounded-xl px-3.5 py-3">
+            该 provider 当前用<strong>平台全局{status?.platform_auth_type ? authTypeLabel(status.platform_auth_type) : '订阅'}</strong>,agent 已可用。填入本企业自己的凭据将<strong>覆盖</strong>平台默认(仅本企业生效);清除后回落平台默认。
           </div>
         )}
 
@@ -171,7 +178,7 @@ function ConfigModal({ def, status, onClose, onDone }: {
   )
 }
 
-// 单 provider 行卡片:名字 + 已配/未配徽标 +(已配)auth 类型 + base_url + 掩码;配置/修改 + 清除。
+// 单 provider 行卡片。三态徽标:本企业已配 / 平台默认(全局订阅,agent 可跑,可覆盖)/ 未配置。
 function ProviderRow({ def, status, canManage, onConfigure, onClear }: {
   def: ProviderDef
   status: ProviderStatus | undefined
@@ -180,6 +187,8 @@ function ProviderRow({ def, status, canManage, onConfigure, onClear }: {
   onClear: (def: ProviderDef) => void
 }) {
   const configured = status?.configured === true
+  // 平台默认:本企业没配、但平台有全局默认(如 claude 订阅)→ agent 仍能跑,只是没用本企业自己的凭据。
+  const platformDefault = !configured && status?.platform_default === true
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex items-start gap-3">
       <div aria-hidden="true" className="shrink-0 w-10 h-10 rounded-xl bg-[#EEF0FF] text-[#4F46E5] font-semibold flex items-center justify-center">
@@ -189,7 +198,9 @@ function ProviderRow({ def, status, canManage, onConfigure, onClear }: {
         <div className="flex items-center gap-2">
           <h2 className="font-semibold text-slate-800 truncate">{def.label}</h2>
           {configured
-            ? <span className="shrink-0 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5">已配置</span>
+            ? <span className="shrink-0 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5">本企业已配置</span>
+            : platformDefault
+            ? <span className="shrink-0 text-[11px] font-medium text-[#4F46E5] bg-[#EEF0FF] rounded px-1.5 py-0.5">平台默认</span>
             : <span className="shrink-0 text-[11px] font-medium text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">未配置</span>}
         </div>
         {configured ? (
@@ -199,8 +210,12 @@ function ProviderRow({ def, status, canManage, onConfigure, onClear }: {
             <span className="font-mono text-slate-400">••••••已配置</span>
             {def.supportsBaseUrl && <span>base_url:{status?.has_base_url ? '已设置' : '默认'}</span>}
           </div>
+        ) : platformDefault ? (
+          <div className="mt-1 text-xs text-slate-500">
+            使用<b>平台全局{status?.platform_auth_type ? authTypeLabel(status.platform_auth_type) : '订阅'}</b>,该 provider 的 agent 开箱即用;如需用本企业自己的凭据,可<b>覆盖</b>。
+          </div>
         ) : (
-          <div className="mt-1 text-xs text-slate-400">尚未为该 provider 配置凭据。</div>
+          <div className="mt-1 text-xs text-slate-400">尚未为该 provider 配置凭据,相关 agent 暂不可用。</div>
         )}
       </div>
       {canManage && (
@@ -209,7 +224,7 @@ function ProviderRow({ def, status, canManage, onConfigure, onClear }: {
             onClick={() => onConfigure(def)}
             className="text-xs font-medium text-slate-500 hover:text-[#4F46E5] px-2 py-1 rounded-lg hover:bg-[#EEF0FF] transition-colors"
           >
-            {configured ? '修改' : '配置'}
+            {configured ? '修改' : platformDefault ? '覆盖' : '配置'}
           </button>
           {configured && (
             <button

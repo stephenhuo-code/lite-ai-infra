@@ -30,6 +30,9 @@ def _env(monkeypatch, store_dir):
     monkeypatch.setenv("BFF_REDIRECT_URI", "http://gw/auth/callback")
     # ★ 文件存储指向临时目录 —— 绝不碰真 secrets/。
     monkeypatch.setenv("MODEL_CONFIG_DIR", str(store_dir))
+    # 平台默认(claude 全局订阅)探测指向不存在的路径 → 默认 platform_default=False,测试确定性;
+    # 需要平台默认的用例自行覆盖此 env 指向真文件(绝不读仓库真 secrets/omnigent.token)。
+    monkeypatch.setenv("PLATFORM_ANTHROPIC_TOKEN_FILE", str(store_dir / "no-platform-token"))
 
 
 def _claims_for(*, sub, org, roles):
@@ -215,9 +218,48 @@ def test_get_returns_status_no_secrets(monkeypatch, tmp_path):
     # 未配的 provider
     assert by["anthropic"]["configured"] is False
     assert by["anthropic"]["auth_type"] is None
-    # 状态字段里不含 value / 任何密钥字段
+    # 状态字段里不含 value / 任何密钥字段(仅状态/元数据,无密钥值)
     for st in r.json()["providers"]:
-        assert set(st.keys()) == {"provider", "configured", "auth_type", "has_base_url"}
+        assert set(st.keys()) == {"provider", "configured", "auth_type",
+                                  "has_base_url", "platform_default", "platform_auth_type"}
+
+
+# ===== (3b) 平台默认(claude 全局订阅)状态 =====
+
+def test_anthropic_platform_default_when_token_file_present(monkeypatch, tmp_path):
+    # 本企业未配 anthropic,但平台有全局订阅(token 文件存在非空)→ platform_default=True(agent 可跑)。
+    tok = tmp_path / "platform.token"
+    tok.write_text("sk-ant-oat-platform\n")
+    c = TestClient(_app(monkeypatch, tmp_path, claims_fn=ADMIN_A))
+    # 在 _app(内含 _env,会重设该 env)之后再指向真 token 文件;状态在请求时实时读取。
+    monkeypatch.setenv("PLATFORM_ANTHROPIC_TOKEN_FILE", str(tok))
+    r = c.get("/v1/ws/model-config", cookies=_ck())
+    assert r.status_code == 200, r.text
+    by = {p["provider"]: p for p in r.json()["providers"]}
+    an = by["anthropic"]
+    assert an["configured"] is False           # 本企业未单独配
+    assert an["platform_default"] is True       # 但平台默认可用
+    assert an["platform_auth_type"] == "subscription"
+    # 平台 token 值绝不外泄到响应
+    assert "sk-ant-oat-platform" not in r.text
+    # 其它 provider 无平台默认
+    assert by["openai"]["platform_default"] is False
+    assert by["gemini"]["platform_default"] is False
+
+
+def test_enterprise_config_overrides_platform_default(monkeypatch, tmp_path):
+    # 平台有全局订阅,但本企业配了自己的 anthropic → configured=True 覆盖,platform_default 归 False。
+    tok = tmp_path / "platform.token"
+    tok.write_text("sk-ant-oat-platform")
+    c = TestClient(_app(monkeypatch, tmp_path, claims_fn=ADMIN_A))
+    monkeypatch.setenv("PLATFORM_ANTHROPIC_TOKEN_FILE", str(tok))
+    c.put("/v1/ws/model-config/anthropic", cookies=_ck(), headers=_hdr(),
+          json={"auth_type": "api_key", "value": "sk-entA-own"})
+    r = c.get("/v1/ws/model-config", cookies=_ck())
+    an = {p["provider"]: p for p in r.json()["providers"]}["anthropic"]
+    assert an["configured"] is True
+    assert an["platform_default"] is False       # 企业配置覆盖平台默认
+    assert an["auth_type"] == "api_key"
 
 
 # ===== (4) 跨企业:只碰自己 alias.json =====

@@ -10,12 +10,15 @@ import { api } from './client'
 // auth 类型:subscription = 登录/订阅 token;api_key = API 密钥。每 provider 存一种(设一个替换另一个)。
 export type AuthType = 'subscription' | 'api_key'
 
-// 单 provider 状态(GET 返回)。configured=是否已配;configured 时带 auth_type + has_base_url。
+// 单 provider 状态(GET 返回)。三态:本企业已配(configured)> 平台默认(platform_default)> 未配置。
+// configured=本企业单独配了;platform_default=本企业没配、但平台有全局默认(如 claude 订阅)可用。
 export interface ProviderStatus {
   provider: string
   configured: boolean
   auth_type?: AuthType | null
   has_base_url?: boolean
+  platform_default?: boolean
+  platform_auth_type?: AuthType | null
 }
 
 // 设置入参(PUT body)。value=密钥/token 字面值(password 输入);base_url 仅支持的 provider 可带。
