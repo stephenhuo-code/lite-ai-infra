@@ -8,7 +8,7 @@ import { useOrgs } from '../auth/useOrgs'
 // 顶栏不显示企业名:后端无 enterprise_name 字段(vN+ 缺口),不假装显示企业名,
 // 也不保留死 prop。折叠/登出/导航行为保持不动。
 
-type NavItem = { to: string; label: string; group?: string; icon: React.ReactNode }
+type NavItem = { to: string; label: string; group?: string; icon: React.ReactNode; adminOnly?: boolean }
 
 const NAV: NavItem[] = [
   { to: '/datasets', label: '数据集', group: '数据', icon: (
@@ -25,6 +25,9 @@ const NAV: NavItem[] = [
   ) },
   { to: '/agents', label: '智能体库', group: '工作台', icon: (
     <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 7V5a3 3 0 016 0v2M9 13h.01M15 13h.01"/></svg>
+  ) },
+  { to: '/model-config', label: '模型配置', adminOnly: true, icon: (
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 010-4h.09A1.65 1.65 0 004.6 8a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 3.6h.09A1.65 1.65 0 0011 2.09V2a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0021.9 8h.01a1.65 1.65 0 001.5 1H23a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
   ) },
   { to: '/workspace', label: 'Workspace', icon: (
     <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
@@ -73,6 +76,9 @@ export function Shell() {
   const location = useLocation()
   // 已加载且无企业成员且非平台管理员 → 待分配态(数据页拦截,/account 放行)。
   const noEnterprise = !loading && !!orgs && (orgs.memberships?.length ?? 0) === 0 && !orgs.is_platform_admin
+  // 企业管理员:任一 membership.role === 'enterprise-admin'。adminOnly 导航项(模型配置)仅其可见(仅 UX 门,服务端独立强制)。
+  const isEnterpriseAdmin = !!orgs?.memberships?.some(m => m.role === 'enterprise-admin')
+  const navItems = NAV.filter(item => !item.adminOnly || isEnterpriseAdmin)
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800">
@@ -98,7 +104,7 @@ export function Shell() {
         </div>
 
         <nav className="p-3.5 space-y-1 flex-1">
-          {NAV.map(item => (
+          {navItems.map(item => (
             <div key={item.to}>
               {item.group && !collapsed && (
                 <p className="px-3 pt-4 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider first:pt-2">{item.group}</p>

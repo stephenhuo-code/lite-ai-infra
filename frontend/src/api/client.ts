@@ -18,4 +18,5 @@ export const api = {
   get: (p: string) => req('GET', p),
   post: (p: string, b?: unknown) => req('POST', p, b),
   put: (p: string, b?: unknown) => req('PUT', p, b),
+  delete: (p: string) => req('DELETE', p),
 }

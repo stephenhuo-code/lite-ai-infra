@@ -5,6 +5,7 @@ import { Agents } from './pages/Agents'
 import { Catalog } from './pages/Catalog'
 import { CreateJob } from './pages/CreateJob'
 import { Datasets } from './pages/Datasets'
+import { ModelConfig } from './pages/ModelConfig'
 import { Pipelines } from './pages/Pipelines'
 import { Workspace } from './pages/Workspace'
 
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/pipelines" element={<Pipelines />} />
         <Route path="/create" element={<CreateJob />} />
         <Route path="/agents" element={<Agents />} />
+        <Route path="/model-config" element={<ModelConfig />} />
         <Route path="/workspace" element={<Workspace />} />
         <Route path="/account" element={<Account />} />
         <Route path="*" element={<Navigate to="/datasets" replace />} />

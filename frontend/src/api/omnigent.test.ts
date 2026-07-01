@@ -65,8 +65,8 @@ it('createAgent POST body:trim + harness 默认 claude-native + 省略空可选�
   expect('description' in body).toBe(false)
 })
 
-// createAgent:SDK harness 透传 harness + api_key + base_url(去空白)。
-it('createAgent 透传 harness/api_key/base_url(SDK harness)', async () => {
+// createAgent:透传 harness(去空白);凭据不随 agent 走,body 无 api_key/base_url。
+it('createAgent 透传 harness,body 无 api_key/base_url', async () => {
   let body: any = null
   let calledUrl = ''
   let calledMethod = ''
@@ -75,30 +75,30 @@ it('createAgent 透传 harness/api_key/base_url(SDK harness)', async () => {
     body = JSON.parse(init.body)
     return new Response(JSON.stringify({ id: 'ag_new', name: body.name }), { status: 200 })
   })
-  await createAgent({ name: 'sdk助手', harness: 'claude-sdk', api_key: '  sk-abc  ', base_url: ' https://x.test ' })
+  await createAgent({ name: 'sdk助手', harness: 'claude-sdk' })
   expect(calledUrl).toBe('/v1/ws/agents')
   expect(calledMethod).toBe('POST')
   expect(body.harness).toBe('claude-sdk')
-  expect(body.api_key).toBe('sk-abc')
-  expect(body.base_url).toBe('https://x.test')
+  expect('api_key' in body).toBe(false)
+  expect('base_url' in body).toBe(false)
 })
 
-// updateAgent:PUT /v1/ws/agents/{id},body 与 create 同形(trim + 默认 harness)。
-it('updateAgent PUT 到 /v1/ws/agents/{id} 且 body 同形', async () => {
+// updateAgent:PUT /v1/ws/agents/{id},body 与 create 同形(trim + 默认 harness),无凭据字段。
+it('updateAgent PUT 到 /v1/ws/agents/{id} 且 body 同形(无 api_key)', async () => {
   let body: any = null
   let calledUrl = ''
   let calledMethod = ''
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (u: any, init?: any) => {
     calledUrl = String(u); calledMethod = init?.method
     body = JSON.parse(init.body)
-    return new Response(JSON.stringify({ id: 'ag1', name: body.name, has_api_key: true }), { status: 200 })
+    return new Response(JSON.stringify({ id: 'ag1', name: body.name }), { status: 200 })
   })
-  await updateAgent('ag 1', { name: ' 改名 ', harness: 'codex', api_key: 'sk-z' })
+  await updateAgent('ag 1', { name: ' 改名 ', harness: 'codex' })
   expect(calledUrl).toBe('/v1/ws/agents/ag%201') // id 经 encodeURIComponent
   expect(calledMethod).toBe('PUT')
   expect(body.name).toBe('改名')
   expect(body.harness).toBe('codex')
-  expect(body.api_key).toBe('sk-z')
+  expect('api_key' in body).toBe(false)
 })
 
 it('忽略非 text 类型的 content,缺 content 视作空文本', () => {

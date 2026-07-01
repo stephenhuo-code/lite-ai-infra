@@ -2,9 +2,9 @@ import { it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { CreateAgentModal } from './CreateAgentModal'
 
-// 新建/编辑弹窗:harness 下拉 + 条件 API Key 字段 + 客户端校验镜像服务端门 +
-// 双模(create/edit,edit 破坏性覆盖告警 + 预填 name/harness + 走 PUT)。
-// POST/PUT 经 fetch mock 验证。
+// 新建/编辑弹窗:名字(必填)+ harness 下拉 + 提示词/模型(可选)。
+// 凭据不再随 agent 走(改由「模型配置」统一管),故【无 API Key 字段】。
+// 双模(create/edit,edit 破坏性覆盖告警 + 预填 name/harness + 走 PUT)。POST/PUT 经 fetch mock 验证。
 
 let lastBody: any = null
 let lastUrl = ''
@@ -20,56 +20,44 @@ beforeEach(() => {
 })
 afterEach(() => { vi.restoreAllMocks() })
 
-it('默认 claude-native:隐藏 API Key 字段', () => {
+it('表单不含 API Key / Base URL 字段(凭据走「模型配置」)', () => {
   render(<CreateAgentModal onClose={() => {}} onDone={() => {}} />)
+  expect(screen.queryByLabelText('API Key *')).toBeNull()
+  expect(screen.queryByLabelText(/Base URL/)).toBeNull()
+})
+
+it('选任一 SDK harness 仍不出现 API Key 字段', () => {
+  render(<CreateAgentModal onClose={() => {}} onDone={() => {}} />)
+  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'codex' } })
   expect(screen.queryByLabelText('API Key *')).toBeNull()
 })
 
-it('选 SDK harness 显示 API Key 字段(password 型)', () => {
-  render(<CreateAgentModal onClose={() => {}} onDone={() => {}} />)
-  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'claude-sdk' } })
-  const key = screen.getByLabelText('API Key *') as HTMLInputElement
-  expect(key).toBeTruthy()
-  expect(key.type).toBe('password') // 红线:password 型
-})
-
-it('SDK harness 缺 key:阻止提交(不调 createAgent)+ 提示', async () => {
-  render(<CreateAgentModal onClose={() => {}} onDone={() => {}} />)
-  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'sdk助手' } })
-  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'claude-sdk' } })
-  fireEvent.click(screen.getByText('创建'))
-  await waitFor(() => expect(screen.getByText(/请填写/)).toBeTruthy())
-  expect(lastBody).toBeNull() // 未发起请求
-})
-
-it('claude-sdk + key:调 createAgent 带 {harness:claude-sdk, api_key}', async () => {
+it('创建:调 createAgent(POST),body 无 api_key/base_url', async () => {
   const onDone = vi.fn()
   render(<CreateAgentModal onClose={() => {}} onDone={onDone} />)
-  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'sdk助手' } })
-  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'claude-sdk' } })
-  fireEvent.change(screen.getByLabelText('API Key *'), { target: { value: 'sk-real-key' } })
+  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'codex助手' } })
+  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'codex' } })
   fireEvent.click(screen.getByText('创建'))
   await waitFor(() => expect(onDone).toHaveBeenCalled())
   expect(lastMethod).toBe('POST')
-  expect(lastBody.harness).toBe('claude-sdk')
-  expect(lastBody.api_key).toBe('sk-real-key')
+  expect(lastBody.harness).toBe('codex')
+  expect('api_key' in lastBody).toBe(false)
+  expect('base_url' in lastBody).toBe(false)
 })
 
-it('${SECRET} 形式 key:客户端拦截 + 友好提示(不发请求)', async () => {
+it('名字为空:创建按钮禁用,点击不发请求', async () => {
   render(<CreateAgentModal onClose={() => {}} onDone={() => {}} />)
-  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'sdk助手' } })
-  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'claude-sdk' } })
-  fireEvent.change(screen.getByLabelText('API Key *'), { target: { value: '${SECRET}' } })
-  fireEvent.click(screen.getByText('创建'))
-  await waitFor(() => expect(screen.getByText(/变量引用/)).toBeTruthy())
+  const btn = screen.getByText('创建') as HTMLButtonElement
+  expect(btn.disabled).toBe(true)
+  fireEvent.click(btn)
+  await new Promise(r => setTimeout(r, 0))
   expect(lastBody).toBeNull()
 })
 
-it('claude-native:不下发 api_key(切回隐藏后)', async () => {
+it('claude-native:提交 body 无 api_key', async () => {
   const onDone = vi.fn()
   render(<CreateAgentModal onClose={() => {}} onDone={onDone} />)
   fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: '原生助手' } })
-  // 默认 claude-native
   fireEvent.click(screen.getByText('创建'))
   await waitFor(() => expect(onDone).toHaveBeenCalled())
   expect(lastBody.harness).toBe('claude-native')
@@ -108,4 +96,5 @@ it('编辑模式:提交走 PUT /v1/ws/agents/{id}', async () => {
   expect(lastMethod).toBe('PUT')
   expect(lastUrl).toBe('/v1/ws/agents/ag1')
   expect(lastBody.name).toBe('客服助手V2')
+  expect('api_key' in lastBody).toBe(false)
 })

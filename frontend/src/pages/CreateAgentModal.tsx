@@ -3,31 +3,21 @@ import { createAgent, updateAgent, type LibraryAgent } from '../api/omnigent'
 
 // 新建/编辑智能体弹窗(智能体库 / US2 · ADR-027)。仅企业管理员可见入口;服务端 can() 兜底。
 // 字段:名字(必填)+ 系统提示词(可选)+ 模型(可选)+ harness(基底)。
-// harness ∈ claude-native(默认,平台全局订阅,无需 key)| claude-sdk | codex | qwen | pi
-// (后四个为 SDK harness,需自带 api_key + 可选 base_url)。
-// 服务端门:SDK harness 缺 key → 400;claude-native 带 key → 400;key 含 ${}/$VAR → 400。
-// 本弹窗在客户端先行校验,避免用户撞裸 400。
+// harness ∈ claude-native(默认)| claude-sdk | codex | qwen | pi。
+// 凭据不再随 agent 走 —— 模型凭据由企业管理员在「模型配置」页统一配(ADR-028),
+// 按 harness 的 provider 自动注入本企业沙箱。故此弹窗无 API Key/Base URL 字段。
 //
 // 双模:create | edit。edit 仅能预填 name + harness(BFF 列表不回传其余字段),
-// 故 edit 为破坏性覆盖 —— 留空的提示词/模型/key 会被清除,需醒目告警。
+// 故 edit 为破坏性覆盖 —— 留空的提示词/模型会被清除,需醒目告警。
 // 视觉照 UploadModal(靛蓝 #6366F1)。
 
 const HARNESSES = [
-  { value: 'claude-native', label: 'claude-native(默认)', hint: '平台已注入全局共享订阅,无需你自己的 API key。', needsKey: false },
-  { value: 'claude-sdk', label: 'claude-sdk', hint: '通过 Anthropic SDK 调用,需你自己的 API key。', needsKey: true },
-  { value: 'codex', label: 'codex', hint: 'OpenAI Codex 基底,需你自己的 API key。', needsKey: true },
-  { value: 'qwen', label: 'qwen', hint: '通义千问基底,需你自己的 API key。', needsKey: true },
-  { value: 'pi', label: 'pi', hint: 'Pi 基底,需你自己的 API key。', needsKey: true },
+  { value: 'claude-native', label: 'claude-native(默认)', hint: 'Anthropic 原生基底。模型凭据在「模型配置」页统一管理。' },
+  { value: 'claude-sdk', label: 'claude-sdk', hint: '通过 Anthropic SDK 调用。模型凭据在「模型配置」页统一管理。' },
+  { value: 'codex', label: 'codex', hint: 'OpenAI Codex 基底。模型凭据在「模型配置」页统一管理。' },
+  { value: 'qwen', label: 'qwen', hint: '通义千问基底。模型凭据在「模型配置」页统一管理。' },
+  { value: 'pi', label: 'pi', hint: 'Pi 基底。模型凭据在「模型配置」页统一管理。' },
 ] as const
-
-function needsKey(harness: string): boolean {
-  return HARNESSES.find(h => h.value === harness)?.needsKey ?? false
-}
-
-// 形似变量引用的 key(${FOO} 或 $FOO)——服务端会 400 拒。前端先拦,给友好提示。
-function looksLikeVarRef(key: string): boolean {
-  return /\$\{|\$[A-Za-z_]/.test(key)
-}
 
 type Props = {
   onClose: () => void
@@ -43,7 +33,7 @@ function errMessage(e: unknown, mode: 'create' | 'edit'): string {
   const msg = e instanceof Error ? e.message : String(e)
   const verb = mode === 'edit' ? '保存' : '创建'
   if (msg === '403') return `你没有${verb === '保存' ? '编辑' : '创建'}智能体的权限(需企业管理员)。`
-  if (msg === '400') return `${verb}失败:字段无效(名字 / API key / 基底配置),请检查后再试。`
+  if (msg === '400') return `${verb}失败:字段无效(名字 / 基底配置),请检查后再试。`
   if (msg === '409') return `${verb}失败:同企业内已存在同名智能体。`
   return `${verb}失败:${msg}`
 }
@@ -54,37 +44,16 @@ export function CreateAgentModal({ onClose, onDone, mode = 'create', agent }: Pr
   const [instructions, setInstructions] = useState('')
   const [model, setModel] = useState('')
   const [harness, setHarness] = useState(isEdit ? (agent?.harness ?? 'claude-native') : 'claude-native')
-  const [apiKey, setApiKey] = useState('')
-  const [baseUrl, setBaseUrl] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
   const [err, setErr] = useState('')
 
-  const showCreds = needsKey(harness)
   const canSubmit = name.trim() !== '' && phase !== 'submitting'
 
-  // 客户端前置校验:返回错误文案(null = 通过)。镜像服务端门。
-  function validate(): string | null {
-    if (name.trim() === '') return '请填写名字。'
-    if (needsKey(harness)) {
-      if (apiKey.trim() === '') return `该 harness(${harness})需要你自己的 API key,请填写。`
-      if (looksLikeVarRef(apiKey)) return 'API key 不能是 ${VAR} / $VAR 形式的变量引用,请填入真实的密钥值。'
-    }
-    return null
-  }
-
   async function submit() {
-    const v = validate()
-    if (v) { setErr(v); setPhase('error'); return }
+    if (name.trim() === '') { setErr('请填写名字。'); setPhase('error'); return }
     setPhase('submitting')
     setErr('')
-    // claude-native 不下发 key(服务端会 400);SDK harness 才带 key/base_url。
-    const input = {
-      name,
-      instructions,
-      model,
-      harness,
-      ...(showCreds ? { api_key: apiKey, base_url: baseUrl } : {}),
-    }
+    const input = { name, instructions, model, harness }
     try {
       if (isEdit && agent) await updateAgent(agent.id, input)
       else await createAgent(input)
@@ -117,7 +86,7 @@ export function CreateAgentModal({ onClose, onDone, mode = 'create', agent }: Pr
         {isEdit && (
           <div className="mb-5 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
             编辑会用下面填写的内容<strong>整体覆盖</strong>该智能体。
-            <strong>留空的提示词 / 模型 / API Key 将被清除</strong>——要保留请重新填写。
+            <strong>留空的提示词 / 模型将被清除</strong>——要保留请重新填写。
           </div>
         )}
 
@@ -157,7 +126,7 @@ export function CreateAgentModal({ onClose, onDone, mode = 'create', agent }: Pr
           />
         </div>
 
-        {/* harness 选择:claude-native 默认无需 key;其余 SDK harness 需自带 key */}
+        {/* harness 选择:凭据统一走「模型配置」,此处不再填 key */}
         <div className="mb-4">
           <label className="block text-xs font-medium text-slate-600 mb-1.5" htmlFor="ag-harness">基底(harness)</label>
           <select
@@ -171,35 +140,6 @@ export function CreateAgentModal({ onClose, onDone, mode = 'create', agent }: Pr
           </select>
           <p className="text-[11px] text-slate-400 mt-1.5">{HARNESSES.find(h => h.value === harness)?.hint}</p>
         </div>
-
-        {/* 条件凭据字段:仅 SDK harness 显示。key 用 password 型;base_url 可选 */}
-        {showCreds && (
-          <>
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-slate-600 mb-1.5" htmlFor="ag-api-key">API Key *</label>
-              <input
-                id="ag-api-key"
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="sk-..."
-                autoComplete="off"
-                className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-[#6366F1] outline-none"
-              />
-              <p className="text-[11px] text-slate-400 mt-1.5">该 harness 需要你自己的 API key{isEdit ? '(留空将清除已存的 key)' : ''}</p>
-            </div>
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-slate-600 mb-1.5" htmlFor="ag-base-url">Base URL(可选)</label>
-              <input
-                id="ag-base-url"
-                value={baseUrl}
-                onChange={e => setBaseUrl(e.target.value)}
-                placeholder="留空用该 harness 默认 endpoint"
-                className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-[#6366F1] outline-none"
-              />
-            </div>
-          </>
-        )}
 
         {phase === 'error' && (
           <div className="mt-3.5 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
