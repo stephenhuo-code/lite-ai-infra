@@ -16,6 +16,7 @@ PADM   = ([], ["platform-admin"])            # 平台管理员(无企业)
 JOB = lambda **k: Resource(kind="job", enterprise_id="e-0001", **k)
 DATASET = lambda **k: Resource(kind="dataset", enterprise_id="e-0001", **k)
 AGENT = lambda **k: Resource(kind="agent", enterprise_id="e-0001", **k)
+MODELCFG = lambda **k: Resource(kind="model-config", enterprise_id="e-0001", **k)
 
 @pytest.mark.parametrize("name,context,action,resource,expect_allow,reason_sub", [
   # 企业硬隔离:alice(e-0001) 访 e-0002 资源 → deny
@@ -55,6 +56,19 @@ AGENT = lambda **k: Resource(kind="agent", enterprise_id="e-0001", **k)
   ("AGENT-DELETE-EADM-OK",     ctx(EADMIN), "agent:delete",    AGENT(owner=None), True,  ""),
   # 跨企业:e-0001 的 enterprise-admin 对 e-0002 的 agent → 仍 deny(企业硬隔离先于角色门)
   ("AGENT-CREATE-XENT", ctx(EADMIN), "agent:create", Resource(kind="agent", enterprise_id="e-0002", owner=None), False, "cross-enterprise"),
+
+  # 模型配置(ADR-028):read/write/delete 须 enterprise-admin(企业级资源 owner=None);
+  # 状态读也 admin-only(配置属管理员)。member deny / platform-admin deny / 跨企业 deny。
+  ("MODELCFG-READ-EADM-OK",    ctx(EADMIN), "model-config:read",   MODELCFG(owner=None), True,  ""),
+  ("MODELCFG-WRITE-EADM-OK",   ctx(EADMIN), "model-config:write",  MODELCFG(owner=None), True,  ""),
+  ("MODELCFG-DELETE-EADM-OK",  ctx(EADMIN), "model-config:delete", MODELCFG(owner=None), True,  ""),
+  ("MODELCFG-READ-MEMBER-DENY",  ctx(ALICE), "model-config:read",  MODELCFG(owner=None), False, "enterprise-admin"),
+  ("MODELCFG-WRITE-MEMBER-DENY", ctx(ALICE), "model-config:write", MODELCFG(owner=None), False, "enterprise-admin"),
+  ("MODELCFG-DELETE-MEMBER-DENY",ctx(ALICE), "model-config:delete",MODELCFG(owner=None), False, "enterprise-admin"),
+  # platform-admin 走业务路径 → deny(is_platform_admin 早返回,先于 model-config 规则)
+  ("MODELCFG-PADM-DENY", ctx(PADM), "model-config:write", MODELCFG(owner=None), False, "/admin/*"),
+  # 跨企业:e-0001 的 admin 写 e-0002 的模型配置 → deny(企业硬隔离先于角色门)
+  ("MODELCFG-WRITE-XENT", ctx(EADMIN), "model-config:write", Resource(kind="model-config", enterprise_id="e-0002", owner=None), False, "cross-enterprise"),
 ])
 def test_can_owner_matrix(name, context, action, resource, expect_allow, reason_sub):
     d = can(context, action, resource)

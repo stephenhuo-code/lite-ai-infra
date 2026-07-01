@@ -29,6 +29,11 @@ def can(ctx: Context, action: str, resource: Resource) -> Decision:
     if action in ("agent:create", "agent:configure", "agent:delete") and not ent_admin:
         return Decision(False, "agent create/configure/delete requires enterprise-admin")
 
+    # 模型配置(ADR-028,每企业统一管模型凭据):读/写/删本企业模型凭据须 enterprise-admin。
+    # 配置(含"已配/未配"状态)= 企业管理员专属(owner=None 的企业级资源);读也须 admin(镜像 agent:* 门)。
+    if action in ("model-config:read", "model-config:write", "model-config:delete") and not ent_admin:
+        return Decision(False, "model-config read/write/delete requires enterprise-admin")
+
     # owner-only(v1):owner 或 enterprise-admin;group 访问/跨用户共享 → Cerbos v2。
     # owner=None(资源无主,如 S0 stub 解析不出 owner)放行本企业成员——企业隔离已强制。
     is_owner = resource.owner in (None, ctx.user)

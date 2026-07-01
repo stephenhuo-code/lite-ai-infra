@@ -326,7 +326,31 @@ def test_session_create_allows_own_agent(monkeypatch):
     posts = [q for q in cap.requests if q.url.path == "/v1/sessions" and q.method == "POST"]
     assert len(posts) == 1
     body = json.loads(posts[0].content)
-    assert body == {"agent_id": AGENTA_ID, "host_type": "managed"}
+    # ★ 隔离命门(ADR-028):labels.enterprise_id 由 BFF 据【会话】alias 服务端构造 == ent-aaa。
+    assert body == {"agent_id": AGENTA_ID, "host_type": "managed",
+                    "labels": {"enterprise_id": ENTA}}
+
+
+def test_session_create_ignores_forged_enterprise_label(monkeypatch):
+    # ★★ 隔离命门(ADR-028 红线 §1):客户端塞 labels:{enterprise_id: 他企业} 试图把别家凭据
+    # 注进自己沙箱(窃取)。BFF 绝不转发/合并客户端 labels —— 打到 omnigent 的 labels.enterprise_id
+    # 必是【会话】的 alias(ent-aaa),绝非伪造的 "ent-bbb" / 任意客户端 labels。
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=MEMBER_A))  # 会话真企业 = ent-aaa
+    r = c.post("/v1/ws/sessions", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"agent_id": AGENTA_ID,
+                     "labels": {"enterprise_id": ENTB, "cost_control.x": "y", "evil": "1"}})
+    assert r.status_code == 200, r.text
+    posts = [q for q in cap.requests if q.url.path == "/v1/sessions" and q.method == "POST"]
+    assert len(posts) == 1
+    body = json.loads(posts[0].content)
+    # 伪造的 enterprise_id 被丢弃,只带会话真 alias;客户端其它 labels 也绝不透传。
+    assert body["labels"] == {"enterprise_id": ENTA}
+    assert body["labels"]["enterprise_id"] == ENTA
+    assert body["labels"]["enterprise_id"] != ENTB
+    assert "evil" not in body["labels"]
+    assert "cost_control.x" not in body["labels"]
 
 
 def test_session_create_allows_builtin_agent(monkeypatch):

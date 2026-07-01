@@ -521,7 +521,12 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         if match is None or not _visible_to(match.get("name", ""), alias):
             # 未知 / 他企业 agent_id → 拒(绝不创建 managed 会话)
             return JSONResponse(status_code=403, content={"reason": "agent not available"})
-        payload = {"agent_id": agent_id, "host_type": "managed"}
+        # ★ 隔离命门(ADR-028):labels.enterprise_id **只**取【已认证会话】的 alias,服务端构造,
+        # 绝不合并/转发客户端的 labels。fork 按此 label 注入本企业模型凭据;若转发客户端
+        # labels:{enterprise_id:victim},用户即可把别家凭据注进自己的沙箱(窃取)→ 故硬编本会话 alias。
+        # alias 已过 _resolve_ctx 的 _ALIAS_RE guard(无 "_"、纯 ASCII 字母数字+连字符)。
+        payload = {"agent_id": agent_id, "host_type": "managed",
+                   "labels": {"enterprise_id": alias}}
         return _call(lambda cli: cli.post("/v1/sessions", json=payload, headers=_headers(email)))
 
     @router.post("/v1/ws/sessions/{session_id}/turn")

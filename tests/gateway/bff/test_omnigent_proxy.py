@@ -113,7 +113,9 @@ def test_managed_create_is_json_not_multipart(monkeypatch):
     assert "multipart" not in ctype
     import json as _json
     body = _json.loads(req.content)
-    assert body == {"agent_id": AGENT_ID, "host_type": "managed"}
+    # labels.enterprise_id 由 BFF 据【会话】alias(ent-demo)服务端构造(ADR-028 隔离命门)。
+    assert body == {"agent_id": AGENT_ID, "host_type": "managed",
+                    "labels": {"enterprise_id": "ent-demo"}}
     assert "host_id" not in body
     assert req.headers.get("x-forwarded-email") == "alice@example.com"
 
