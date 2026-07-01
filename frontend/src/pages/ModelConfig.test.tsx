@@ -63,11 +63,25 @@ it('已配置的 provider:显 已配置徽标 + auth 类型,且【不渲染密�
   ])
   render(<ModelConfig />)
   const card = (await waitFor(() => screen.getByText('Anthropic (Claude)'))).closest('.rounded-2xl') as HTMLElement
-  expect(within(card).getByText('已配置')).toBeTruthy()
+  expect(within(card).getByText('本企业已配置')).toBeTruthy()
   expect(within(card).getByText(/订阅 token/)).toBeTruthy()
   // 密钥永不回显:掩码占位存在,页面无任何真实密钥文本
   expect(within(card).getByText(/••••••已配置/)).toBeTruthy()
   expect(document.body.textContent).not.toContain('sk-')
+})
+
+it('平台默认的 provider:显「平台默认」+「覆盖」,不误显未配置', async () => {
+  mockApis('enterprise-admin', [
+    { provider: 'anthropic', configured: false, auth_type: null, has_base_url: false,
+      platform_default: true, platform_auth_type: 'subscription' },
+  ])
+  render(<ModelConfig />)
+  const card = (await waitFor(() => screen.getByText('Anthropic (Claude)'))).closest('.rounded-2xl') as HTMLElement
+  expect(within(card).getByText('平台默认')).toBeTruthy()
+  expect(within(card).queryByText('未配置')).toBeNull()
+  // 未单独配置 → 操作按钮是「覆盖」而非「修改」;无「清除」(没有本企业凭据可清)
+  expect(within(card).getByRole('button', { name: '覆盖' })).toBeTruthy()
+  expect(within(card).queryByRole('button', { name: '清除' })).toBeNull()
 })
 
 it('保存 provider:调 PUT /v1/ws/model-config/{provider} body {auth_type, value}', async () => {
