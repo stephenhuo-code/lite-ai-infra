@@ -17,4 +17,15 @@ sandbox:
   docker:
     image: omnigent-host:dev
     network: omnigent-dev_default
-    env: [CLAUDE_CODE_OAUTH_TOKEN]   # 仅订阅 token,不注入 API key(否则 apiKeyHelper 冲突)
+    # M1 每企业凭据：env 只列**名字**(所有支持的 provider env 名)。每个名字的**值**由 launcher
+    # 按会话企业解析：<OMNIGENT_MODEL_CREDENTIALS_DIR>/<enterprise_id>.json 里有则用文件值(每企业),
+    # 否则回退全局 server env;两处都无值的名字**不注入**(不产生空 env)。故这里全列无害:
+    # 没配的 provider 自然不注入,配了的按企业注入对应值。
+    env:
+      - CLAUDE_CODE_OAUTH_TOKEN   # Anthropic 订阅(claude-native/sdk/debby/polly)
+      - ANTHROPIC_API_KEY         # Anthropic API key(与订阅二选一)
+      - ANTHROPIC_BASE_URL        # Anthropic 网关覆盖(可选)
+      - OPENAI_API_KEY            # OpenAI/Codex/Qwen key
+      - OPENAI_BASE_URL           # OpenAI 网关覆盖(可选)
+      - CODEX_ACCESS_TOKEN        # Codex 订阅(与 OPENAI_API_KEY 二选一)
+      - GEMINI_API_KEY            # Gemini(antigravity)

@@ -33,11 +33,19 @@ services:
       # sandbox=docker：server 用挂进来的 docker.sock 起 managed host 容器（镜像/网络如下）。
       OMNIGENT_DOCKER_HOST_IMAGE: omnigent-host:dev
       OMNIGENT_DOCKER_NETWORK: omnigent-dev_default
-      # 仅注入订阅 token（apiKeyHelper 走订阅）；绝不注入 ANTHROPIC_API_KEY（会破坏订阅 token）。
+      # 全局回退凭据（无企业文件的企业用）：仅注入订阅 token（apiKeyHelper 走订阅）；
+      # 绝不注入 ANTHROPIC_API_KEY（会破坏订阅 token）。
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?need subscription token (export from secrets/omnigent.token)}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}   # 全局回退；主来源=每企业文件（M1）
+      # M1 每企业凭据：launcher 按会话 enterprise_id label 读 <dir>/<enterprise_id>.json 取值
+      # （文件优先，回退上面的全局 env），跨企业隔离。目录挂载见下方 volumes。
+      OMNIGENT_MODEL_CREDENTIALS_DIR: /config/model-credentials
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.yaml:/config.yaml:ro
+      # 每企业模型凭据（<enterprise_id>.json，name→value 扁平表）；只读挂载，值来自宿主
+      # gitignored 目录 secrets/model-config（BFF 写；绝不进 git）。
+      - ../../../secrets/model-config:/config/model-credentials:ro
       - omnigent-dev-data:/data
     ports: ["127.0.0.1:8900:8000"]
 # agent_id 来源（managed session create 需要）：server 启动时自动 seed 内置 agent（含 claude-native），
