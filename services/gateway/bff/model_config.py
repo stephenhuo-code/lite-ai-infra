@@ -67,7 +67,7 @@ def _store_root() -> Path:
     MODEL_CONFIG_DIR env 可覆盖(测试指向临时目录,绝不碰真 secrets/)。这与 omnigent 只读挂载的
     host 目录 secrets/model-config 是**同一个**。缺失则建(gitignored)。"""
     root = Path(os.getenv("MODEL_CONFIG_DIR", "secrets/model-config"))
-    root.mkdir(parents=True, exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)   # 0700:目录列表(=企业 alias 文件名)不世界可读(M2 审查 M-2)
     return root
 
 
@@ -92,8 +92,13 @@ def _write_creds(alias: str, creds: dict[str, str]) -> None:
     """原子写(temp + os.replace,镜像 raw_store):读者绝不见半写文件。0600 权限(含密钥)。"""
     p = _enterprise_file(alias)
     tmp = p.parent / f".{alias}.{os.getpid()}.tmp"
-    tmp.write_text(json.dumps(creds, ensure_ascii=False, indent=2))
-    os.chmod(tmp, 0o600)
+    # 一开始就以 0600 建 fd 再写(避免 write-then-chmod 的短暂 0644 窗口暴露密钥,M2 审查 M-1)
+    data = json.dumps(creds, ensure_ascii=False, indent=2).encode()
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
     os.replace(tmp, p)
 
 
