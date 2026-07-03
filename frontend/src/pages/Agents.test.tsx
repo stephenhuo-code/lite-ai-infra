@@ -155,18 +155,13 @@ it('删除二次确认取消 → 不发 DELETE', async () => {
   confirmSpy.mockRestore()
 })
 
-it('内置卡片「复制为本企业」→ create 弹窗预填名字副本 + 同基底', async () => {
+it('内置卡片无「删除」按钮(全局共享,不可删/不可就地改)', async () => {
   mockApis('enterprise-admin')
   render(<Agents />)
   await waitFor(() => expect(screen.getByText('claude-native-ui')).toBeTruthy())
-
   const builtinCard = screen.getByText('claude-native-ui').closest('.rounded-2xl') as HTMLElement
-  fireEvent.click(within(builtinCard).getByText('复制为本企业'))
-
-  // create 弹窗(非编辑):预填"<内置名> 副本",无覆盖告警
-  await waitFor(() =>
-    expect((screen.getByLabelText('名字 *') as HTMLInputElement).value).toBe('claude-native-ui 副本'))
-  expect(screen.queryByText(/整体覆盖/)).toBeNull()   // create 模式无编辑覆盖告警
+  expect(within(builtinCard).queryByText('删除')).toBeNull()
+  expect(within(builtinCard).queryByText('编辑')).toBeNull()
 })
 
 it('点「编辑」→ 编辑弹窗(预填 name/harness + 覆盖告警),提交走 PUT 后刷新', async () => {
