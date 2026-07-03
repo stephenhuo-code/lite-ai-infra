@@ -151,11 +151,17 @@ function ConfigModal({ def, status, onClose, onDone }: {
             <label className="block text-xs font-medium text-slate-600 mb-1.5" htmlFor="mc-base-url">Base URL(可选)</label>
             <input
               id="mc-base-url"
+              name="mc-base-url"
               value={baseUrl}
               onChange={e => setBaseUrl(e.target.value)}
-              placeholder="留空用该 provider 默认 endpoint"
+              placeholder="如 https://api.minimaxi.com/v1(留空用默认 endpoint)"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
               className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-[#6366F1] outline-none"
             />
+            <p className="text-[11px] text-slate-400 mt-1.5">OpenAI 兼容 provider(MiniMax/DeepSeek 等)在此填其 endpoint;留空则用官方默认。</p>
           </div>
         )}
 

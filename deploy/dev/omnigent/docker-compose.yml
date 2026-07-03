@@ -40,6 +40,12 @@ services:
       # M1 每企业凭据：launcher 按会话 enterprise_id label 读 <dir>/<enterprise_id>.json 取值
       # （文件优先，回退上面的全局 env），跨企业隔离。目录挂载见下方 volumes。
       OMNIGENT_MODEL_CREDENTIALS_DIR: /config/model-credentials
+      # openai-agents 接 OpenAI 兼容 provider(MiniMax/DeepSeek/vLLM…):它们只讲
+      # /chat/completions,而 openai-agents 默认走 /responses 会 404。全局设 0 = 用
+      # chat/completions(真 OpenAI GPT 也兼容)。该值经 sandbox.docker.env 注入 host 容器,
+      # 再由 OMNIGENT_RUNNER_ENV_PASSTHROUGH 让 host 转发给 runner(harness 在 runner 里读它)。
+      HARNESS_OPENAI_AGENTS_USE_RESPONSES: "0"
+      OMNIGENT_RUNNER_ENV_PASSTHROUGH: HARNESS_OPENAI_AGENTS_USE_RESPONSES
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config.yaml:/config.yaml:ro

@@ -400,18 +400,33 @@ def test_create_sdk_harness_with_api_key_emits_executor_auth(monkeypatch):
     assert "sk-x" not in r.text
 
 
-def test_create_sdk_harness_without_api_key_400_no_omnigent(monkeypatch):
+def test_create_harness_without_api_key_ok_creds_via_model_config(monkeypatch):
+    # ADR-028:凭据走「模型配置」env 注入,per-agent key 不再必填 → 无 key 也能建(不再 400)。
     cap = _Capture()
     sink = _FakeSink()
     c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A, sink=sink))
     r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
                headers={"X-CSRF-Token": "csrf-xyz"},
                json={"name": "SDK 助手", "harness": "codex"})
-    assert r.status_code == 400, r.text
-    assert "API key" in r.json()["reason"]
-    # SDK harness 没配 key → 建不出可用 agent,绝不打到 omnigent、不落审计
-    assert cap.requests == []
-    assert sink.events == []
+    assert r.status_code == 200, r.text
+    cfg = _unpack_bundle(_bundle_posts(cap)[0])
+    assert cfg["executor"]["config"]["harness"] == "codex"
+    # 无 per-agent key → bundle 不带 executor.auth(凭据由沙箱 env 注入)
+    assert "auth" not in cfg["executor"]
+
+
+def test_create_openai_agents_harness_with_model(monkeypatch):
+    # openai-agents:接 OpenAI 兼容 provider(MiniMax…),凭据走模型配置 env,无 per-agent key。
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.post("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"},
+               json={"name": "MiniMax 助手", "harness": "openai-agents", "model": "MiniMax-Text-01"})
+    assert r.status_code == 200, r.text
+    cfg = _unpack_bundle(_bundle_posts(cap)[0])
+    assert cfg["executor"]["config"]["harness"] == "openai-agents"
+    assert cfg["llm"]["model"] == "MiniMax-Text-01"
+    assert "auth" not in cfg["executor"]
 
 
 def test_create_rejects_env_ref_in_api_key(monkeypatch):

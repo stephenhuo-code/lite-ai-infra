@@ -45,6 +45,31 @@ it('创建:调 createAgent(POST),body 无 api_key/base_url', async () => {
   expect('base_url' in lastBody).toBe(false)
 })
 
+it('openai-agents:模型名必填 —— 未填时创建禁用/报错,不发请求', async () => {
+  render(<CreateAgentModal onClose={() => {}} onDone={() => {}} />)
+  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'MiniMax 助手' } })
+  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'openai-agents' } })
+  // 模型标签变必填(带 *),按钮禁用(未填模型)
+  expect(screen.getByLabelText('模型 *')).toBeTruthy()
+  const btn = screen.getByText('创建') as HTMLButtonElement
+  expect(btn.disabled).toBe(true)
+  fireEvent.click(btn)
+  await new Promise(r => setTimeout(r, 0))
+  expect(lastBody).toBeNull()
+})
+
+it('openai-agents:填了模型名 → 创建成功,body 带 harness+model', async () => {
+  const onDone = vi.fn()
+  render(<CreateAgentModal onClose={() => {}} onDone={onDone} />)
+  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'MiniMax 助手' } })
+  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'openai-agents' } })
+  fireEvent.change(screen.getByLabelText('模型 *'), { target: { value: 'MiniMax-Text-01' } })
+  fireEvent.click(screen.getByText('创建'))
+  await waitFor(() => expect(onDone).toHaveBeenCalled())
+  expect(lastBody.harness).toBe('openai-agents')
+  expect(lastBody.model).toBe('MiniMax-Text-01')
+})
+
 it('名字为空:创建按钮禁用,点击不发请求', async () => {
   render(<CreateAgentModal onClose={() => {}} onDone={() => {}} />)
   const btn = screen.getByText('创建') as HTMLButtonElement

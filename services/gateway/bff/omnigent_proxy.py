@@ -51,14 +51,19 @@ _ENT_SEP = "_"
 # "ent_foo" 的 agent(跨企业泄漏)。故对【已认证会话的 alias】强制 ^[a-zA-Z0-9-]+$
 # (ASCII 字母数字 + 连字符,无 "_" 无其它),不符则 fail-loud 拒(绝不静默错隔离)。
 _ALIAS_RE = re.compile(r"^[a-zA-Z0-9-]+$")
-# Harness 集合(ADR-027 §4'):
-#   - claude-native:用平台全局共享订阅(不读 executor.auth)→ 绝不需要也绝不接受 per-agent key。
-#   - SDK harness(claude-sdk/codex/qwen/pi):读 omnigent 原生 executor.auth → 必须配 per-agent api_key。
+# Harness 集合(ADR-028 取代 ADR-027 §4' 的 per-agent key):
+#   - 凭据统一由企业管理员在「模型配置」页配置,按 provider 注入本企业沙箱 env(claude-native
+#     用平台全局订阅;openai-agents/claude-sdk/qwen/pi 读注入的 OPENAI_*/ANTHROPIC_* env)。
+#   - 故 per-agent api_key **不再必填**(前端已去该字段);仅作未来"高级覆盖"保留(给了必须字面值)。
+#   - openai-agents:接 OpenAI 及兼容 provider(MiniMax/DeepSeek/vLLM…),从 env 读 OPENAI_API_KEY
+#     + OPENAI_BASE_URL(正是模型配置注入的)→ 是 API-key 接兼容 provider 的正确基底。
+#   - codex(codex-native):只认 ChatGPT 订阅登录(读 auth.json、剥离 OPENAI_API_KEY)→ 当前用
+#     API key 跑不通,选它需 ChatGPT 订阅(留待未来);不阻止创建,仅提示。
 _DEFAULT_HARNESS = "claude-native"
-# claude-native 用全局订阅(无 key);SDK harness 读 executor.auth(必须 key)。
 _NATIVE_HARNESSES = {"claude-native"}
-_SDK_HARNESSES = {"claude-sdk", "codex", "qwen", "pi"}
-_ALLOWED_HARNESSES = _NATIVE_HARNESSES | _SDK_HARNESSES
+# 凭据来自模型配置 env 注入(非 per-agent key)。openai-agents 为接 OpenAI 兼容 provider 的主基底。
+_ENV_CRED_HARNESSES = {"openai-agents", "claude-sdk", "codex", "qwen", "pi"}
+_ALLOWED_HARNESSES = _NATIVE_HARNESSES | _ENV_CRED_HARNESSES
 
 # fork 的安全白名单只接受 executor.auth 的【字面值】,任何 ${}/$VAR 引用都会被 fork 400 拒
 # (堵 expand_env 把 ${服务器密钥} 展开外泄)。BFF 先在本侧 fail-fast 拒掉引用——绝不把 fork
@@ -72,16 +77,14 @@ def _is_env_ref(value: str) -> bool:
 
 
 def _validate_credential(harness: str, api_key: str | None, base_url: str | None) -> str | None:
-    """校验 harness 与 per-agent 凭据组合;返回错误 reason(str)或 None(通过)。
-      - SDK harness(读 executor.auth):必须有 api_key,否则建不出可用 agent。
-      - claude-native(全局订阅,不读 auth):配 key 无用 → 禁(避免误以为生效)。
-      - api_key/base_url 必须字面值;含 ${}/$VAR 引用即拒(fork 会 400 + 外泄面)。"""
+    """校验 harness 与(可选的)per-agent 凭据组合;返回错误 reason(str)或 None(通过)。
+    ADR-028:凭据统一走「模型配置」env 注入,per-agent api_key **不再必填**(前端已去该字段)。
+      - api_key/base_url 若提供,必须字面值;含 ${}/$VAR 引用即拒(fork 会 400 + 外泄面)。
+      - claude-native(全局订阅,不读 executor.auth):配 key 无用 → 禁(避免误以为生效)。"""
     if api_key and _is_env_ref(api_key):
         return "api_key must be a literal value (no ${} / $VAR refs)"
     if base_url and _is_env_ref(base_url):
         return "base_url must be a literal value (no ${} / $VAR refs)"
-    if harness in _SDK_HARNESSES and not api_key:
-        return "this harness needs an API key"
     if harness in _NATIVE_HARNESSES and api_key:
         return "claude-native uses the global subscription; it does not accept a per-agent api_key"
     return None

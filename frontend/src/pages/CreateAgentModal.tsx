@@ -14,10 +14,14 @@ import { createAgent, updateAgent, type LibraryAgent } from '../api/omnigent'
 const HARNESSES = [
   { value: 'claude-native', label: 'claude-native(默认)', hint: 'Anthropic 原生基底。模型凭据在「模型配置」页统一管理。' },
   { value: 'claude-sdk', label: 'claude-sdk', hint: '通过 Anthropic SDK 调用。模型凭据在「模型配置」页统一管理。' },
-  { value: 'codex', label: 'codex', hint: 'OpenAI Codex 基底。模型凭据在「模型配置」页统一管理。' },
+  { value: 'openai-agents', label: 'openai-agents(OpenAI 兼容)', hint: 'OpenAI 及兼容 provider(MiniMax / DeepSeek / vLLM 等):在「模型配置」把 OpenAI 配成 API key + base_url,并在下方【模型】填该 provider 的模型名(如 MiniMax-Text-01)。' },
+  { value: 'codex', label: 'codex(ChatGPT 订阅)', hint: 'OpenAI Codex 原生基底。仅认 ChatGPT 订阅登录,不吃 API key;要用 API key 接 OpenAI 兼容 provider 请选 openai-agents。' },
   { value: 'qwen', label: 'qwen', hint: '通义千问基底。模型凭据在「模型配置」页统一管理。' },
   { value: 'pi', label: 'pi', hint: 'Pi 基底。模型凭据在「模型配置」页统一管理。' },
 ] as const
+
+// 需要显式填模型名的 harness(多模型基底:openai-agents 接兼容 provider 时模型名必填,否则 model=None 会失败)。
+const MODEL_REQUIRED_HARNESSES = new Set(['openai-agents'])
 
 type Props = {
   onClose: () => void
@@ -47,10 +51,15 @@ export function CreateAgentModal({ onClose, onDone, mode = 'create', agent }: Pr
   const [phase, setPhase] = useState<Phase>('idle')
   const [err, setErr] = useState('')
 
-  const canSubmit = name.trim() !== '' && phase !== 'submitting'
+  const modelRequired = MODEL_REQUIRED_HARNESSES.has(harness)
+  const canSubmit = name.trim() !== '' && phase !== 'submitting' && (!modelRequired || model.trim() !== '')
 
   async function submit() {
     if (name.trim() === '') { setErr('请填写名字。'); setPhase('error'); return }
+    if (modelRequired && model.trim() === '') {
+      setErr('该基底(openai-agents)需在【模型】填目标 provider 的模型名(如 MiniMax-Text-01),否则无法调用。')
+      setPhase('error'); return
+    }
     setPhase('submitting')
     setErr('')
     const input = { name, instructions, model, harness }
@@ -116,14 +125,17 @@ export function CreateAgentModal({ onClose, onDone, mode = 'create', agent }: Pr
         </div>
 
         <div className="mb-4">
-          <label className="block text-xs font-medium text-slate-600 mb-1.5" htmlFor="ag-model">模型(可选)</label>
+          <label className="block text-xs font-medium text-slate-600 mb-1.5" htmlFor="ag-model">模型{modelRequired ? ' *' : '(可选)'}</label>
           <input
             id="ag-model"
             value={model}
-            onChange={e => setModel(e.target.value)}
-            placeholder="留空用模板默认模型"
+            onChange={e => { setModel(e.target.value); if (phase === 'error') { setErr(''); setPhase('idle') } }}
+            placeholder={modelRequired ? '如 MiniMax-Text-01(该 provider 的模型名)' : '留空用模板默认模型'}
             className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-[#6366F1] outline-none"
           />
+          {modelRequired && (
+            <p className="text-[11px] text-slate-400 mt-1.5">openai-agents 需指定模型名;可在 provider 文档或其 /v1/models 查看可用模型。</p>
+          )}
         </div>
 
         {/* harness 选择:凭据统一走「模型配置」,此处不再填 key */}
