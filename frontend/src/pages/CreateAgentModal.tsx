@@ -28,6 +28,7 @@ type Props = {
   onDone: () => void // 成功后由父刷新列表
   mode?: 'create' | 'edit'
   agent?: LibraryAgent // edit 模式必传:提供 id + 预填 name/harness
+  initial?: { name?: string; harness?: string } // create 模式可选预填(如"复制为本企业"以内置为模板)
 }
 
 type Phase = 'idle' | 'submitting' | 'error'
@@ -42,12 +43,13 @@ function errMessage(e: unknown, mode: 'create' | 'edit'): string {
   return `${verb}失败:${msg}`
 }
 
-export function CreateAgentModal({ onClose, onDone, mode = 'create', agent }: Props) {
+export function CreateAgentModal({ onClose, onDone, mode = 'create', agent, initial }: Props) {
   const isEdit = mode === 'edit'
-  const [name, setName] = useState(isEdit ? (agent?.name ?? '') : '')
+  const [name, setName] = useState(isEdit ? (agent?.name ?? '') : (initial?.name ?? ''))
   const [instructions, setInstructions] = useState('')
   const [model, setModel] = useState('')
-  const [harness, setHarness] = useState(isEdit ? (agent?.harness ?? 'claude-native') : 'claude-native')
+  const [harness, setHarness] = useState(
+    isEdit ? (agent?.harness ?? 'claude-native') : (initial?.harness ?? 'claude-native'))
   const [phase, setPhase] = useState<Phase>('idle')
   const [err, setErr] = useState('')
 

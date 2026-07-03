@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listLibraryAgents, type LibraryAgent } from '../api/omnigent'
+import { listLibraryAgents, deleteAgent, type LibraryAgent } from '../api/omnigent'
 import { useOrgs } from '../auth/useOrgs'
 import { CreateAgentModal } from './CreateAgentModal'
 
@@ -21,15 +21,19 @@ function dash(v: string | null | undefined): string {
 }
 
 // 单张智能体卡片(展示型)。圆角软卡 + 首字母头像 + 来源徽标 + 基底 + 描述(≤3 行)。
-// 仅企业管理员 + 本企业创建的卡片(enterprise_owned,非内置)展示「编辑」入口;
-// 服务端对 PUT 独立强制(仅 UX 门)。
-function AgentCard({ agent, canEdit, onEdit }: {
+// 管理员操作(仅 UX 门,服务端对 PUT/DELETE 独立强制):
+//   - 本企业卡片(enterprise_owned,非内置):「编辑」+「删除」。
+//   - 内置卡片(全局共享,不可就地改):「复制为本企业」→ 以它为模板建本企业副本再改。
+function AgentCard({ agent, canManage, onEdit, onDelete, onClone }: {
   agent: LibraryAgent
-  canEdit: boolean
+  canManage: boolean
   onEdit: (a: LibraryAgent) => void
+  onDelete: (a: LibraryAgent) => void
+  onClone: (a: LibraryAgent) => void
 }) {
   const initial = (agent.name?.trim()?.[0] ?? '?').toUpperCase()
-  const editable = canEdit && agent.enterprise_owned === true && !agent.builtin
+  const ownEditable = canManage && agent.enterprise_owned === true && !agent.builtin
+  const cloneable = canManage && agent.builtin === true
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col">
       <div className="flex items-start gap-3">
@@ -53,16 +57,36 @@ function AgentCard({ agent, canEdit, onEdit }: {
           {/* 基底 harness:小号 mono 次要标签 */}
           <div className="mt-0.5 text-xs font-mono text-slate-400">{dash(agent.harness)}</div>
         </div>
-        {/* 编辑入口:仅本企业卡片 + 管理员可见(右上,低调) */}
-        {editable && (
-          <button
-            onClick={() => onEdit(agent)}
-            aria-label={`编辑 ${agent.name}`}
-            className="shrink-0 text-xs font-medium text-slate-500 hover:text-[#4F46E5] px-2 py-1 rounded-lg hover:bg-[#EEF0FF] transition-colors"
-          >
-            编辑
-          </button>
-        )}
+        {/* 操作入口(右上,低调):本企业 = 编辑/删除;内置 = 复制为本企业 */}
+        <div className="shrink-0 flex items-center gap-1">
+          {ownEditable && (
+            <>
+              <button
+                onClick={() => onEdit(agent)}
+                aria-label={`编辑 ${agent.name}`}
+                className="text-xs font-medium text-slate-500 hover:text-[#4F46E5] px-2 py-1 rounded-lg hover:bg-[#EEF0FF] transition-colors"
+              >
+                编辑
+              </button>
+              <button
+                onClick={() => onDelete(agent)}
+                aria-label={`删除 ${agent.name}`}
+                className="text-xs font-medium text-slate-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
+              >
+                删除
+              </button>
+            </>
+          )}
+          {cloneable && (
+            <button
+              onClick={() => onClone(agent)}
+              aria-label={`复制 ${agent.name} 为本企业智能体`}
+              className="text-xs font-medium text-slate-500 hover:text-[#4F46E5] px-2 py-1 rounded-lg hover:bg-[#EEF0FF] transition-colors"
+            >
+              复制为本企业
+            </button>
+          )}
+        </div>
       </div>
       {/* 描述,≤3 行截断 */}
       <p className="mt-3 text-sm text-slate-600 line-clamp-3">{dash(agent.description)}</p>
@@ -95,6 +119,8 @@ export function Agents() {
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [editAgent, setEditAgent] = useState<LibraryAgent | null>(null)
+  // 复制为本企业:以某内置为模板,在 create 模式预填名字/基底(cloneFrom≠null 即打开 create 弹窗)。
+  const [cloneFrom, setCloneFrom] = useState<LibraryAgent | null>(null)
   const { orgs } = useOrgs()
   const canCreate = isEnterpriseAdmin(orgs)
 
@@ -106,6 +132,19 @@ export function Agents() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  // 删除本企业智能体(二次确认)。失败(403/404)→ 顶部错误条,不静默。
+  async function handleDelete(agent: LibraryAgent) {
+    if (!window.confirm(`确认删除智能体「${agent.name}」?此操作不可撤销(仅删除本企业创建的智能体)。`)) return
+    try {
+      await deleteAgent(agent.id)
+      setLoading(true); setError(''); void load()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(msg === '403' ? '你没有删除该智能体的权限(需企业管理员;内置/他企业不可删)。'
+             : msg === '404' ? '该智能体已不存在。' : `删除失败:${msg}`)
+    }
+  }
 
   return (
     <div>
@@ -151,7 +190,8 @@ export function Agents() {
       {!loading && !error && agents.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {agents.map(a => (
-            <AgentCard key={a.id} agent={a} canEdit={canCreate} onEdit={setEditAgent} />
+            <AgentCard key={a.id} agent={a} canManage={canCreate}
+                       onEdit={setEditAgent} onDelete={handleDelete} onClone={setCloneFrom} />
           ))}
         </div>
       )}
@@ -170,6 +210,16 @@ export function Agents() {
           agent={editAgent}
           onClose={() => setEditAgent(null)}
           onDone={() => { setEditAgent(null); setLoading(true); setError(''); void load() }}
+        />
+      )}
+
+      {/* 复制为本企业:以内置为模板的 create 弹窗(预填名字副本 + 同基底);建的是本企业新 agent */}
+      {cloneFrom && (
+        <CreateAgentModal
+          mode="create"
+          initial={{ name: `${cloneFrom.name} 副本`, harness: cloneFrom.harness ?? undefined }}
+          onClose={() => setCloneFrom(null)}
+          onDone={() => { setCloneFrom(null); setLoading(true); setError(''); void load() }}
         />
       )}
     </div>

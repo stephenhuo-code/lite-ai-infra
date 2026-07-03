@@ -74,6 +74,12 @@ export async function updateAgent(id: string, input: CreateAgentInput): Promise<
   return api.put(`/v1/ws/agents/${encodeURIComponent(id)}`, buildAgentBody(input))
 }
 
+// 删除智能体(企业管理员 + 仅本企业创建;内置/他企业不可删,服务端 403 兜底)。
+// 失败时 api.delete 抛 Error(`${status}`)——403(非管理员/内置/他企业)/404(不存在),由调用方提示。
+export async function deleteAgent(id: string): Promise<void> {
+  await api.delete(`/v1/ws/agents/${encodeURIComponent(id)}`)
+}
+
 export async function listSessions(): Promise<Session[]> {
   const r: DataEnvelope<Session> = await api.get('/v1/ws/sessions')
   return r?.data ?? []

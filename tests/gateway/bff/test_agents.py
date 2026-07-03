@@ -109,6 +109,9 @@ class _Capture:
                                              "harness": "claude-native", "description": ""})
         if path == "/v1/sessions" and request.method == "POST":
             return httpx.Response(200, json={"id": "conv_123"})
+        if path.startswith("/v1/agents/") and request.method == "DELETE":
+            return httpx.Response(200, json={"deleted": True,
+                                             "id": path.rsplit("/", 1)[-1]})
         return httpx.Response(404, json={"reason": "nf"})
 
 
@@ -558,3 +561,67 @@ def test_edit_unknown_agent_404(monkeypatch):
               headers={"X-CSRF-Token": "csrf-xyz"}, json={"name": "x"})
     assert r.status_code == 404, r.text
     assert _bundle_posts(cap) == []
+
+
+# ===== (7) 删除 DELETE(admin 门 + 本企业 own;内置/他企业拒;审计 agent:delete)=====
+
+def _deletes(cap: _Capture) -> list[httpx.Request]:
+    return [q for q in cap.requests if q.url.path.startswith("/v1/agents/") and q.method == "DELETE"]
+
+
+def test_delete_non_admin_403_no_omnigent(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=MEMBER_A))  # entA member(非 admin)
+    r = c.delete(f"/v1/ws/agents/{AGENTA_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+                 headers={"X-CSRF-Token": "csrf-xyz"})
+    assert r.status_code == 403, r.text
+    assert cap.requests == []   # can() 先于反代 → 完全没打到 omnigent
+
+
+def test_delete_builtin_rejected(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.delete(f"/v1/ws/agents/{BUILTIN_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+                 headers={"X-CSRF-Token": "csrf-xyz"})
+    assert r.status_code == 403, r.text
+    assert "built-in" in r.json()["reason"]
+    assert _deletes(cap) == []   # 内置(全局)绝不可删 → 绝不打到 omnigent DELETE
+
+
+def test_delete_cross_enterprise_rejected(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))  # entA admin 删 entB 的 agent
+    r = c.delete(f"/v1/ws/agents/{AGENTB_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+                 headers={"X-CSRF-Token": "csrf-xyz"})
+    assert r.status_code == 403, r.text
+    assert _deletes(cap) == []   # 他企业 agent 不可见/不可删(隔离)
+
+
+def test_delete_own_agent_proxies_and_audits(monkeypatch):
+    cap = _Capture()
+    sink = _FakeSink()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A, sink=sink))  # entA admin 删本企业 agent
+    r = c.delete(f"/v1/ws/agents/{AGENTA_ID}", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+                 headers={"X-CSRF-Token": "csrf-xyz"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"deleted": True, "id": AGENTA_ID}
+    # 反代到 omnigent DELETE /v1/agents/{id} + 注入身份头
+    dels = _deletes(cap)
+    assert len(dels) == 1
+    assert dels[0].url.path == f"/v1/agents/{AGENTA_ID}"
+    assert dels[0].headers.get("x-forwarded-email") == "alice@example.com"
+    # 审计 delete / allow(展示名取自 description 首行)
+    assert len(sink.events) == 1
+    ev = sink.events[0]
+    assert ev["action"] == "agent:delete"
+    assert ev["decision"] == "allow"
+    assert ev["enterprise_id"] == ENTA
+
+
+def test_delete_unknown_agent_404(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=ADMIN_A))
+    r = c.delete("/v1/ws/agents/ag_nope", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+                 headers={"X-CSRF-Token": "csrf-xyz"})
+    assert r.status_code == 404, r.text
+    assert _deletes(cap) == []

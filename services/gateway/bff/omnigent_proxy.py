@@ -496,6 +496,48 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
             "description": user_desc or "", "has_api_key": bool(api_key),
             "builtin": False, "enterprise_owned": True})
 
+    @router.delete("/v1/ws/agents/{agent_id}")
+    def delete_agent(agent_id: str, request: Request):
+        # 删:can(agent:delete) enterprise-admin 门 → 本企业 own 校验(必须本企业前缀)→
+        # 反代 DELETE omnigent → 审计。内置(无前缀,全局)绝不可删;他企业 agent 绝不可见/不可删(隔离)。
+        email, ctx, alias, err = _resolve_ctx(request, claims)
+        if err:
+            return err
+        d = can(ctx, "agent:delete", Resource(kind="agent", enterprise_id=EnterpriseId(alias),
+                                              owner=None))
+        if not d.allow:           # 非企业管理员 → 403,绝不打到 omnigent(can() 先于反代)
+            return JSONResponse(status_code=403, content={"reason": d.reason})
+        # 拉全量 → 按 id 查该 agent 的 omnigent name → 校验归属(必须本企业前缀;内置/他企业拒)。
+        raw = _fetch_agents_raw(email)
+        if isinstance(raw, JSONResponse):
+            return raw
+        match = next((a for a in raw if a.get("id") == agent_id), None)
+        if match is None:
+            return JSONResponse(status_code=404, content={"reason": "agent not found"})
+        owner, _ = _split_enterprise(match.get("name", ""))
+        if owner is None:
+            # 内置模板(无前缀,全局共享)→ 删了影响所有企业 → 永不可删。
+            return JSONResponse(status_code=403, content={"reason": "built-in agents cannot be deleted"})
+        if owner != alias:
+            # 他企业 agent → 不可见/不可删(隔离),与 list/edit/session-create 一致的归属判定。
+            return JSONResponse(status_code=403, content={"reason": "agent not available"})
+        try:
+            with _client() as cli:
+                r = cli.delete(f"/v1/agents/{agent_id}", headers=_headers(email))
+        except httpx.RequestError:
+            return JSONResponse(status_code=502, content={"reason": "omnigent unreachable"})
+        if r.status_code >= 400:
+            try:
+                detail = r.json()
+            except Exception:
+                detail = {"raw": r.text}
+            return JSONResponse(status_code=r.status_code if r.status_code < 500 else 502,
+                                content={"reason": "delete failed", "detail": detail})
+        display, _ = _decode_description(match.get("description", "") or "")
+        _audit_agent("agent:delete", ctx, alias, agent_id, display or agent_id,
+                     match.get("harness", "") or "", has_api_key=False)
+        return JSONResponse(status_code=200, content={"deleted": True, "id": agent_id})
+
     @router.get("/v1/ws/sessions")
     def list_sessions(request: Request):
         # omnigent 已按 X-Forwarded-Email owner-filter,故只回当前用户自己的会话。
