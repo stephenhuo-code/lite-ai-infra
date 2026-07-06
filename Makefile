@@ -23,7 +23,7 @@ omnigent-up:      ; bash scripts/omnigent_build.sh dev && docker compose -f depl
 omnigent-down:    ; docker compose -f deploy/dev/omnigent/docker-compose.yml down
 # KC 组织置备(realm 导入后把 alice/bob 加入企业 org + organization scope);幂等,可重复跑
 provision-orgs:   ; uv run python scripts/provision_orgs.py
-provision-default-agents: ; uv run python scripts/provision_default_agents.py --enterprise $(EID)
+provision-default-agents: ; env $$($(LOAD) gateway) uv run python scripts/provision_default_agents.py --enterprise $(EID)
 # Plan 9a Workspace 一键编排:deps-dev → provision-orgs → omnigent-up → services up,逐步等就绪(见 scripts/ws_up.sh)
 # 前端不后台化:脚本末尾打印 `cd frontend && npm run dev`(vite:5173,代理 /auth /v1 → gateway:8090)
 ws-up:            ; bash scripts/ws_up.sh

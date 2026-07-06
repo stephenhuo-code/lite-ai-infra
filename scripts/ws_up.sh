@@ -16,6 +16,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MAKE="${MAKE:-make}"
+LOAD_CMD=(uv run python "$ROOT/scripts/load_env.py")
 
 _wait() {  # _wait <名> <url> <期望子串|""> <超时秒>
   local name="$1" url="$2" want="$3" timeout="${4:-90}" i=0 body
@@ -55,7 +56,7 @@ _wait "omnigent" "http://127.0.0.1:8900/health" '"ok"' 120 || {
   echo "ERROR: omnigent 未就绪;看 docker compose -f deploy/dev/omnigent/docker-compose.yml logs omnigent" >&2; exit 1; }
 
 echo "==> Provision default enterprise agents"
-uv run python "$ROOT/scripts/provision_default_agents.py" --enterprise "${EID:-ent-demo}" --omni-base-url "http://127.0.0.1:8900" || {
+env $("${LOAD_CMD[@]}" gateway) uv run python "$ROOT/scripts/provision_default_agents.py" --enterprise "${EID:-ent-demo}" --omni-base-url "http://127.0.0.1:8900" || {
   echo "ERROR: 默认 agent 置备失败" >&2; exit 1; }
 
 echo "==> [4/5] 前端 build(frontend/dist)+ services up(uvicorn 含 gateway:8090)"

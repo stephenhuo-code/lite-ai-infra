@@ -9,8 +9,7 @@ def test_ws_up_inserts_default_agent_provision_after_omnigent_ready():
     script = Path(__file__).parents[1].parent / "scripts" / "ws_up.sh"
     ws_up = _read(str(script))
     target_command_candidates = [
-        'uv run python "$ROOT/scripts/provision_default_agents.py" --enterprise "${EID:-ent-demo}" --omni-base-url "http://127.0.0.1:8900"',
-        'uv run python scripts/provision_default_agents.py --enterprise "${EID:-ent-demo}" --omni-base-url "http://127.0.0.1:8900"',
+        'env $("${LOAD_CMD[@]}" gateway) uv run python "$ROOT/scripts/provision_default_agents.py" --enterprise "${EID:-ent-demo}" --omni-base-url "http://127.0.0.1:8900"',
     ]
 
     command_pos = -1
@@ -24,6 +23,7 @@ def test_ws_up_inserts_default_agent_provision_after_omnigent_ready():
 
     assert command_pos >= 0, "default enterprise agent provision command is missing from ws_up.sh"
     assert 'echo "==> Provision default enterprise agents"' in ws_up
+    assert 'LOAD_CMD=(uv run python "$ROOT/scripts/load_env.py")' in ws_up
     assert ws_up.find('echo "==> Provision default enterprise agents"') < command_pos
 
     omnigent_wait = '_wait "omnigent" "http://127.0.0.1:8900/health" \'"ok"\' 120'
@@ -41,4 +41,4 @@ def test_ws_up_inserts_default_agent_provision_after_omnigent_ready():
 def test_makefile_has_default_agents_target():
     makefile = _read(str(Path(__file__).parents[1].parent / "Makefile"))
     assert "provision-default-agents" in makefile
-    assert "provision-default-agents: ; uv run python scripts/provision_default_agents.py --enterprise $(EID)" in makefile
+    assert "provision-default-agents: ; env $$($(LOAD) gateway) uv run python scripts/provision_default_agents.py --enterprise $(EID)" in makefile
