@@ -190,7 +190,9 @@ SERVICE_ENV_KEYS: dict[str, list[str]] = {
                       "METADATA_URL"],   # S2a:submit 时按名查 metadata 解析源 location
     "gateway": ["IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
                 "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
-                "BFF_REDIRECT_URI", "OMNIGENT_BASE_URL"],  # 反代 omnigent(Plan 9a):主机 gateway 走 127.0.0.1:8900
+                "BFF_REDIRECT_URI", "OMNIGENT_BASE_URL",
+                "OSS_ENDPOINT", "OSS_ACCESS_KEY", "OSS_SECRET_KEY", "OSS_REGION",
+                "AUDIT_BUCKET"],  # 反代 omnigent + BFF/seed 审计
 }
 
 

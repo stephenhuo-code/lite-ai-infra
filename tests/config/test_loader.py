@@ -110,7 +110,9 @@ _BASELINE = {
                       "METADATA_URL"},
     "gateway": {"IDENTITY_ORG_URL", "METADATA_URL", "DATA_PIPELINE_URL", "LITEAI_JWKS_URL",
                 "BFF_SESSION_KEY", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_ISSUER",
-                "BFF_REDIRECT_URI", "OMNIGENT_BASE_URL"},  # Plan 9a:反代 omnigent
+                "BFF_REDIRECT_URI", "OMNIGENT_BASE_URL",
+                "OSS_ENDPOINT", "OSS_ACCESS_KEY", "OSS_SECRET_KEY", "OSS_REGION",
+                "AUDIT_BUCKET"},  # Plan 9a:反代 omnigent + BFF/seed 审计
 }
 
 @pytest.mark.parametrize("svc,keys", _BASELINE.items())
@@ -160,3 +162,5 @@ def test_load_env_cli_emits_gateway_keys():
     assert out.returncode == 0, out.stderr
     emitted = dict(tok.split("=", 1) for tok in out.stdout.split())
     assert "BFF_SESSION_KEY" in emitted and "IDENTITY_ORG_URL" in emitted
+    for k in ("AUDIT_BUCKET", "OSS_ENDPOINT", "OSS_ACCESS_KEY", "OSS_SECRET_KEY"):
+        assert k in emitted
