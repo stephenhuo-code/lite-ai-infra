@@ -70,7 +70,7 @@ _ALLOWED_HARNESSES = _NATIVE_HARNESSES | _ENV_CRED_HARNESSES
 @dataclass(frozen=True)
 class DefaultAgentTemplate:
     key: str
-    display_name: str
+    display_name: str  # display-name-ok(default agent UI label, not resource id)
     harness: str
     model: str | None
     description: str
@@ -80,7 +80,7 @@ class DefaultAgentTemplate:
 DEFAULT_ENTERPRISE_AGENTS: tuple[DefaultAgentTemplate, ...] = (
     DefaultAgentTemplate(
         key="minimax",
-        display_name="minimax",
+        display_name="minimax",  # display-name-ok(default agent UI label)
         harness="openai-agents",
         model="MiniMax-Text-01",
         description="OpenAI 兼容 provider 模板,默认用于 MiniMax。",
@@ -88,7 +88,7 @@ DEFAULT_ENTERPRISE_AGENTS: tuple[DefaultAgentTemplate, ...] = (
     ),
     DefaultAgentTemplate(
         key="debby",
-        display_name="debby",
+        display_name="debby",  # display-name-ok(default agent UI label)
         harness="claude-sdk",
         model=None,
         description="多视角讨论与审查助手。",
@@ -96,7 +96,7 @@ DEFAULT_ENTERPRISE_AGENTS: tuple[DefaultAgentTemplate, ...] = (
     ),
     DefaultAgentTemplate(
         key="codex",
-        display_name="codex",
+        display_name="codex",  # display-name-ok(default agent UI label)
         harness="codex",
         model=None,
         description="代码实现和修改助手。",
@@ -104,7 +104,7 @@ DEFAULT_ENTERPRISE_AGENTS: tuple[DefaultAgentTemplate, ...] = (
     ),
     DefaultAgentTemplate(
         key="polly",
-        display_name="polly",
+        display_name="polly",  # display-name-ok(default agent UI label)
         harness="claude-sdk",
         model=None,
         description="任务拆解与协作编排助手。",
@@ -114,7 +114,7 @@ DEFAULT_ENTERPRISE_AGENTS: tuple[DefaultAgentTemplate, ...] = (
 
 
 def _default_agent_names() -> set[str]:
-    return {t.display_name for t in DEFAULT_ENTERPRISE_AGENTS}
+    return {t.display_name for t in DEFAULT_ENTERPRISE_AGENTS}  # display-name-ok(default agent UI labels)
 
 # fork 的安全白名单只接受 executor.auth 的【字面值】,任何 ${}/$VAR 引用都会被 fork 400 拒
 # (堵 expand_env 把 ${服务器密钥} 展开外泄)。BFF 先在本侧 fail-fast 拒掉引用——绝不把 fork
@@ -276,15 +276,15 @@ def ensure_default_agents_for_enterprise(
             if display:
                 existing.add(display)
         for template in DEFAULT_ENTERPRISE_AGENTS:
-            if template.display_name in existing:
-                skipped.append(template.display_name)
+            if template.display_name in existing:  # display-name-ok(compare decoded display label)
+                skipped.append(template.display_name)  # display-name-ok(result label)
                 continue
             bundle = _build_bundle_bytes(
-                name=_enterprise_name(alias, template.display_name),
+                name=_enterprise_name(alias, template.display_name),  # display-name-ok(slugified by _enterprise_name)
                 instructions=template.instructions,
                 harness=template.harness,
                 model=template.model,
-                description=_encode_description(template.display_name, template.description),
+                description=_encode_description(template.display_name, template.description),  # display-name-ok(description UI label)
                 api_key=None,
                 base_url=None,
             )
@@ -294,7 +294,7 @@ def ensure_default_agents_for_enterprise(
                 headers=headers,
             )
             resp.raise_for_status()
-            created.append(template.display_name)
+            created.append(template.display_name)  # display-name-ok(result label)
     return DefaultAgentSeedResult(created=created, skipped=skipped)
 
 
