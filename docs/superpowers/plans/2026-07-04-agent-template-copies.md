@@ -471,12 +471,12 @@ git commit -m "feat(9a/default-agents): add dev ops provision script"
 - Consumes Task 3 CLI.
 - Produces `make ws-up` 后 ent-demo 默认 agent 就绪。
 
-- [ ] **Step 1: 找到 ws-up 中 omnigent ready 后的位置**
+- [x] **Step 1: 找到 ws-up 中 omnigent ready 后的位置**
 
 Run: `sed -n '1,260p' scripts/ws_up.sh`
 Expected: 找到 `make provision-orgs` 和 omnigent/server ready 检查之后的阶段。
 
-- [ ] **Step 2: 加调用**
+- [x] **Step 2: 加调用**
 
 Add after omnigent is reachable:
 
@@ -485,7 +485,7 @@ echo "==> Provision default enterprise agents"
 uv run python scripts/provision_default_agents.py --enterprise "${EID:-ent-demo}" --omni-base-url "http://127.0.0.1:8900"
 ```
 
-- [ ] **Step 3: 如果 Makefile 需要显式目标,加 `provision-default-agents`**
+- [x] **Step 3: 如果 Makefile 需要显式目标,加 `provision-default-agents`**
 
 In `Makefile`:
 
@@ -493,12 +493,12 @@ In `Makefile`:
 provision-default-agents: ; uv run python scripts/provision_default_agents.py --enterprise $(EID)
 ```
 
-- [ ] **Step 4: 跑语法/脚本测试**
+- [x] **Step 4: 跑语法/脚本测试**
 
 Run: `bash -n scripts/ws_up.sh && uv run pytest tests/scripts/test_provision_default_agents.py -q`
 Expected: PASS.
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add scripts/ws_up.sh Makefile tests/scripts/test_provision_default_agents.py
