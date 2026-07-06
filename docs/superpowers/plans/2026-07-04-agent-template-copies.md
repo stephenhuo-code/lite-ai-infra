@@ -176,7 +176,7 @@ git commit -m "feat(9a/default-agents): define four enterprise default agent tem
   - `_decode_description`
   - `_build_bundle_bytes`
 
-- [ ] **Step 1: 扩展测试 capture 支持返回创建的 name/description**
+- [x] **Step 1: 扩展测试 capture 支持返回创建的 name/description**
 
 In `tests/gateway/bff/test_agents.py`, update `_Capture.handler` POST `/v1/agents` branch to unpack bundle and append the created agent:
 
@@ -193,7 +193,7 @@ In `tests/gateway/bff/test_agents.py`, update `_Capture.handler` POST `/v1/agent
             return httpx.Response(200, json=new)
 ```
 
-- [ ] **Step 2: 写失败测试:空企业创建 4 个默认 agent**
+- [x] **Step 2: 写失败测试:空企业创建 4 个默认 agent**
 
 Append:
 
@@ -220,7 +220,7 @@ def test_ensure_default_agents_creates_missing_four_for_enterprise():
     assert "auth" not in created_cfgs[0]["executor"]
 ```
 
-- [ ] **Step 3: 写失败测试:重复运行不重复创建**
+- [x] **Step 3: 写失败测试:重复运行不重复创建**
 
 Append:
 
@@ -244,7 +244,7 @@ def test_ensure_default_agents_is_idempotent():
     assert len(_bundle_posts(cap)) == 4
 ```
 
-- [ ] **Step 4: 写失败测试:已有 debby 只补缺失**
+- [x] **Step 4: 写失败测试:已有 debby 只补缺失**
 
 Append:
 
@@ -269,12 +269,12 @@ def test_ensure_default_agents_backfills_only_missing_defaults():
     assert len(_bundle_posts(cap)) == 3
 ```
 
-- [ ] **Step 5: 跑测试确认失败**
+- [x] **Step 5: 跑测试确认失败**
 
 Run: `uv run pytest tests/gateway/bff/test_agents.py -k "ensure_default_agents" -q`
 Expected: FAIL with missing `ensure_default_agents_for_enterprise`.
 
-- [ ] **Step 6: 实现结果类型与初始化函数**
+- [x] **Step 6: 实现结果类型与初始化函数**
 
 In `services/gateway/bff/omnigent_proxy.py`, add:
 
@@ -343,12 +343,12 @@ def ensure_default_agents_for_enterprise(
     return DefaultAgentSeedResult(created=created, skipped=skipped)
 ```
 
-- [ ] **Step 7: 跑测试确认通过**
+- [x] **Step 7: 跑测试确认通过**
 
 Run: `uv run pytest tests/gateway/bff/test_agents.py -k "default_enterprise_agent_templates or ensure_default_agents" -q`
 Expected: PASS.
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add services/gateway/bff/omnigent_proxy.py tests/gateway/bff/test_agents.py
