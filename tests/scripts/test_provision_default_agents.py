@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+
 from scripts import provision_default_agents as p
 
 
@@ -27,3 +31,26 @@ def test_main_calls_seed_with_enterprise(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "created: minimax, debby" in out
     assert "skipped: codex, polly" in out
+
+
+def test_script_help_runs_as_direct_cli():
+    env = os.environ.copy()
+    env["UV_CACHE_DIR"] = "/private/tmp/uv-cache"
+
+    result = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "scripts/provision_default_agents.py",
+            "--help",
+        ],
+        cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Provision default enterprise agents" in result.stdout
