@@ -59,7 +59,7 @@
   - `_enterprise_name(alias, display)`
   - `_encode_description(display, user_desc)`
 
-- [ ] **Step 1: 写失败测试:默认模板集合准确**
+- [x] **Step 1: 写失败测试:默认模板集合准确**
 
 Append to `tests/gateway/bff/test_agents.py`:
 
@@ -79,12 +79,12 @@ def test_default_enterprise_agent_templates_are_fixed_four():
     assert all(t.instructions.strip() for t in op.DEFAULT_ENTERPRISE_AGENTS)
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/gateway/bff/test_agents.py::test_default_enterprise_agent_templates_are_fixed_four -q`
 Expected: FAIL with `AttributeError: DEFAULT_ENTERPRISE_AGENTS`.
 
-- [ ] **Step 3: 实现默认模板定义**
+- [x] **Step 3: 实现默认模板定义**
 
 In `services/gateway/bff/omnigent_proxy.py`, add imports near the top:
 
@@ -145,12 +145,12 @@ def _default_agent_names() -> set[str]:
     return {t.display_name for t in DEFAULT_ENTERPRISE_AGENTS}
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/gateway/bff/test_agents.py::test_default_enterprise_agent_templates_are_fixed_four -q`
 Expected: PASS.
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add services/gateway/bff/omnigent_proxy.py tests/gateway/bff/test_agents.py
