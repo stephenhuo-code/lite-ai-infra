@@ -12,6 +12,7 @@ import secrets
 import tarfile
 import unicodedata
 from datetime import datetime, timezone
+from dataclasses import dataclass
 
 import httpx
 import yaml
@@ -64,6 +65,56 @@ _NATIVE_HARNESSES = {"claude-native"}
 # 凭据来自模型配置 env 注入(非 per-agent key)。openai-agents 为接 OpenAI 兼容 provider 的主基底。
 _ENV_CRED_HARNESSES = {"openai-agents", "claude-sdk", "codex", "qwen", "pi"}
 _ALLOWED_HARNESSES = _NATIVE_HARNESSES | _ENV_CRED_HARNESSES
+
+
+@dataclass(frozen=True)
+class DefaultAgentTemplate:
+    key: str
+    display_name: str
+    harness: str
+    model: str | None
+    description: str
+    instructions: str
+
+
+DEFAULT_ENTERPRISE_AGENTS: tuple[DefaultAgentTemplate, ...] = (
+    DefaultAgentTemplate(
+        key="minimax",
+        display_name="minimax",
+        harness="openai-agents",
+        model="MiniMax-Text-01",
+        description="OpenAI 兼容 provider 模板,默认用于 MiniMax。",
+        instructions="你是 minimax 智能体,使用企业配置的 OpenAI 兼容 provider 回答问题。",
+    ),
+    DefaultAgentTemplate(
+        key="debby",
+        display_name="debby",
+        harness="claude-sdk",
+        model=None,
+        description="多视角讨论与审查助手。",
+        instructions="你是 Debby,负责从多个角度审查问题、提出反例和改进建议。",
+    ),
+    DefaultAgentTemplate(
+        key="codex",
+        display_name="codex",
+        harness="codex",
+        model=None,
+        description="代码实现和修改助手。",
+        instructions="你是 Codex,负责阅读代码、提出实现计划并谨慎修改项目文件。",
+    ),
+    DefaultAgentTemplate(
+        key="polly",
+        display_name="polly",
+        harness="claude-sdk",
+        model=None,
+        description="任务拆解与协作编排助手。",
+        instructions="你是 Polly,负责把目标拆成可执行任务,协调多个实现者并汇总结果。",
+    ),
+)
+
+
+def _default_agent_names() -> set[str]:
+    return {t.display_name for t in DEFAULT_ENTERPRISE_AGENTS}
 
 # fork 的安全白名单只接受 executor.auth 的【字面值】,任何 ${}/$VAR 引用都会被 fork 400 拒
 # (堵 expand_env 把 ${服务器密钥} 展开外泄)。BFF 先在本侧 fail-fast 拒掉引用——绝不把 fork

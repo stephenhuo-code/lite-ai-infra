@@ -149,6 +149,21 @@ def _unpack_bundle(req: httpx.Request) -> dict:
     return yaml.safe_load(tf.extractfile(member).read())
 
 
+def test_default_enterprise_agent_templates_are_fixed_four():
+    from services.gateway.bff import omnigent_proxy as op
+
+    names = [t.display_name for t in op.DEFAULT_ENTERPRISE_AGENTS]
+
+    assert names == ["minimax", "debby", "codex", "polly"]
+    by_name = {t.display_name: t for t in op.DEFAULT_ENTERPRISE_AGENTS}
+    assert by_name["minimax"].harness == "openai-agents"
+    assert by_name["minimax"].model == "MiniMax-Text-01"
+    assert by_name["debby"].harness == "claude-sdk"
+    assert by_name["codex"].harness == "codex"
+    assert by_name["polly"].harness == "claude-sdk"
+    assert all(t.instructions.strip() for t in op.DEFAULT_ENTERPRISE_AGENTS)
+
+
 # ===== (1) 非 admin 建 → 403,且不打到 omnigent =====
 
 def test_non_admin_create_403_no_omnigent(monkeypatch):
