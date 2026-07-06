@@ -40,6 +40,12 @@
 ### 5. "对话开始后不能改" = BFF 不反代 switch-agent
 - omnigent 原生有 `POST /v1/sessions/{id}/switch-agent`、`PUT .../agent`(允许会话内换 agent)。**BFF 不暴露这两个端点** ⇒ 默认锁定,零成本。
 
+### 6. 增量(2026-07-05):企业创建时默认智能体模板
+- 新企业创建/置备时默认获得 4 个本企业 agent:minimax、debby、codex、polly。
+- 默认 agent 由 Lite AI BFF 维护的模板定义生成,复用现有 `POST /v1/agents`;不新增 omnigent fork clone 端点。
+- 默认 agent 是普通本企业资源,企业管理员可编辑/删除;普通成员不可改删。
+- 凭据不进入 agent bundle,继续由企业模型配置/平台默认注入。
+
 ## Consequences
 **正面**:满足"建自定义智能体 + 每企业隔离 + admin-only + 对话选/锁";fork 极小(暴露已有函数)、可 upstream;企业隔离/授权/审计全在 BFF,omnigent 保持租户无关;无新 secret、无新 PG、BFF 无状态。
 

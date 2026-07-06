@@ -181,7 +181,9 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8900/v1/agents
 > **这一段验什么(大白话)**:平台多了一个「智能体库」页 —— 企业管理员能在里面**自己造一个 AI 角色**(比如"客服助手",给它起名字、写一段它该怎么说话的提示词);
 > 同企业的普通成员进对话窗时能**从库里挑这个角色**来聊,聊起来后**这个会话就锁定用它、中途换不了**;
 > 别的企业的人**既看不到、也用不了**你造的角色;普通成员**根本没有"新建"按钮**,就算他绕过界面直接调接口,服务端也会**拒绝**。
-> 内置的几个现成模板(claude-native-ui 等)对**所有企业**都看得见、能用,且共用平台那一份订阅,**不需要给每个角色单独配凭据**。
+> 企业默认可见 4 个本企业智能体:minimax、debby、codex、polly；列表不再并列展示"内置"模板卡片。
+>
+> **你该看到什么**:智能体库里有 minimax、debby、codex、polly 四个"本企业"智能体,不再并列展示"内置"模板卡片。管理员能编辑 debby,能删除 polly;刷新后结果保持。普通成员没有编辑/删除入口。
 >
 > **对应需求**:SC-001 ~ SC-005、FR-001 ~ FR-008、User Story 1/2/3(见 `../2026-06-30-agent-library/spec.md`)。每步标了编号。
 > **前置**:第 0 步那套环境已起好(`make ws-up`,唯一入口 `http://localhost:8090`),`alice`/`alice`(企业管理员)、`bob`/`bob`(普通成员)都在企业 `ent-demo`。
@@ -201,7 +203,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8900/v1/agents
    - **名字**:`客服助手`
    - **系统提示词**:`你是友好的客服,只用中文简短回答`
    - 模型留空(用模板默认即可);基底固定是 `claude-native`(平台已注入全局共享订阅,唯一能跑的)。
-4. 点「创建」。弹窗关掉,**列表里立刻出现「客服助手」这一条,带「本企业」标记**(说明它归 ent-demo、只有本企业可见)。内置模板那几条仍在(带「内置」标记)。
+4. 点「创建」。弹窗关掉,**列表里立刻出现「客服助手」这一条,带「本企业」标记**(说明它归 ent-demo、只有本企业可见)。列表中不再并列展示"内置"模板卡片。
 
 > 如果创建报错(比如"重名""无权限""不可用"),那是**明确的中文提示**,不会静默卡住 —— 看到提示按提示处理即可,别当成功。
 
@@ -215,7 +217,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8900/v1/agents
 
 **你该看到什么**:
 1. **另开无痕窗口**,用 `bob` / `bob` 登录,进 **「智能体库」**。
-2. **关键(FR-003 UX)**:bob **看不到「新建智能体」按钮**(他不是管理员)。但他**能在列表里看到「客服助手」**(同企业可见)+ 内置模板。
+2. **关键(FR-003 UX)**:bob **看不到「新建智能体」按钮**(他不是管理员)。但他**能在列表里看到「客服助手」**(同企业可见)。
 3. bob 进 **Workspace** → 点 **+ 新会话** → 弹出的智能体选择器里**选「客服助手」**(下拉里它标「本企业」)→ 点「开始对话」。
 4. 发一条消息,比如「帮我查下退款要多久?」—— **回复应符合那段提示词**:**中文、简短、客服口吻**(这就是 SC-002 / US1:选的角色真的生效了)。
 5. **关键(FR-002 锁定)**:会话开始后,对话窗顶部显示**绑定的智能体名 + 「已锁定」**标记,**界面上没有任何"换/切换/更换智能体"的入口**;新建另一个会话才能重新选。
@@ -231,10 +233,10 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8900/v1/agents
 **这步在验什么**:**另一个企业**的用户在「智能体库」里**看不到** alice 建的"客服助手";就算他**猜到/攥着**这个智能体的 id 想拿去建会话,也会被服务端**拒掉**(403/404)。
 
 **你该看到什么**:
-- **若有第二个企业的账号**:用它登录 → 进「智能体库」→ 列表里**没有"客服助手"**(只有内置模板 + 他自己企业的);拿"客服助手"的 id 去建会话 → **被拒**。
+- **若有第二个企业的账号**:用它登录 → 进「智能体库」→ 列表里**没有"客服助手"**(只有他自己企业的);拿"客服助手"的 id 去建会话 → **被拒**。
 - **dev 默认只有一个企业 `ent-demo`** —— 造第二个企业要在 Keycloak 多开一个 Organization,dev 没默认配。**故此条由执行者用直连 BFF 的负向 curl 代跑**:伪造"另一个企业前缀"、或用一个**本企业不可见的 agent_id**去建会话 → 服务端 **403**,且**不创建任何 managed 会话**。
 
-> **说明**:双企业的完整端到端隔离演示需要多一个 KC org;dev 默认单企业 ent-demo,所以这条用执行者的负向验证代跑。隔离的**红线不变式**(列表只含内置+本企业、建会话校验 agent 归属、跨企业 agent_id 被拒)在 BFF 单元测试里已钉死:`tests/gateway/bff/test_agents.py`(`test_list_filters_per_enterprise_and_strips_prefix` / `test_session_create_rejects_other_enterprise_agent` / `test_session_create_rejects_unknown_agent`)。
+> **说明**:双企业的完整端到端隔离演示需要多一个 KC org;dev 默认单企业 ent-demo,所以这条用执行者的负向验证代跑。隔离的**红线不变式**(列表只含本企业可见项、建会话校验 agent 归属、跨企业 agent_id 被拒)在 BFF 单元测试里已钉死:`tests/gateway/bff/test_agents.py`(`test_list_filters_per_enterprise_and_strips_prefix` / `test_session_create_rejects_other_enterprise_agent` / `test_session_create_rejects_unknown_agent`)。
 
 <details><summary>怎么做(命令,执行者跑)</summary>
 
@@ -280,17 +282,18 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8090/v1/ws/age
 
 ---
 
-## 智-5. 内置模板全局可见 + 无 per-agent 凭据(parity 引用 9a 第 5 步)
+## 智-5. 企业默认智能体与编辑/删除边界
 
 **对应**:SC-005、FR-006、FR-001。
 
-**这步在验什么**:内置的现成模板(claude-native-ui 等)对**任何企业的任何用户**都看得见、能用;它们**共用平台那一份全局订阅**,**没有给每个智能体单独配凭据/vault**(本版红线:无 per-agent 凭据)。
+**这步在验什么**:企业库展示 minimax、debby、codex、polly 四个默认本企业智能体，不展示内置模板卡片入口；管理员与普通成员的编辑/删除能力按后端授权区分;刷新后默认卡片状态稳定。
 
 **你该看到什么**:
-1. alice、bob(以及任何企业的任何用户)在「智能体库」里**都能看到内置模板**(带「内置」标记),且都能拿它建会话正常对话 —— 用的就是平台那份全局共享订阅(`secrets/omnigent.token`),**没有任何"给这个智能体配 token"的步骤**。
-2. **parity(改 fork 重编译生效)**:智能体库的"建可复用 agent"靠 omnigent fork 新加的 `POST /v1/agents`(ADR-027,复用其内部 `_ensure_builtin_agent`);**改 fork → `scripts/omnigent_build.sh dev` 重编译 → 改动生效**,与 dev/prod 同源。这条的演示与"我们自编译镜像"**完全复用上面第 5 步**(改一行 omnigent → 重编译 → 生效 → 镜像是本地 `:dev`),不再重复跑。
+1. **你该看到什么**:智能体库里有 minimax、debby、codex、polly 四个"本企业"智能体,不再并列展示"内置"模板卡片。管理员能编辑 debby,能删除 polly;刷新后结果保持。普通成员没有编辑/删除入口。
+2. 管理员对 debby 执行编辑、对 polly 执行删除后刷新列表;行为仍按策略持续生效，不会被重建流程自动恢复。
+3. non-admin（普通成员）在列表与接口层都看不到编辑/删除入口;服务端拒绝编辑/删除请求。
 
-> 单元测试佐证:`tests/gateway/bff/test_agents.py::test_list_builtin_visible_to_other_enterprise`(内置对他企业仍可见);建 bundle **只含安全字段、不含 per-agent 凭据/auth**(`test_admin_create_prefixed_safe_bundle_and_audit`)。
+> 单元测试佐证:`tests/gateway/bff/test_agents.py::test_default_enterprise_agent_templates_are_fixed_four`(默认四个本企业卡片),`tests/gateway/bff/test_agents.py::test_edit_builtin_rejected`/`test_delete_builtin_rejected`(内置拒绝编辑/删除),`tests/gateway/bff/test_agents.py::test_edit_own_agent_reposts_same_name_with_new_fields_and_audit`/`test_delete_own_agent_proxies_and_audits`(本企业 own 的编辑/删除路径)。
 
 ---
 
@@ -329,5 +332,5 @@ make ws-down
 **订阅 token**:`secrets/omnigent.token`(不进代码仓;ws-up 自动读出注入为 `CLAUDE_CODE_OAUTH_TOKEN`)。
 
 > **哪些是 owner 亲自做、哪些执行者代跑**:
-> - **你(owner)亲自做**:第 0 步起栈、第 1~3 步浏览器登录 + 点击 + 双用户隔离(SC-001/002/003 的核心);**智能体库**第 智-1 步(alice 建客服助手)、智-2 步(bob 选用 + 锁定)、智-5 步(内置全局可见)。
+> - **你(owner)亲自做**:第 0 步起栈、第 1~3 步浏览器登录 + 点击 + 双用户隔离(SC-001/002/003 的核心);**智能体库**第 智-1 步(alice 建客服助手)、智-2 步(bob 选用 + 锁定)、智-5 步(企业默认卡片与编辑/删除边界)。
 > - **执行者代跑、把结果摆给你**:第 4 步(沙箱容器)、第 5 步(改码重编译生效)、第 6 步(负向 curl);**智能体库**第 智-3 步(跨企业隔离,dev 单企业故负向 curl 代跑)、智-4 步(非管理员直调接口 → 403)。
