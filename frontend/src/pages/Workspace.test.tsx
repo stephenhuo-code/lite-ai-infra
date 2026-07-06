@@ -39,7 +39,7 @@ it('新建会话前弹智能体选择器,选定后 createSession 带所选 agent
   await waitFor(() => expect(screen.getByText('+ 新会话')).toBeTruthy())
   fireEvent.click(screen.getByText('+ 新会话'))
 
-  const select = await screen.findByLabelText('选择智能体')
+  await screen.findByLabelText('选择智能体')
   fireEvent.click(screen.getByText('开始对话'))
 
   await waitFor(() => expect(lastSessionBody).not.toBeNull())
