@@ -640,11 +640,11 @@ git commit -m "docs(9a/default-agents): record enterprise default agent decision
 
 ## Final Verification
 
-- [ ] `uv run pytest tests/gateway/bff/test_agents.py -k "default_enterprise_agent_templates or ensure_default_agents" -q`
-- [ ] `uv run pytest tests/scripts/test_provision_default_agents.py -q`
-- [ ] `bash -n scripts/ws_up.sh`
-- [ ] `cd frontend && npx vitest run src/pages/Agents.test.tsx src/api/omnigent.test.ts`
-- [ ] `make lint`
+- [x] `uv run pytest tests/gateway/bff/test_agents.py -k "default_enterprise_agent_templates or ensure_default_agents" -q`
+- [x] `uv run pytest tests/scripts/test_provision_default_agents.py -q`
+- [x] `bash -n scripts/ws_up.sh`
+- [x] `cd frontend && npx vitest run src/pages/Agents.test.tsx src/api/omnigent.test.ts`
+- [x] `make lint`
 
 ## Manual Acceptance Runbook
 
