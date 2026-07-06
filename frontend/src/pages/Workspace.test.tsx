@@ -40,8 +40,6 @@ it('新建会话前弹智能体选择器,选定后 createSession 带所选 agent
   fireEvent.click(screen.getByText('+ 新会话'))
 
   const select = await screen.findByLabelText('选择智能体')
-  // 选「客服助手」
-  fireEvent.change(select, { target: { value: 'ag_cs' } })
   fireEvent.click(screen.getByText('开始对话'))
 
   await waitFor(() => expect(lastSessionBody).not.toBeNull())
@@ -58,10 +56,10 @@ it('对话进行中无"换智能体"控件(锁定不变式)', async () => {
   render(<Workspace />)
   await waitFor(() => expect(screen.getByText('+ 新会话')).toBeTruthy())
   fireEvent.click(screen.getByText('+ 新会话'))
-  fireEvent.click(await screen.findByText('开始对话'))   // 用默认预选(claude-native-ui)建
+  fireEvent.click(await screen.findByText('开始对话'))   // 用默认预选(企业智能体)建
 
   await waitFor(() => expect(lastSessionBody).not.toBeNull())
-  expect(lastSessionBody.agent_id).toBe('ag_builtin')   // 默认预选内置
+  expect(lastSessionBody.agent_id).toBe('ag_cs')   // 默认预选企业智能体
 
   // 会话锁定后:无任何"换/切换智能体"入口
   await waitFor(() => expect(screen.getByText('已锁定')).toBeTruthy())
@@ -70,14 +68,15 @@ it('对话进行中无"换智能体"控件(锁定不变式)', async () => {
   expect(screen.queryByLabelText('选择智能体')).toBeNull()
 })
 
-it('默认预选 claude-native-ui 内置模板', async () => {
+it('默认预选首个企业智能体', async () => {
   mockApis()
   render(<Workspace />)
   await waitFor(() => expect(screen.getByText('+ 新会话')).toBeTruthy())
   fireEvent.click(screen.getByText('+ 新会话'))
 
   const select = await screen.findByLabelText('选择智能体') as HTMLSelectElement
-  expect(select.value).toBe('ag_builtin') // claude-native-ui
+  expect(select.value).toBe('ag_cs')
+  expect(screen.queryByText(/claude-native-ui/)).toBeNull()
 })
 
 it('建会话失败 → 明确反馈,不静默卡死(spec Edge Case)', async () => {

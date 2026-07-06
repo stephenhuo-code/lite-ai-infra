@@ -231,6 +231,48 @@ def test_ensure_default_agents_backfills_only_missing_defaults():
     assert len(_bundle_posts(cap)) == 3
 
 
+def test_ensure_default_agents_audits_only_created_defaults():
+    from services.gateway.bff.omnigent_proxy import ensure_default_agents_for_enterprise
+    from libs.audit.oss_audit import AuditWriter
+
+    cap = _Capture(agents=[])
+    sink = _FakeSink()
+    audit_writer = AuditWriter(sink)
+    result = ensure_default_agents_for_enterprise(
+        ENTA,
+        omni_base_url="http://omnigent:8000",
+        identity_email="system@lite-ai.local",
+        transport=httpx.MockTransport(cap.handler),
+        audit_writer=audit_writer,
+    )
+
+    assert result.created == ["minimax", "debby", "codex", "polly"]
+    assert len(sink.events) == 4
+    actions = {ev["action"] for ev in sink.events}
+    assert actions == {"agent:seed-default"}
+    for ev in sink.events:
+        assert ev["enterprise_id"] == ENTA
+        assert ev["actor_user"] == "system@lite-ai.local"
+        assert ev["actor_role"] == "system"
+        assert ev["decision"] == "allow"
+        assert ev["resource_uri"].startswith("agent/")
+        assert ev["metadata"]["has_api_key"] is False
+        assert {"key", "name", "harness", "has_api_key"} <= set(ev["metadata"].keys())
+        assert set(ev["metadata"].keys()) == {"key", "name", "harness", "has_api_key"}
+
+    # 对已存在代理的第二次补齐不应额外审计（仅首次创建的 4 条）
+    second = ensure_default_agents_for_enterprise(
+        ENTA,
+        omni_base_url="http://omnigent:8000",
+        identity_email="system@lite-ai.local",
+        transport=httpx.MockTransport(cap.handler),
+        audit_writer=audit_writer,
+    )
+    assert second.created == []
+    assert second.skipped == ["minimax", "debby", "codex", "polly"]
+    assert len(sink.events) == 4
+
+
 # ===== (1) 非 admin 建 → 403,且不打到 omnigent =====
 
 def test_non_admin_create_403_no_omnigent(monkeypatch):
@@ -434,13 +476,26 @@ def test_session_create_ignores_forged_enterprise_label(monkeypatch):
     assert "cost_control.x" not in body["labels"]
 
 
-def test_session_create_allows_builtin_agent(monkeypatch):
+def test_session_create_rejects_builtin_agent(monkeypatch):
     cap = _Capture()
     c = TestClient(_app(monkeypatch, cap, claims_fn=MEMBER_A))
     r = c.post("/v1/ws/sessions", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
                headers={"X-CSRF-Token": "csrf-xyz"}, json={"agent_id": BUILTIN_ID})
-    assert r.status_code == 200
-    assert any(q.url.path == "/v1/sessions" and q.method == "POST" for q in cap.requests)
+    assert r.status_code in (403, 404)
+    assert not any(q.url.path == "/v1/sessions" and q.method == "POST" for q in cap.requests)
+
+
+def test_session_create_rejects_missing_or_empty_agent_id(monkeypatch):
+    cap = _Capture()
+    c = TestClient(_app(monkeypatch, cap, claims_fn=MEMBER_A))
+    r = c.post("/v1/ws/sessions", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+               headers={"X-CSRF-Token": "csrf-xyz"}, json={})
+    assert r.status_code == 400
+    assert not any(q.url.path == "/v1/sessions" and q.method == "POST" for q in cap.requests)
+    r2 = c.post("/v1/ws/sessions", cookies={SESSION_COOKIE: _cookie(_valid_sd())},
+                headers={"X-CSRF-Token": "csrf-xyz"}, json={"agent_id": "   "})
+    assert r2.status_code == 400
+    assert not any(q.url.path == "/v1/sessions" and q.method == "POST" for q in cap.requests)
 
 
 def test_session_create_rejects_unknown_agent(monkeypatch):

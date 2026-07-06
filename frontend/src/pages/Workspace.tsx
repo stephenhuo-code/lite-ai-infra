@@ -14,12 +14,13 @@ function sessionLabel(s: Session): string {
   return s.title?.trim() || `会话 ${s.id.slice(0, 8)}`
 }
 
-// 默认预选:优先 claude-native-ui 内置模板,否则第一个 builtin,否则第一个。
+// 默认预选:企业端返回的智能体列表已是企业可见条目，默认取首个企业智能体即可。
 function pickDefault(agents: LibraryAgent[]): string {
-  const preferred = agents.find(a => a.name === 'claude-native-ui')
-    ?? agents.find(a => a.builtin)
-    ?? agents[0]
-  return preferred?.id ?? ''
+  return agents[0]?.id ?? ''
+}
+
+function enterpriseAgents(agents: LibraryAgent[]): LibraryAgent[] {
+  return agents.filter(a => a.enterprise_owned === true && !a.builtin)
 }
 
 export function Workspace() {
@@ -39,8 +40,9 @@ export function Workspace() {
   useEffect(() => {
     listLibraryAgents()
       .then(ags => {
-        setAgents(ags)
-        setSelectedAgent(prev => prev || pickDefault(ags))
+        const visible = enterpriseAgents(ags)
+        setAgents(visible)
+        setSelectedAgent(prev => prev || pickDefault(visible))
       })
       .catch(() => {})
     listSessions().then(setSessions).catch(() => {})

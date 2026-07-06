@@ -26,8 +26,6 @@ from libs.identity.context import Context, parse_context
 from libs.identity.ids import EnterpriseId
 from services._scaffold.auth import _as_list
 
-# claude-native-ui 默认 agent(探针 live-pinned);前端通常显式从 /v1/ws/agents 选,缺省时回退此。
-DEFAULT_AGENT_ID = "ag_58a1bc5bf0bba6d31ceeb7661f8d751c"
 _IDENTITY_HEADER = "X-Forwarded-Email"
 
 # 智能体库(ADR-027)企业归属前缀分隔符 = ASCII 下划线("_")。
@@ -162,12 +160,6 @@ def _split_enterprise(name: str) -> tuple[str | None, str]:
     return None, name
 
 
-def _visible_to(name: str, alias: str) -> bool:
-    """该 agent(按 name 前缀)对 alias 企业是否可见:内置(无前缀)或前缀==alias。"""
-    owner, _ = _split_enterprise(name)
-    return owner is None or owner == alias
-
-
 def _ascii_slug(display: str) -> str:
     """把(任意 Unicode)展示名压成 ASCII slug,供 omnigent name 后缀(name 仅许 [a-zA-Z0-9_-])。
     非 ASCII 字符无损映射不到则丢弃 → 可能为空(纯中文名);为空时由调用方兜底。"""
@@ -254,6 +246,7 @@ def ensure_default_agents_for_enterprise(
     omni_base_url: str = "http://omnigent:8000",
     identity_email: str = "system@lite-ai.local",
     transport: httpx.BaseTransport | None = None,
+    audit_writer: AuditWriter | None = None,
 ) -> DefaultAgentSeedResult:
     if not _ALIAS_RE.fullmatch(alias):
         raise ValueError("enterprise alias incompatible with agent library")
@@ -294,6 +287,22 @@ def ensure_default_agents_for_enterprise(
                 headers=headers,
             )
             resp.raise_for_status()
+            created_id = ""
+            try:
+                obj = resp.json()
+                if isinstance(obj, dict):
+                    created_id = obj.get("id", "") or ""
+            except Exception:
+                created_id = ""
+            if audit_writer is not None:
+                audit_writer.write(AuditEvent(
+                    ts=datetime.now(timezone.utc).isoformat(), enterprise_id=alias,
+                    actor_user=identity_email, actor_role="system", action="agent:seed-default",
+                    resource_uri=f"agent/{created_id}" if created_id else "agent/",
+                    decision="allow", override=False, reason="",
+                    metadata={"key": template.key, "name": template.display_name,  # display-name-ok(audit label)
+                              "harness": template.harness, "has_api_key": False},
+                ))
             created.append(template.display_name)  # display-name-ok(result label)
     return DefaultAgentSeedResult(created=created, skipped=skipped)
 
@@ -652,7 +661,7 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
     @router.post("/v1/ws/sessions")
     async def create_session(request: Request):
         # managed 建会话:JSON {agent_id, host_type:"managed"}(红线:绝不 multipart,绝不 host_id)。
-        # 隔离:建会话前校验 agent_id 属本企业或内置(防猜他企业 agent_id 建会话)。
+        # 隔离:建会话前校验 agent_id 存在且 owner==alias（禁止 ownerless 内置/他企业）.
         email, ctx, alias, err = _resolve_ctx(request, claims)
         if err:
             return err
@@ -660,14 +669,20 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
             body = await request.json()
         except Exception:
             body = {}
-        agent_id = (body or {}).get("agent_id") or DEFAULT_AGENT_ID
-        # 拉全量 → 按 id 查 name → 校验归属(内置无前缀 或 前缀==本企业)。
+        agent_id = ((body or {}).get("agent_id") or "").strip()
+        if not agent_id:
+            return JSONResponse(status_code=400, content={"reason": "agent_id required"})
+        # 拉全量 → 按 id 查 name → 校验归属(owner==alias, 内置 owner=None 一律拒)。
         raw = _fetch_agents_raw(email)
         if isinstance(raw, JSONResponse):
             return raw
         match = next((a for a in raw if a.get("id") == agent_id), None)
-        if match is None or not _visible_to(match.get("name", ""), alias):
-            # 未知 / 他企业 agent_id → 拒(绝不创建 managed 会话)
+        if match is None:
+            # 未知 agent_id → 拒(绝不创建 managed 会话)
+            return JSONResponse(status_code=403, content={"reason": "agent not available"})
+        owner, _ = _split_enterprise(match.get("name", ""))
+        if owner != alias:
+            # 内置 ownerless 或他企业 → 拒(绝不创建 managed 会话)
             return JSONResponse(status_code=403, content={"reason": "agent not available"})
         # ★ 隔离命门(ADR-028):labels.enterprise_id **只**取【已认证会话】的 alias,服务端构造,
         # 绝不合并/转发客户端的 labels。fork 按此 label 注入本企业模型凭据;若转发客户端
