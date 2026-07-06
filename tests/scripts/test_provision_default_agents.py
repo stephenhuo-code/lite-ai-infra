@@ -12,13 +12,16 @@ class _Result:
 
 def test_main_calls_seed_with_enterprise(monkeypatch, capsys):
     seen = {}
+    audit = object()
 
-    def fake_seed(alias, *, omni_base_url, identity_email, transport=None):
+    def fake_seed(alias, *, omni_base_url, identity_email, transport=None, audit_writer=None):
         seen["alias"] = alias
         seen["base"] = omni_base_url
         seen["email"] = identity_email
+        seen["audit_writer"] = audit_writer
         return _Result()
 
+    monkeypatch.setattr(p, "_default_audit_writer", lambda: audit)
     monkeypatch.setattr(p, "ensure_default_agents_for_enterprise", fake_seed)
     rc = p.main(["--enterprise", "ent-demo", "--omni-base-url", "http://omni"])
 
@@ -27,6 +30,7 @@ def test_main_calls_seed_with_enterprise(monkeypatch, capsys):
         "alias": "ent-demo",
         "base": "http://omni",
         "email": "system@lite-ai.local",
+        "audit_writer": audit,
     }
     out = capsys.readouterr().out
     assert "created: minimax, debby" in out

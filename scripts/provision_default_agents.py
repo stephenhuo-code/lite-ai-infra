@@ -8,6 +8,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.gateway.bff.omnigent_proxy import ensure_default_agents_for_enterprise
+from services.gateway.bff.middleware import _default_audit_writer
 
 
 def _fmt(items: list[str]) -> str:
@@ -31,6 +32,7 @@ def main(argv: list[str] | None = None) -> int:
         args.enterprise,
         omni_base_url=args.omni_base_url,
         identity_email=args.identity_email,
+        audit_writer=_default_audit_writer(),
     )
     print(f"default agents for `{args.enterprise}` ready")
     print(f"  created: {_fmt(result.created)}")
