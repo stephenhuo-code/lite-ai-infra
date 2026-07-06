@@ -518,7 +518,7 @@ git commit -m "chore(9a/default-agents): provision defaults during dev workspace
 **Interfaces:**
 - Current API remains `GET /v1/ws/agents`.
 
-- [ ] **Step 1: 更新页面文案**
+- [x] **Step 1: 更新页面文案**
 
 In `frontend/src/pages/Agents.tsx`, change the subtitle from:
 
@@ -532,7 +532,7 @@ to:
 本企业智能体。新企业默认包含 minimax、debby、codex 和 polly,企业管理员可编辑。
 ```
 
-- [ ] **Step 2: 改 BFF 列表过滤,隐藏内置**
+- [x] **Step 2: 改 BFF 列表过滤,隐藏内置**
 
 Replace list filter in `agents()` so `owner is None` is skipped:
 
@@ -543,7 +543,7 @@ if owner != alias:
 
 Expected: screenshot no longer shows `内置` cards once default enterprise agents exist.
 
-- [ ] **Step 3: 更新 BFF 列表测试断言**
+- [x] **Step 3: 更新 BFF 列表测试断言**
 
 In `tests/gateway/bff/test_agents.py`, update old built-in visibility tests so:
 
@@ -563,12 +563,12 @@ def test_list_filters_per_enterprise_and_strips_prefix(monkeypatch):
 
 Expected:内置不再作为企业可见项返回。
 
-- [ ] **Step 4: 更新前端测试断言**
+- [x] **Step 4: 更新前端测试断言**
 
 Run: `cd frontend && npx vitest run src/pages/Agents.test.tsx`
 Expected before update:可能因文案变更失败。Update expected text to include `minimax、debby、codex 和 polly`.
 
-- [ ] **Step 5: 跑相关验证**
+- [x] **Step 5: 跑相关验证**
 
 Run:
 ```bash
@@ -577,7 +577,7 @@ cd frontend && npx vitest run src/pages/Agents.test.tsx src/api/omnigent.test.ts
 ```
 Expected: PASS.
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add frontend/src/pages/Agents.tsx frontend/src/pages/Agents.test.tsx services/gateway/bff/omnigent_proxy.py tests/gateway/bff/test_agents.py
