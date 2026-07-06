@@ -2,7 +2,7 @@ import { it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { Agents } from './Agents'
 
-// 智能体库页(ADR-027):列出本企业可见智能体(内置 + 本企业)+ 徽标;
+// 智能体库页(ADR-027):列出本企业智能体 + 徽标;
 // 企业管理员见「新建智能体」入口,普通成员不见(角色由 GET /v1/me/orgs 决定);
 // 提交创建 → POST /v1/ws/agents body 正确 → 刷新列表。
 // 角色 / 列表 / 创建均经 fetch mock(useOrgs 与 api 都用 fetch)。
@@ -13,7 +13,6 @@ let lastDeleteId: string | null = null
 beforeEach(() => { lastDeleteId = null; vi.restoreAllMocks() })
 afterEach(() => { vi.restoreAllMocks() })
 
-const BUILTIN = { id: 'ag_builtin', name: 'claude-native-ui', harness: 'claude-native', description: '内置通用助手', builtin: true, enterprise_owned: false }
 const OWNED = { id: 'ag_owned', name: '客服助手', harness: 'claude-native', description: '只答产品问题', builtin: false, enterprise_owned: true }
 
 // role: 'enterprise-admin' | 'member' —— 控制 /v1/me/orgs 返回的角色。
@@ -41,22 +40,21 @@ function mockApis(role: string) {
       return new Response(JSON.stringify({ deleted: true, id: lastDeleteId }), { status: 200 })
     }
     if (u === '/v1/ws/agents') {
-      return new Response(JSON.stringify({ data: [BUILTIN, OWNED, ...created] }), { status: 200 })
+      return new Response(JSON.stringify({ data: [OWNED, ...created] }), { status: 200 })
     }
     return new Response('', { status: 404 })
   })
 }
 
-it('列出智能体并标 内置/本企业 徽标', async () => {
+it('列出智能体并标本企业徽标', async () => {
   mockApis('member')
   render(<Agents />)
 
-  await waitFor(() => expect(screen.getByText('claude-native-ui')).toBeTruthy())
+  await waitFor(() => expect(screen.getByText('客服助手')).toBeTruthy())
   expect(screen.getByText('客服助手')).toBeTruthy()
+  expect(screen.getByText('本企业智能体。新企业默认包含 minimax、debby、codex 和 polly,企业管理员可编辑。')).toBeTruthy()
 
   // 卡片化后:徽标与名称同处一张卡(标题的最近 .rounded-2xl 卡容器)。
-  const builtinCard = screen.getByText('claude-native-ui').closest('.rounded-2xl') as HTMLElement
-  expect(within(builtinCard).getByText('内置')).toBeTruthy()
   const ownedCard = screen.getByText('客服助手').closest('.rounded-2xl') as HTMLElement
   expect(within(ownedCard).getByText('本企业')).toBeTruthy()
 })
@@ -64,14 +62,14 @@ it('列出智能体并标 内置/本企业 徽标', async () => {
 it('企业管理员见「新建智能体」入口', async () => {
   mockApis('enterprise-admin')
   render(<Agents />)
-  await waitFor(() => expect(screen.getByText('claude-native-ui')).toBeTruthy())
+  await waitFor(() => expect(screen.getByText('客服助手')).toBeTruthy())
   await waitFor(() => expect(screen.getByText('新建智能体')).toBeTruthy())
 })
 
 it('普通成员【不见】「新建智能体」入口', async () => {
   mockApis('member')
   render(<Agents />)
-  await waitFor(() => expect(screen.getByText('claude-native-ui')).toBeTruthy())
+  await waitFor(() => expect(screen.getByText('客服助手')).toBeTruthy())
   // 角色加载完成后仍无入口
   await new Promise(r => setTimeout(r, 0))
   expect(screen.queryByText('新建智能体')).toBeNull()
@@ -106,16 +104,13 @@ it('管理员提交创建 → POST body 正确(harness=claude-native)且刷新�
   await waitFor(() => expect(screen.getByText('销售助手')).toBeTruthy())
 })
 
-it('「编辑」按钮仅在本企业卡片出现(内置卡片无),且管理员可见', async () => {
+it('「编辑」按钮仅在本企业卡片出现,且管理员可见', async () => {
   mockApis('enterprise-admin')
   render(<Agents />)
   await waitFor(() => expect(screen.getByText('客服助手')).toBeTruthy())
 
   const ownedCard = screen.getByText('客服助手').closest('.rounded-2xl') as HTMLElement
   expect(within(ownedCard).getByText('编辑')).toBeTruthy()
-
-  const builtinCard = screen.getByText('claude-native-ui').closest('.rounded-2xl') as HTMLElement
-  expect(within(builtinCard).queryByText('编辑')).toBeNull() // 内置不可编辑
 })
 
 it('普通成员【不见】「编辑」按钮(仅 UX 门)', async () => {
@@ -126,15 +121,11 @@ it('普通成员【不见】「编辑」按钮(仅 UX 门)', async () => {
   expect(screen.queryByText('编辑')).toBeNull()
 })
 
-it('「删除」仅在本企业卡片(内置无);确认后走 DELETE + 刷新', async () => {
+it('「删除」仅在本企业卡片;确认后走 DELETE + 刷新', async () => {
   const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
   mockApis('enterprise-admin')
   render(<Agents />)
   await waitFor(() => expect(screen.getByText('客服助手')).toBeTruthy())
-
-  // 内置卡片无「删除」(全局共享,不可删)
-  const builtinCard = screen.getByText('claude-native-ui').closest('.rounded-2xl') as HTMLElement
-  expect(within(builtinCard).queryByText('删除')).toBeNull()
 
   // 本企业卡片有「删除」→ 点击 → 确认 → DELETE 本 agent id
   const ownedCard = screen.getByText('客服助手').closest('.rounded-2xl') as HTMLElement
@@ -155,15 +146,6 @@ it('删除二次确认取消 → 不发 DELETE', async () => {
   confirmSpy.mockRestore()
 })
 
-it('内置卡片无「删除」按钮(全局共享,不可删/不可就地改)', async () => {
-  mockApis('enterprise-admin')
-  render(<Agents />)
-  await waitFor(() => expect(screen.getByText('claude-native-ui')).toBeTruthy())
-  const builtinCard = screen.getByText('claude-native-ui').closest('.rounded-2xl') as HTMLElement
-  expect(within(builtinCard).queryByText('删除')).toBeNull()
-  expect(within(builtinCard).queryByText('编辑')).toBeNull()
-})
-
 it('点「编辑」→ 编辑弹窗(预填 name/harness + 覆盖告警),提交走 PUT 后刷新', async () => {
   let putBody: any = null
   let putUrl = ''
@@ -182,7 +164,7 @@ it('点「编辑」→ 编辑弹窗(预填 name/harness + 覆盖告警),提交�
     }
     if (u === '/v1/ws/agents') {
       const renamed = { ...OWNED, name: putBody?.name ?? OWNED.name }
-      return new Response(JSON.stringify({ data: [BUILTIN, putBody ? renamed : OWNED] }), { status: 200 })
+      return new Response(JSON.stringify({ data: [putBody ? renamed : OWNED] }), { status: 200 })
     }
     return new Response('', { status: 404 })
   })
@@ -219,7 +201,7 @@ it('非管理员后端 403 兜底:创建接口被拒时弹窗显可理解提示'
     if (u === '/v1/ws/agents' && init?.method === 'POST') {
       return new Response(JSON.stringify({ reason: 'forbidden' }), { status: 403 })
     }
-    if (u === '/v1/ws/agents') return new Response(JSON.stringify({ data: [BUILTIN] }), { status: 200 })
+    if (u === '/v1/ws/agents') return new Response(JSON.stringify({ data: [OWNED] }), { status: 200 })
     return new Response('', { status: 404 })
   })
   render(<Agents />)

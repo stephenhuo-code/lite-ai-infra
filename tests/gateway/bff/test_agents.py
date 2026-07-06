@@ -2,7 +2,7 @@
 # 红线(负向):
 #  - 非 enterprise-admin 建 → 403,且**不打到 omnigent**(can() 在反代前拦)
 #  - admin 建:发往 omnigent /v1/agents 的 bundle 名带本企业前缀、只含安全字段、审计落一条
-#  - 列表:只回内置(无前缀) + 本企业前缀(剥前缀);他企业的不可见
+#  - 列表:只回本企业前缀(剥前缀);内置和他企业的不可见
 #  - 建会话:他企业 agent_id 被拒(无 managed 会话);内置/本企业 agent_id 放行(反代)
 import io
 import json
@@ -355,7 +355,7 @@ def test_list_rejects_alias_with_underscore(monkeypatch):
     assert cap.requests == []
 
 
-# ===== (3) 列表过滤:内置 + 本企业(剥前缀);他企业不可见 =====
+# ===== (3) 列表过滤:本企业(剥前缀);内置/他企业不可见 =====
 
 def test_list_filters_per_enterprise_and_strips_prefix(monkeypatch):
     cap = _Capture()
@@ -363,29 +363,25 @@ def test_list_filters_per_enterprise_and_strips_prefix(monkeypatch):
     r = c.get("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())})
     assert r.status_code == 200
     data = r.json()["data"]
-    by_id = {a["id"]: a for a in data}
-    # 内置(无前缀)+ 本企业 agent 可见;他企业(entB)不可见
-    assert BUILTIN_ID in by_id
-    assert AGENTA_ID in by_id
-    assert AGENTB_ID not in by_id
+    names = [a["name"] for a in data]
+    assert names == [AGENTA_DISPLAY]
     # 展示名干净(从 description 首行还原),无内部 slug/无 SEP;用户描述拆出(空行后那段)
-    assert by_id[AGENTA_ID]["name"] == "客服助手"
-    assert SEP not in by_id[AGENTA_ID]["name"]
-    assert by_id[AGENTA_ID]["description"] == "entA 的客服"
-    # builtin / enterprise_owned 标志供 UI
-    assert by_id[BUILTIN_ID]["builtin"] is True
-    assert by_id[BUILTIN_ID]["enterprise_owned"] is False
-    assert by_id[AGENTA_ID]["builtin"] is False
-    assert by_id[AGENTA_ID]["enterprise_owned"] is True
+    assert data[0]["name"] == AGENTA_DISPLAY
+    assert SEP not in data[0]["name"]
+    assert data[0]["description"] == "entA 的客服"
+    assert data[0]["builtin"] is False
+    assert data[0]["enterprise_owned"] is True
+    assert "claude-native-ui" not in names
+    assert AGENTB_ID not in [a["id"] for a in data]
 
 
-def test_list_builtin_visible_to_other_enterprise(monkeypatch):
+def test_list_filters_current_enterprise_for_other_enterprise(monkeypatch):
     cap = _Capture()
     c = TestClient(_app(monkeypatch, cap, claims_fn=MEMBER_B))  # entB 成员
     r = c.get("/v1/ws/agents", cookies={SESSION_COOKIE: _cookie(_valid_sd())})
     data = r.json()["data"]
     by_id = {a["id"]: a for a in data}
-    assert BUILTIN_ID in by_id          # 内置全局共享
+    assert BUILTIN_ID not in by_id
     assert AGENTB_ID in by_id           # 自己的
     assert AGENTA_ID not in by_id        # 别人的不可见
 

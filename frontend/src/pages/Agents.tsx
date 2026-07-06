@@ -3,8 +3,8 @@ import { listLibraryAgents, deleteAgent, type LibraryAgent } from '../api/omnige
 import { useOrgs } from '../auth/useOrgs'
 import { CreateAgentModal } from './CreateAgentModal'
 
-// 智能体库页(US1/US2 · ADR-027)。列出本企业可见智能体(全局内置模板 + 本企业创建),
-// 每条带 内置/本企业 徽标。企业管理员额外见「新建智能体」入口(非管理员无入口 +
+// 智能体库页(US1/US2 · ADR-027)。列出本企业智能体(新企业默认模板 + 本企业创建),
+// 每条带 本企业 徽标。企业管理员额外见「新建智能体」入口(非管理员无入口 +
 // 服务端 can() 兜底 403,不靠前端藏按钮)。
 // 列表来自 BFF GET /v1/ws/agents(已按企业过滤 + 剥前缀):
 //   { data: [{ id, name, harness, description, builtin, enterprise_owned }, ...] }
@@ -21,8 +21,7 @@ function dash(v: string | null | undefined): string {
 }
 
 // 单张智能体卡片(展示型)。圆角软卡 + 首字母头像 + 来源徽标 + 基底 + 描述(≤3 行)。
-// 管理员操作(仅 UX 门,服务端对 PUT/DELETE 独立强制):本企业卡片可「编辑」+「删除」;
-// 内置卡片(全局共享)无操作(不可就地改/删,避免影响其它企业)。
+// 管理员操作(仅 UX 门,服务端对 PUT/DELETE 独立强制):本企业卡片可「编辑」+「删除」。
 function AgentCard({ agent, canManage, onEdit, onDelete }: {
   agent: LibraryAgent
   canManage: boolean
@@ -135,7 +134,7 @@ export function Agents() {
       <div className="flex items-center gap-3 mb-4">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">智能体库</h1>
-          <p className="text-sm text-slate-500 mt-0.5">本企业可见的智能体:平台内置模板 + 本企业创建。对话开始时从中选用。</p>
+          <p className="text-sm text-slate-500 mt-0.5">本企业智能体。新企业默认包含 minimax、debby、codex 和 polly,企业管理员可编辑。</p>
         </div>
         {/* 仅企业管理员见入口(非管理员无按钮;服务端独立强制) */}
         {canCreate && (

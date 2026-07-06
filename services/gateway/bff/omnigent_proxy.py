@@ -418,7 +418,7 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
 
     @router.get("/v1/ws/agents")
     def agents(request: Request):
-        # 列:omnigent 全量 → 按企业过滤(内置无前缀 + 本企业前缀)→ 剥前缀回干净展示名。
+        # 列:omnigent 全量 → 按企业过滤(仅本企业前缀)→ 剥前缀回干净展示名。
         email, ctx, alias, err = _resolve_ctx(request, claims)
         if err:
             return err
@@ -428,19 +428,15 @@ def make_omnigent_router(*, claims, omni_base_url: str = "http://omnigent:8000",
         out = []
         for a in raw:
             name = a.get("name", "")
-            if not _visible_to(name, alias):
+            owner, _ = _split_enterprise(name)  # 归属判定：仅本企业前缀可见，隐藏 ownerless built-in
+            if owner != alias:
                 continue            # 他企业 agent → 不可见(隔离)
-            owner, _ = _split_enterprise(name)   # 归属判定仍纯靠 name 前缀(隔离逻辑不变)
             raw_desc = a.get("description", "") or ""
-            if owner is None:
-                # 内置模板:无展示名编码,直接用 omnigent name 当展示名 + 原样 description。
-                display, user_desc = name, raw_desc
-            else:
-                # 本企业 agent:展示名(可含中文)在 description 首行,空行后为用户描述。
-                display, user_desc = _decode_description(raw_desc)
+            # 本企业 agent:展示名(可含中文)在 description 首行,空行后为用户描述。
+            display, user_desc = _decode_description(raw_desc)
             out.append({"id": a.get("id"), "name": display, "harness": a.get("harness"),
                         "description": user_desc,
-                        "builtin": owner is None, "enterprise_owned": owner == alias})
+                        "builtin": False, "enterprise_owned": True})
         return JSONResponse(status_code=200, content={"data": out})
 
     @router.post("/v1/ws/agents")
