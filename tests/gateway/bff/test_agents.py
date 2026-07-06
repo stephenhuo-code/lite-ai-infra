@@ -104,9 +104,15 @@ class _Capture:
         if path == "/v1/agents" and request.method == "GET":
             return httpx.Response(200, json={"data": self._agents})
         if path == "/v1/agents" and request.method == "POST":
-            # 回 AgentObject(含 id);name 回显上传名(omnigent 原样存)
-            return httpx.Response(200, json={"id": "ag_new_1", "name": "created",
-                                             "harness": "claude-native", "description": ""})
+            cfg = _unpack_bundle(request)
+            new = {
+                "id": f"ag_new_{len(self._agents)}",
+                "name": cfg["name"],
+                "harness": cfg["executor"]["config"]["harness"],
+                "description": cfg.get("description", ""),
+            }
+            self._agents.append(new)
+            return httpx.Response(200, json=new)
         if path == "/v1/sessions" and request.method == "POST":
             return httpx.Response(200, json={"id": "conv_123"})
         if path.startswith("/v1/agents/") and request.method == "DELETE":
@@ -162,6 +168,67 @@ def test_default_enterprise_agent_templates_are_fixed_four():
     assert by_name["codex"].harness == "codex"
     assert by_name["polly"].harness == "claude-sdk"
     assert all(t.instructions.strip() for t in op.DEFAULT_ENTERPRISE_AGENTS)
+
+
+def test_ensure_default_agents_creates_missing_four_for_enterprise():
+    from services.gateway.bff.omnigent_proxy import ensure_default_agents_for_enterprise
+
+    cap = _Capture(agents=[])
+    result = ensure_default_agents_for_enterprise(
+        ENTA,
+        omni_base_url="http://omnigent:8000",
+        identity_email="system@lite-ai.local",
+        transport=httpx.MockTransport(cap.handler),
+    )
+
+    assert result.created == ["minimax", "debby", "codex", "polly"]
+    assert result.skipped == []
+    posts = _bundle_posts(cap)
+    assert len(posts) == 4
+    created_cfgs = [_unpack_bundle(p) for p in posts]
+    assert [c["description"].split("\n", 1)[0] for c in created_cfgs] == [
+        "minimax", "debby", "codex", "polly"]
+    assert all(c["name"].startswith(f"{ENTA}{SEP}") for c in created_cfgs)
+    assert "auth" not in created_cfgs[0]["executor"]
+
+
+def test_ensure_default_agents_is_idempotent():
+    from services.gateway.bff.omnigent_proxy import ensure_default_agents_for_enterprise
+
+    cap = _Capture(agents=[])
+    transport = httpx.MockTransport(cap.handler)
+
+    first = ensure_default_agents_for_enterprise(
+        ENTA, omni_base_url="http://omnigent:8000",
+        identity_email="system@lite-ai.local", transport=transport)
+    second = ensure_default_agents_for_enterprise(
+        ENTA, omni_base_url="http://omnigent:8000",
+        identity_email="system@lite-ai.local", transport=transport)
+
+    assert first.created == ["minimax", "debby", "codex", "polly"]
+    assert second.created == []
+    assert second.skipped == ["minimax", "debby", "codex", "polly"]
+    assert len(_bundle_posts(cap)) == 4
+
+
+def test_ensure_default_agents_backfills_only_missing_defaults():
+    from services.gateway.bff.omnigent_proxy import ensure_default_agents_for_enterprise
+
+    cap = _Capture(agents=[
+        {"id": AGENTA_ID, "name": AGENTA_NAME, "harness": "claude-sdk",
+         "description": "debby\n\n管理员已改过的 debby"},
+    ])
+
+    result = ensure_default_agents_for_enterprise(
+        ENTA,
+        omni_base_url="http://omnigent:8000",
+        identity_email="system@lite-ai.local",
+        transport=httpx.MockTransport(cap.handler),
+    )
+
+    assert result.created == ["minimax", "codex", "polly"]
+    assert result.skipped == ["debby"]
+    assert len(_bundle_posts(cap)) == 3
 
 
 # ===== (1) 非 admin 建 → 403,且不打到 omnigent =====

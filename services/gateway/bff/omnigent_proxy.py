@@ -242,6 +242,62 @@ def _build_bundle_bytes(*, name: str, instructions: str | None, harness: str,
     return buf.getvalue()
 
 
+@dataclass(frozen=True)
+class DefaultAgentSeedResult:
+    created: list[str]
+    skipped: list[str]
+
+
+def ensure_default_agents_for_enterprise(
+    alias: str,
+    *,
+    omni_base_url: str = "http://omnigent:8000",
+    identity_email: str = "system@lite-ai.local",
+    transport: httpx.BaseTransport | None = None,
+) -> DefaultAgentSeedResult:
+    if not _ALIAS_RE.fullmatch(alias):
+        raise ValueError("enterprise alias incompatible with agent library")
+    base = omni_base_url.rstrip("/")
+    headers = {"Accept": "application/json", _IDENTITY_HEADER: identity_email}
+    created: list[str] = []
+    skipped: list[str] = []
+    with httpx.Client(base_url=base, timeout=30, trust_env=False, transport=transport) as cli:
+        r = cli.get("/v1/agents", headers=headers)
+        r.raise_for_status()
+        body = r.json()
+        raw = body.get("data") if isinstance(body, dict) else body
+        agents = raw if isinstance(raw, list) else []
+        existing: set[str] = set()
+        for agent in agents:
+            owner, _ = _split_enterprise(agent.get("name", ""))
+            if owner != alias:
+                continue
+            display, _ = _decode_description(agent.get("description", "") or "")
+            if display:
+                existing.add(display)
+        for template in DEFAULT_ENTERPRISE_AGENTS:
+            if template.display_name in existing:
+                skipped.append(template.display_name)
+                continue
+            bundle = _build_bundle_bytes(
+                name=_enterprise_name(alias, template.display_name),
+                instructions=template.instructions,
+                harness=template.harness,
+                model=template.model,
+                description=_encode_description(template.display_name, template.description),
+                api_key=None,
+                base_url=None,
+            )
+            resp = cli.post(
+                "/v1/agents",
+                files={"bundle": ("bundle.tar.gz", bundle, "application/gzip")},
+                headers=headers,
+            )
+            resp.raise_for_status()
+            created.append(template.display_name)
+    return DefaultAgentSeedResult(created=created, skipped=skipped)
+
+
 def _resolve(request: Request, claims):
     """从【已认证会话】解出 email;未认证/坏 token → (None, JSONResponse 401)。
     身份只来自会话内 access token 的 claims —— 绝不信任请求头/体(C-1 / 反伪造命门)。"""
