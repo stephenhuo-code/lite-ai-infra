@@ -369,7 +369,7 @@ git commit -m "feat(9a/default-agents): seed missing default agents idempotently
   - env `OMNIGENT_BASE_URL` default `http://127.0.0.1:8900`
   - env `OMNIGENT_IDENTITY_EMAIL` default `system@lite-ai.local`
 
-- [ ] **Step 1: 写脚本测试**
+- [x] **Step 1: 写脚本测试**
 
 Create `tests/scripts/test_provision_default_agents.py`:
 
@@ -401,12 +401,12 @@ def test_main_calls_seed_with_enterprise(monkeypatch, capsys):
     assert "skipped: codex, polly" in out
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/scripts/test_provision_default_agents.py -q`
 Expected: FAIL because script does not exist.
 
-- [ ] **Step 3: 创建脚本**
+- [x] **Step 3: 创建脚本**
 
 Create `scripts/provision_default_agents.py`:
 
@@ -446,12 +446,12 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/scripts/test_provision_default_agents.py -q`
 Expected: PASS.
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add scripts/provision_default_agents.py tests/scripts/test_provision_default_agents.py
