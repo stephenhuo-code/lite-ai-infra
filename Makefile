@@ -1,4 +1,4 @@
-.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog omnigent-up omnigent-down ws-up ws-down provision-orgs
+.PHONY: test test-integration lint contract-check deps-base deps-dev dev-up dev-down dev-reset sync gen up down ps api-docs api-docs-down dj-setup fe-install fe-types fe-build fe-lint fe-test fe-e2e bootstrap-catalog omnigent-up omnigent-down ws-up ws-down provision-orgs provision-default-agents
 EID ?= ent-demo
 sync:             ; uv sync --extra dev
 # dev/prod parity:建独立 .dj-venv(同云上 Data-Juicer+Ray);本地真跑数据管线前先 `make dj-setup` 一次
@@ -23,6 +23,7 @@ omnigent-up:      ; bash scripts/omnigent_build.sh dev && docker compose -f depl
 omnigent-down:    ; docker compose -f deploy/dev/omnigent/docker-compose.yml down
 # KC 组织置备(realm 导入后把 alice/bob 加入企业 org + organization scope);幂等,可重复跑
 provision-orgs:   ; uv run python scripts/provision_orgs.py
+provision-default-agents: ; uv run python scripts/provision_default_agents.py --enterprise $(EID)
 # Plan 9a Workspace 一键编排:deps-dev → provision-orgs → omnigent-up → services up,逐步等就绪(见 scripts/ws_up.sh)
 # 前端不后台化:脚本末尾打印 `cd frontend && npm run dev`(vite:5173,代理 /auth /v1 → gateway:8090)
 ws-up:            ; bash scripts/ws_up.sh

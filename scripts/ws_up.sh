@@ -54,6 +54,10 @@ $MAKE omnigent-up || exit 1
 _wait "omnigent" "http://127.0.0.1:8900/health" '"ok"' 120 || {
   echo "ERROR: omnigent 未就绪;看 docker compose -f deploy/dev/omnigent/docker-compose.yml logs omnigent" >&2; exit 1; }
 
+echo "==> Provision default enterprise agents"
+uv run python "$ROOT/scripts/provision_default_agents.py" --enterprise "${EID:-ent-demo}" --omni-base-url "http://127.0.0.1:8900" || {
+  echo "ERROR: 默认 agent 置备失败" >&2; exit 1; }
+
 echo "==> [4/5] 前端 build(frontend/dist)+ services up(uvicorn 含 gateway:8090)"
 # 网关同源发 frontend/dist(install_static)。dist 必须先于网关启动存在 ——
 # install_static 在网关启动那一刻检查 dist 是否存在,不存在就整段跳过(连 catch-all 都不挂)。
