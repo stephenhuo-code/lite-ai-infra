@@ -595,7 +595,7 @@ git commit -m "feat(9a/default-agents): align agent library UI with enterprise d
 **Interfaces:**
 - Documents the decision and manual acceptance path.
 
-- [ ] **Step 1: ADR-027 增加默认模板增量**
+- [x] **Step 1: ADR-027 增加默认模板增量**
 
 Append a section:
 
@@ -607,7 +607,7 @@ Append a section:
 - 凭据不进入 agent bundle,继续由企业模型配置/平台默认注入。
 ```
 
-- [ ] **Step 2: runbook 更新智能体库验收**
+- [x] **Step 2: runbook 更新智能体库验收**
 
 Update the agent library section to include:
 
@@ -615,7 +615,7 @@ Update the agent library section to include:
 **你该看到什么**:智能体库里有 minimax、debby、codex、polly 四个"本企业"智能体,不再并列展示"内置"模板卡片。管理员能编辑 debby,能删除 polly;刷新后结果保持。普通成员没有编辑/删除入口。
 ```
 
-- [ ] **Step 3: 文档自检**
+- [x] **Step 3: 文档自检**
 
 Run:
 
@@ -629,7 +629,7 @@ rg -n "^## Task .*Fork|submodule 指针|AGENT_SEED_DIR|\\.seeding|O_EXCL|服务�
 
 Expected: no matches. Mentions that explicitly reject fork copy are allowed; executable fork tasks are not.
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add docs/adr/ADR-027-agent-library.md docs/superpowers/plans/2026-06-28-omnigent-integration/RUNBOOK.md
