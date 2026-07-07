@@ -51,7 +51,8 @@ class _Capture:
         self.requests.append(request)
         path = request.url.path
         if path == "/v1/agents":
-            return httpx.Response(200, json={"data": [{"id": AGENT_ID, "name": "claude-native-ui"}]})
+            # 归属本企业(owner==alias "ent-demo")：建会话要求 agent 为本企业所有(ADR-028 隔离命门)。
+            return httpx.Response(200, json={"data": [{"id": AGENT_ID, "name": "ent-demo_native-ui"}]})
         if path == "/v1/sessions" and request.method == "GET":
             return httpx.Response(200, json={"data": []})
         if path == "/v1/sessions" and request.method == "POST":
