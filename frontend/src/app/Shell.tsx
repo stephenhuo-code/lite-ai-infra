@@ -11,6 +11,15 @@ import { useOrgs } from '../auth/useOrgs'
 type NavItem = { to: string; label: string; group?: string; icon: React.ReactNode; adminOnly?: boolean }
 
 const NAV: NavItem[] = [
+  { to: '/workspace', label: '任务', group: '智能体', icon: (
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+  ) },
+  { to: '/agents', label: '智能体库', icon: (
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 7V5a3 3 0 016 0v2M9 13h.01M15 13h.01"/></svg>
+  ) },
+  { to: '/model-config', label: '模型配置', adminOnly: true, icon: (
+    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 010-4h.09A1.65 1.65 0 004.6 8a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 3.6h.09A1.65 1.65 0 0011 2.09V2a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0021.9 8h.01a1.65 1.65 0 001.5 1H23a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+  ) },
   { to: '/datasets', label: '数据集', group: '数据', icon: (
     <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
   ) },
@@ -22,15 +31,6 @@ const NAV: NavItem[] = [
   ) },
   { to: '/create', label: '创建作业', icon: (
     <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
-  ) },
-  { to: '/agents', label: '智能体库', group: '工作台', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 7V5a3 3 0 016 0v2M9 13h.01M15 13h.01"/></svg>
-  ) },
-  { to: '/model-config', label: '模型配置', adminOnly: true, icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 010-4h.09A1.65 1.65 0 004.6 8a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 3.6h.09A1.65 1.65 0 0011 2.09V2a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0021.9 8h.01a1.65 1.65 0 001.5 1H23a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-  ) },
-  { to: '/workspace', label: 'Workspace', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
   ) },
   { to: '/account', label: '我的账户', group: '账户', icon: (
     <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>
