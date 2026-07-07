@@ -40,12 +40,14 @@ function mockApis(role: string, statuses: any[] = []) {
   })
 }
 
-it('企业管理员:见 provider 列表(Anthropic/OpenAI/Gemini)', async () => {
+it('企业管理员:见 provider 列表(Anthropic/OpenAI/MiniMax/DeepSeek,无 Gemini)', async () => {
   mockApis('enterprise-admin')
   render(<ModelConfig />)
   await waitFor(() => expect(screen.getByText('Anthropic (Claude)')).toBeTruthy())
   expect(screen.getByText('OpenAI (Codex)')).toBeTruthy()
-  expect(screen.getByText('Gemini')).toBeTruthy()
+  expect(screen.getByText('MiniMax')).toBeTruthy()
+  expect(screen.getByText('DeepSeek')).toBeTruthy()
+  expect(screen.queryByText('Gemini')).toBeNull()
 })
 
 it('普通成员:见「无权限」,无任何配置 UI', async () => {
@@ -59,50 +61,49 @@ it('普通成员:见「无权限」,无任何配置 UI', async () => {
 
 it('已配置的 provider:显 已配置徽标 + auth 类型,且【不渲染密钥值】', async () => {
   mockApis('enterprise-admin', [
-    { provider: 'anthropic', configured: true, auth_type: 'subscription', has_base_url: false },
+    { provider: 'anthropic', configured: true, auth_type: 'api_key', has_base_url: false },
   ])
   render(<ModelConfig />)
   const card = (await waitFor(() => screen.getByText('Anthropic (Claude)'))).closest('.rounded-2xl') as HTMLElement
   expect(within(card).getByText('本企业已配置')).toBeTruthy()
-  expect(within(card).getByText(/订阅 token/)).toBeTruthy()
+  expect(within(card).getByText(/API key/)).toBeTruthy()
   // 密钥永不回显:掩码占位存在,页面无任何真实密钥文本
   expect(within(card).getByText(/••••••已配置/)).toBeTruthy()
   expect(document.body.textContent).not.toContain('sk-')
 })
 
-it('平台默认的 provider:显「平台默认」+「覆盖」,不误显未配置', async () => {
+it('未配置的 provider:显「未配置」+「配置」,无「平台默认」', async () => {
   mockApis('enterprise-admin', [
-    { provider: 'anthropic', configured: false, auth_type: null, has_base_url: false,
-      platform_default: true, platform_auth_type: 'subscription' },
+    { provider: 'anthropic', configured: false, auth_type: null, has_base_url: false },
   ])
   render(<ModelConfig />)
   const card = (await waitFor(() => screen.getByText('Anthropic (Claude)'))).closest('.rounded-2xl') as HTMLElement
-  expect(within(card).getByText('平台默认')).toBeTruthy()
-  expect(within(card).queryByText('未配置')).toBeNull()
-  // 未单独配置 → 操作按钮是「覆盖」而非「修改」;无「清除」(没有本企业凭据可清)
-  expect(within(card).getByRole('button', { name: '覆盖' })).toBeTruthy()
+  expect(within(card).getByText('未配置')).toBeTruthy()
+  expect(within(card).queryByText('平台默认')).toBeNull()
+  expect(within(card).getByRole('button', { name: '配置' })).toBeTruthy()
+  expect(within(card).queryByRole('button', { name: '覆盖' })).toBeNull()
   expect(within(card).queryByRole('button', { name: '清除' })).toBeNull()
 })
 
 it('保存 provider:调 PUT /v1/ws/model-config/{provider} body {auth_type, value}', async () => {
   mockApis('enterprise-admin')
   render(<ModelConfig />)
-  const card = (await waitFor(() => screen.getByText('Gemini'))).closest('.rounded-2xl') as HTMLElement
+  const card = (await waitFor(() => screen.getByText('MiniMax'))).closest('.rounded-2xl') as HTMLElement
   fireEvent.click(within(card).getByText('配置'))
 
   await screen.findByLabelText('API key *')
-  fireEvent.change(screen.getByLabelText('API key *'), { target: { value: 'real-gemini-key' } })
+  fireEvent.change(screen.getByLabelText('API key *'), { target: { value: 'real-mm-key' } })
   fireEvent.click(screen.getByText('保存'))
 
-  await waitFor(() => expect(lastPutUrl).toBe('/v1/ws/model-config/gemini'))
+  await waitFor(() => expect(lastPutUrl).toBe('/v1/ws/model-config/minimax'))
   expect(lastPutBody.auth_type).toBe('api_key')
-  expect(lastPutBody.value).toBe('real-gemini-key')
+  expect(lastPutBody.value).toBe('real-mm-key')
 })
 
 it('${SECRET} 形式值:客户端拦截 + 友好提示(不发请求)', async () => {
   mockApis('enterprise-admin')
   render(<ModelConfig />)
-  const card = (await waitFor(() => screen.getByText('Gemini'))).closest('.rounded-2xl') as HTMLElement
+  const card = (await waitFor(() => screen.getByText('MiniMax'))).closest('.rounded-2xl') as HTMLElement
   fireEvent.click(within(card).getByText('配置'))
   fireEvent.change(await screen.findByLabelText('API key *'), { target: { value: '${SECRET}' } })
   fireEvent.click(screen.getByText('保存'))
@@ -110,14 +111,15 @@ it('${SECRET} 形式值:客户端拦截 + 友好提示(不发请求)', async () 
   expect(lastPutUrl).toBe('')
 })
 
-it('Anthropic:凭据类型可切换(订阅 token / API key)', async () => {
+it('Anthropic:仅 API key(无凭据类型选择器,无订阅选项)', async () => {
   mockApis('enterprise-admin')
   render(<ModelConfig />)
   const card = (await waitFor(() => screen.getByText('Anthropic (Claude)'))).closest('.rounded-2xl') as HTMLElement
   fireEvent.click(within(card).getByText('配置'))
-  const sel = await screen.findByLabelText('凭据类型') as HTMLSelectElement
-  expect(sel.value).toBe('subscription')
-  fireEvent.change(sel, { target: { value: 'api_key' } })
+  await screen.findByLabelText('API key *')
+  // 单一凭据类型 → 无选择器,固定显示「凭据类型:API key」
+  expect(screen.queryByLabelText('凭据类型')).toBeNull()
+  expect(screen.getByText('凭据类型:API key')).toBeTruthy()
   fireEvent.change(screen.getByLabelText('API key *'), { target: { value: 'sk-ant-real' } })
   fireEvent.click(screen.getByText('保存'))
   await waitFor(() => expect(lastPutBody?.auth_type).toBe('api_key'))

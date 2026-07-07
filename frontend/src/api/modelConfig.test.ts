@@ -6,10 +6,10 @@ afterEach(() => { vi.restoreAllMocks() })
 // listModelConfig:GET /v1/ws/model-config → 解 { providers: [...] }(只回状态,无密钥)。
 it('listModelConfig 解出 providers 状态数组', async () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
-    providers: [{ provider: 'anthropic', configured: true, auth_type: 'subscription', has_base_url: false }],
+    providers: [{ provider: 'anthropic', configured: true, auth_type: 'api_key', has_base_url: false }],
   }), { status: 200 }))
   const r = await listModelConfig()
-  expect(r).toEqual([{ provider: 'anthropic', configured: true, auth_type: 'subscription', has_base_url: false }])
+  expect(r).toEqual([{ provider: 'anthropic', configured: true, auth_type: 'api_key', has_base_url: false }])
 })
 
 // setModelConfig:PUT /v1/ws/model-config/{provider},body {auth_type, value}(+ 可选 base_url)。
@@ -33,7 +33,7 @@ it('setModelConfig:空 base_url 不下发', async () => {
     body = JSON.parse(init.body)
     return new Response(JSON.stringify({}), { status: 200 })
   })
-  await setModelConfig('gemini', { auth_type: 'api_key', value: 'k' })
+  await setModelConfig('minimax', { auth_type: 'api_key', value: 'k' })
   expect('base_url' in body).toBe(false)
 })
 
@@ -49,12 +49,16 @@ it('clearModelConfig DELETE 到 /v1/ws/model-config/{provider}', async () => {
   expect(method).toBe('DELETE')
 })
 
-// provider 定义表镜像 BFF:gemini 无 base_url;anthropic/openai 支持。
-it('PROVIDERS 表:auth 选项与 base_url 支持', () => {
-  const g = PROVIDERS.find(p => p.provider === 'gemini')!
-  expect(g.authOptions).toEqual(['api_key'])
-  expect(g.supportsBaseUrl).toBe(false)
+// provider 定义表镜像 BFF:anthropic 仅 api_key;minimax/deepseek OpenAI 兼容(带 base_url);无 gemini。
+it('PROVIDERS 表:集合 + auth 选项 + base_url 支持', () => {
+  expect(PROVIDERS.map(p => p.provider)).toEqual(['anthropic', 'openai', 'minimax', 'deepseek'])
   const a = PROVIDERS.find(p => p.provider === 'anthropic')!
-  expect(a.authOptions).toEqual(['subscription', 'api_key'])
+  expect(a.authOptions).toEqual(['api_key'])   // 去订阅态
   expect(a.supportsBaseUrl).toBe(true)
+  const mm = PROVIDERS.find(p => p.provider === 'minimax')!
+  expect(mm.authOptions).toEqual(['api_key'])
+  expect(mm.supportsBaseUrl).toBe(true)
+  const ds = PROVIDERS.find(p => p.provider === 'deepseek')!
+  expect(ds.authOptions).toEqual(['api_key'])
+  expect(ds.supportsBaseUrl).toBe(true)
 })
