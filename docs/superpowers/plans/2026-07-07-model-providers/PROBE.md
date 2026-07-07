@@ -62,6 +62,12 @@ ALL PROBE CHECKS PASSED
   - `response.output_text.delta` 增量:`你好` / `，我是一个由人工智能驱动的助手，旨在帮助您解决问题并提供信息。` → `response.output_item.done`(status completed)
 - 结论:minimax harness 读 `MINIMAX_*` 槽,凭据链 `企业文件→host 注入→runner 转发→harness` 完整走通,真实调用 MiniMax 并流式回复。**与 openai-agents 的 `OPENAI_*` 槽互不冲突**(两槽独立)。
 
+## 最终 verify(定稿镜像+compose,7 处触点全接)
+- `HARNESS_CREDENTIAL_ENV_VARS` 一等公民转发(非探针 passthrough hack);`_build_spawn_env_from_spec` 分支让 spec model 流到 harness。
+- **minimax** harness:`你好！有什么我可以帮助你的吗？`(真实流式)。
+- **deepseek** harness:`你好！有什么我可以帮助你的吗？`(真实流式;dev 用 MiniMax 测试凭据+model 隔离验证 harness 派发/凭据槽/model 流/流式;deepseek 默认 agent 的 `deepseek-chat` 模型需真 DeepSeek key 才能对真端点跑通)。
+- **FINAL: BOTH OK**。fork 单测 `tests/inner/test_provider_harnesses.py` 锁全 7 处;fork 360 passed、后端 324 passed、前端 89 passed、lint KEPT。
+
 ## 对 design/plan 的修订(据探针)
 - design §3.3/§4 的 `待探针` 项 → 已决定:model-flow 走 `_HARNESS_MODEL_ENV_KEY`(硬编字典,需登记);use_responses=False;endpoint 默认常量。
 - **新增第 4 处 fork 改动**:`host/connect.py::HARNESS_CREDENTIAL_ENV_VARS` 加 `MINIMAX_*`/`DEEPSEEK_*`。plan Task 2 增此步。
