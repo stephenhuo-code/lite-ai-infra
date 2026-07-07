@@ -22,18 +22,12 @@
 
 **Files:** 临时改 `third_party/omnigent/...`(探针分支/worktree,可弃);记录写 `2026-07-07-model-providers/PROBE.md`。
 
-- [ ] **Step 1: 起栈基线**
-  `make ws-up`,确认 omnigent server/host 就绪、现有 minimax(openai-agents)默认 agent 能对话(用 dev 测试 OpenAI 兼容凭据)。记当前 minimax 走 `OPENAI_*` 的实况。
-- [ ] **Step 2: 加最小 `minimax_harness.py` + 注册**
-  按 design §3.2 写薄 harness 读 `MINIMAX_API_KEY`/`MINIMAX_BASE_URL`/`HARNESS_MINIMAX_MODEL`;`_HARNESS_MODULES` 注册 `"minimax"`;`config.yaml` env 加三槽;重编译镜像。
-- [ ] **Step 3: 建一个 harness=minimax 的 agent 并对话**
-  经 BFF 建(或直接 omnigent POST /v1/agents)一个 `harness=minimax` 的 agent,配 `MINIMAX_*` 到 `secrets/model-config/ent-demo.json`,发一条消息。
-- [ ] **Step 4: 记事实(PROBE.md)**
-  回答:① 新 harness 名能否被 agent 选用并起 runner ② `model` 字段实际经哪个 env 到达 harness(是否 runner 自动派生 `HARNESS_MINIMAX_MODEL`,还是需 fork 补映射)③ `use_responses` 需否 False ④ base_url 缺失时行为 ⑤ 上游 `cli.py::_LOCAL_DAEMON_ENV_ALLOWLIST` 是否拦 `MINIMAX_*`。**每条附命令 + 观察到的输出证据。**
-- [ ] **Step 5: 据实测敲定决策规则**
-  在 PROBE.md 末尾把 design 的 `待探针` 项改为"已决定"(model-flow 方案、endpoint 默认、白名单补项)。
-- [ ] **Step 6: 提交探针记录**（探针代码可丢弃,只留 PROBE.md）
-  `git add docs/superpowers/plans/2026-07-07-model-providers/PROBE.md && git commit -m "probe(9a/providers): minimax harness copy end-to-end facts"`
+- [x] **Step 1: 起栈基线** — `make ws-up` 就绪;默认 agent 已种(含 ent-demo_minimax)。
+- [x] **Step 2: 加最小 `minimax_harness.py` + 注册** — harness 模块 + 5 处登记 + config/compose 槽;重编译镜像。
+- [x] **Step 3: 建 harness=minimax 的 agent 并对话** — 直连 omnigent POST /v1/agents(header-trust)建 `ent-demo_minimaxprobe`,`MINIMAX_*` 落 ent-demo.json,发消息真跑一轮。
+- [x] **Step 4: 记事实(PROBE.md)** — 6 处 fork 触点 + 真链路 SSE 证据(流式 MiniMax 回复)已记。
+- [x] **Step 5: 据实测敲定决策规则** — design §3.3 的 `待探针` 全部落地为"已定";撤上游白名单条;新增第 5/6 处。
+- [x] **Step 6: 提交探针记录** — PROBE.md + design/plan 更新提交(harness/config/compose 探针脚手架留待 Task 2 formalize)。
 
 > **人参与点**:探针结果研判 + DoR #4 过门由 owner 拍板后再进 Task 2。
 
@@ -41,20 +35,20 @@
 
 ## Task 2: fork — minimax/deepseek harness + 注册 + 白名单 + 重编译
 
+> **PROBE 已实测:每 provider harness 须改 fork 6 处(见 PROBE.md)。minimax 的 5 处登记 + harness 模块探针期已落,Task 2 formalize + 加 deepseek + 补第 6 处(HARNESS_CREDENTIAL_ENV_VARS)+ TDD。**
+
 **Files:**
 - Create: `third_party/omnigent/omnigent/inner/minimax_harness.py`、`deepseek_harness.py`
-- Modify: `third_party/omnigent/omnigent/runtime/harnesses/__init__.py`
-- Modify: `third_party/omnigent/omnigent/cli.py`(env 白名单,按 Task 1 结论)
-- Test: fork 侧 `tests/inner/test_*_harness.py`(注册可解析 + factory 读对槽)
+- Modify(6 触点):`runtime/harnesses/__init__.py`(_HARNESS_MODULES)、`model_override.py`(_SDK_MODEL_OVERRIDE_HARNESSES)、`runner/app.py`(_HARNESS_MODEL_ENV_KEY)、`spec/_omnigent_compat.py`(OMNIGENT_HARNESSES)、`host/connect.py`(HARNESS_CREDENTIAL_ENV_VARS 加 `MINIMAX_*`/`DEEPSEEK_*`)
+- Test: fork 侧单测(注册可解析 + factory 读对槽 + spec 允许集含 minimax/deepseek)
 - Modify: submodule 指针 + `scripts/omnigent_build.sh` 触发
 
-- [ ] **Step 1: 写失败测试** — `_HARNESS_MODULES` 含 `minimax`/`deepseek`;各 factory 在设了 `MINIMAX_API_KEY`/`DEEPSEEK_API_KEY` 时构造出带对应 api_key/base_url 的 executor(monkeypatch env)。
-- [ ] **Step 2: 跑测试确认失败(KeyError/ImportError)。**
-- [ ] **Step 3: 实现两 harness 模块**(按 Task 1 敲定的 model-flow/use_responses/默认 endpoint)。
-- [ ] **Step 4: 注册进 `_HARNESS_MODULES`;白名单补 `MINIMAX_*`(及缺的 `DEEPSEEK_BASE_URL`)。**
+- [ ] **Step 1: 写失败测试** — `_HARNESS_MODULES`/`OMNIGENT_HARNESSES`/`_SDK_MODEL_OVERRIDE_HARNESSES`/`_HARNESS_MODEL_ENV_KEY`/`HARNESS_CREDENTIAL_ENV_VARS` 均含 `minimax`/`deepseek`;各 factory 在设了 `MINIMAX_*`/`DEEPSEEK_*` 时构造出带对应 api_key/base_url 的 executor(monkeypatch env)。
+- [ ] **Step 2: 跑测试确认失败。**
+- [ ] **Step 3: 实现两 harness 模块**(use_responses=False;缺失 base_url/model 用 provider 默认常量)。
+- [ ] **Step 4: 补齐 6 处登记**(minimax 探针已落 5 处,deepseek 全新;两者都补第 6 处 `HARNESS_CREDENTIAL_ENV_VARS`,替代探针期的 compose passthrough hack)。
 - [ ] **Step 5: 跑 fork 单测确认绿。**
-- [ ] **Step 6: 重编译镜像 + bump submodule 指针。**
-  `scripts/omnigent_build.sh`;`git add third_party/omnigent`。
+- [ ] **Step 6: 重编译镜像 + bump submodule 指针。** `scripts/omnigent_build.sh`;`git add third_party/omnigent`。
 - [ ] **Step 7: 提交** `feat(9a/providers): minimax+deepseek harness (copy of openai-agents, own cred slots) + bump submodule`
 
 ---

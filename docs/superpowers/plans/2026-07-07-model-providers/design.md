@@ -79,10 +79,19 @@ def create_app():
 
 注册:`_HARNESS_MODULES` 增 `"minimax": "omnigent.inner.minimax_harness"`、`"deepseek": "omnigent.inner.deepseek_harness"`。
 
-### 3.3 `待探针`（plan Task 1 必须实测确认，禁止猜写进实现）
-- **model 流入**:agent spec 的 `model` 字段如何到达自定义 harness?openai-agents 靠 runner 设 `HARNESS_OPENAI_AGENTS_MODEL`;新 harness 名不在 spec-bake 的 env 名映射里 → 需确认 runner 是否按 harness 名派生 `HARNESS_<UPPER>_MODEL`,还是需在 fork 侧补映射。**决策规则**:若 runner 不自动派生,则在 executor spec bake 处按 harness 名补 `HARNESS_<NAME>_MODEL` 映射(最小改动),或让新 harness 读固定 `*_MODEL` 槽 + 默认模型常量兜底。
-- **use_responses**:MiniMax/DeepSeek 是否需 `/chat/completions`(=`use_responses=False`)。实测跑通一轮确认。
-- **base_url 默认**:MiniMax(如 `https://api.minimaxi.com/v1`)、DeepSeek(如 `https://api.deepseek.com`)——是否要求企业必填,还是 harness 内置默认。**决策规则**:优先企业配置的 `*_BASE_URL`;缺失时 harness 用该 provider 官方默认常量(避免误路由到 api.openai.com)。
+### 3.3 已由 PROBE 实测敲定(见 `PROBE.md`)
+每新增一个 provider harness,须改 **fork 的 6 处**(缺一即失败,PROBE 逐条实测):
+1. `omnigent/inner/<provider>_harness.py`(新模块,复用 `OpenAIAgentsSDKExecutor`)。
+2. `runtime/harnesses/__init__.py::_HARNESS_MODULES`(dispatch)。
+3. `model_override.py::_SDK_MODEL_OVERRIDE_HARNESSES`(model 覆盖允许)。
+4. `runner/app.py::_HARNESS_MODEL_ENV_KEY`(**硬编字典**;`model` 到 harness 的唯一通道 → `HARNESS_<NAME>_MODEL`)。
+5. `spec/_omnigent_compat.py::OMNIGENT_HARNESSES`(否则 POST /v1/agents 400 `must be one of`)。
+6. `host/connect.py::HARNESS_CREDENTIAL_ENV_VARS`(加 `MINIMAX_*`/`DEEPSEEK_*`;否则 host 注入到不了 runner)。
+
+- **model 流入**:靠第 4 处硬编字典(非通用派生)。**已定**。
+- **use_responses=False**:MiniMax/DeepSeek 走 `/chat/completions`(实测跑通)。**已定**。
+- **base_url 默认**:优先企业 `*_BASE_URL`,缺失用 provider 官方默认常量(MiniMax `https://api.minimaxi.com/v1`,DeepSeek `https://api.deepseek.com`)避免误路由到 api.openai.com。**已定**。
+- **上游 `cli.py::_LOCAL_DAEMON_ENV_ALLOWLIST` 不在受管注入路径**上 → **无需改**(撤销原 §4 该条)。
 
 ## 4. 沙箱注入 env 名单（`deploy/dev/omnigent/config.yaml` `sandbox.docker.env`）
 
