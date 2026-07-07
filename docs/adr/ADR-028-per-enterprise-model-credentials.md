@@ -27,7 +27,7 @@
 ### 3. 每 provider 独立 harness(增量 2026-07-07)
 - **问题**:MiniMax、DeepSeek 都是 OpenAI 兼容,初版都靠 openai-agents harness 读同一组 `OPENAI_*` → 无法同时配置(互相覆盖)。
 - **决策**:各复制一份 openai-agents harness(复用同一 `OpenAIAgentsSDKExecutor`),**各读自己的凭据槽**,注册为独立 harness 名 `minimax` / `deepseek`。两者可同时配置并各自可用;`OPENAI_*` 槽腾给真正的 OpenAI/Codex。
-- **PROBE 实测:每新增一个 provider harness 须改 fork 6 处**(缺一即失败):① `inner/<p>_harness.py` ② `runtime/harnesses/__init__.py::_HARNESS_MODULES` ③ `model_override.py::_SDK_MODEL_OVERRIDE_HARNESSES` ④ `runner/app.py::_HARNESS_MODEL_ENV_KEY`(硬编字典,model→harness 唯一通道) ⑤ `spec/_omnigent_compat.py::OMNIGENT_HARNESSES`(否则建 agent 400) ⑥ `host/connect.py::HARNESS_CREDENTIAL_ENV_VARS`(否则凭据到不了 runner)。+ Lite-AI 侧 `config.yaml sandbox.docker.env` 列注入槽名。详见 PROBE.md。
+- **PROBE + verify 实测:每新增一个 provider harness 须改 fork 7 处**(缺一即失败):① `inner/<p>_harness.py` ② `runtime/harnesses/__init__.py::_HARNESS_MODULES` ③ `model_override.py::_SDK_MODEL_OVERRIDE_HARNESSES` ④ `runner/app.py::_HARNESS_MODEL_ENV_KEY`(per-session `/model` 覆盖通道) ⑤ `spec/_omnigent_compat.py::OMNIGENT_HARNESSES`(否则建 agent 400) ⑥ `host/connect.py::HARNESS_CREDENTIAL_ENV_VARS`(否则凭据到不了 runner) ⑦ `runner/app.py::_build_spawn_env_from_spec`(否则 agent spec 声明的 `model` 烤不进 harness、被 harness 默认掩盖——真链路 verify 抓出)。+ Lite-AI 侧 `config.yaml sandbox.docker.env` 列注入槽名。fork 单测 `tests/inner/test_provider_harnesses.py` 锁全 7 处。详见 PROBE.md。
 - harness `use_responses=False`(chat/completions);缺 base_url/model 用 provider 官方默认常量(避免误路由到 api.openai.com)。
 
 ### 4. Anthropic 去平台默认 + 去订阅(增量 2026-07-07)

@@ -79,8 +79,9 @@ def create_app():
 
 注册:`_HARNESS_MODULES` 增 `"minimax": "omnigent.inner.minimax_harness"`、`"deepseek": "omnigent.inner.deepseek_harness"`。
 
-### 3.3 已由 PROBE 实测敲定(见 `PROBE.md`)
-每新增一个 provider harness,须改 **fork 的 6 处**(缺一即失败,PROBE 逐条实测):
+### 3.3 已由 PROBE + verify 实测敲定(见 `PROBE.md`)
+每新增一个 provider harness,须改 **fork 的 7 处**(缺一即失败,逐条实测;第 7 处由最终真链路 verify 抓出):
+7. `runner/app.py::_build_spawn_env_from_spec` 加分支 bake `_resolve_spec_model(spec)` → `HARNESS_<NAME>_MODEL`(否则 spec 声明的 model 被 harness 默认掩盖)。
 1. `omnigent/inner/<provider>_harness.py`(新模块,复用 `OpenAIAgentsSDKExecutor`)。
 2. `runtime/harnesses/__init__.py::_HARNESS_MODULES`(dispatch)。
 3. `model_override.py::_SDK_MODEL_OVERRIDE_HARNESSES`(model 覆盖允许)。

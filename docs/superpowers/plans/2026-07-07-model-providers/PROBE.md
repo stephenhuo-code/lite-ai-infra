@@ -7,7 +7,11 @@
 复制 openai-agents 得到一个可运行的 `minimax` harness,真链路(managed docker 沙箱)**跑通一轮**,流式返回 MiniMax 真实回复。
 每新增一个 provider harness 需改 **fork 的 6 处** + Lite-AI 的 config/compose。design 原先只列了 2–3 处,**漏了第 5、6 处(spec 校验允许集 + host→runner 凭据转发白名单)**——本探针补上。
 
-## 每新增一个 provider harness 要改的 6 处(fork)
+## 每新增一个 provider harness 要改的 7 处(fork)
+> 第 7 处由**最终真链路 verify** 抓出(6 处让 minimax"看着通",但 deepseek 暴露:spec 声明的 model 没流到 harness、被 harness 默认掩盖)。
+7. **spec model → spawn-env** `omnigent/runner/app.py::_build_spawn_env_from_spec`:硬编 `if harness==...` 分派,新 harness 落 `else→None` 分支 → agent spec 的 `model` 烤不进 `HARNESS_<NAME>_MODEL`,harness 只能用自己的 `_DEFAULT_MODEL`。加分支 bake `_resolve_spec_model(spec)`(parser 已把 `llm.model`→`executor.model`)。默认 agent 因默认模型=声明模型而"碰巧对";自定义 agent 换模型就会被静默忽略——故必须补。
+
+## (原 6 处 fork 登记)
 1. **新 harness 模块** `omnigent/inner/<provider>_harness.py`(`create_app()` 复用 `OpenAIAgentsSDKExecutor`,读自己的槽)。
 2. **harness 注册** `omnigent/runtime/harnesses/__init__.py::_HARNESS_MODULES`(runner 据此 import+调 `create_app()`)。
 3. **model override 允许集** `omnigent/model_override.py::_SDK_MODEL_OVERRIDE_HARNESSES`(否则 model 覆盖不落 spawn env)。
