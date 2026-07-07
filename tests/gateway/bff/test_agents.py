@@ -155,15 +155,18 @@ def _unpack_bundle(req: httpx.Request) -> dict:
     return yaml.safe_load(tf.extractfile(member).read())
 
 
-def test_default_enterprise_agent_templates_are_fixed_four():
+def test_default_enterprise_agent_templates_are_fixed_five():
     from services.gateway.bff import omnigent_proxy as op
 
     names = [t.display_name for t in op.DEFAULT_ENTERPRISE_AGENTS]
 
-    assert names == ["minimax", "debby", "codex", "polly"]
+    assert names == ["minimax", "deepseek", "debby", "codex", "polly"]
     by_name = {t.display_name: t for t in op.DEFAULT_ENTERPRISE_AGENTS}
-    assert by_name["minimax"].harness == "openai-agents"
+    # minimax / deepseek 走各自独立 harness（读自己的凭据槽，不抢 OPENAI_*）
+    assert by_name["minimax"].harness == "minimax"
     assert by_name["minimax"].model == "MiniMax-Text-01"
+    assert by_name["deepseek"].harness == "deepseek"
+    assert by_name["deepseek"].model == "deepseek-chat"
     assert by_name["debby"].harness == "claude-sdk"
     assert by_name["codex"].harness == "codex"
     assert by_name["polly"].harness == "claude-sdk"
@@ -181,13 +184,13 @@ def test_ensure_default_agents_creates_missing_four_for_enterprise():
         transport=httpx.MockTransport(cap.handler),
     )
 
-    assert result.created == ["minimax", "debby", "codex", "polly"]
+    assert result.created == ["minimax", "deepseek", "debby", "codex", "polly"]
     assert result.skipped == []
     posts = _bundle_posts(cap)
-    assert len(posts) == 4
+    assert len(posts) == 5
     created_cfgs = [_unpack_bundle(p) for p in posts]
     assert [c["description"].split("\n", 1)[0] for c in created_cfgs] == [
-        "minimax", "debby", "codex", "polly"]
+        "minimax", "deepseek", "debby", "codex", "polly"]
     assert all(c["name"].startswith(f"{ENTA}{SEP}") for c in created_cfgs)
     assert "auth" not in created_cfgs[0]["executor"]
 
@@ -205,10 +208,10 @@ def test_ensure_default_agents_is_idempotent():
         ENTA, omni_base_url="http://omnigent:8000",
         identity_email="system@lite-ai.local", transport=transport)
 
-    assert first.created == ["minimax", "debby", "codex", "polly"]
+    assert first.created == ["minimax", "deepseek", "debby", "codex", "polly"]
     assert second.created == []
-    assert second.skipped == ["minimax", "debby", "codex", "polly"]
-    assert len(_bundle_posts(cap)) == 4
+    assert second.skipped == ["minimax", "deepseek", "debby", "codex", "polly"]
+    assert len(_bundle_posts(cap)) == 5
 
 
 def test_ensure_default_agents_backfills_only_missing_defaults():
@@ -226,9 +229,9 @@ def test_ensure_default_agents_backfills_only_missing_defaults():
         transport=httpx.MockTransport(cap.handler),
     )
 
-    assert result.created == ["minimax", "codex", "polly"]
+    assert result.created == ["minimax", "deepseek", "codex", "polly"]
     assert result.skipped == ["debby"]
-    assert len(_bundle_posts(cap)) == 3
+    assert len(_bundle_posts(cap)) == 4
 
 
 def test_ensure_default_agents_audits_only_created_defaults():
@@ -246,8 +249,8 @@ def test_ensure_default_agents_audits_only_created_defaults():
         audit_writer=audit_writer,
     )
 
-    assert result.created == ["minimax", "debby", "codex", "polly"]
-    assert len(sink.events) == 4
+    assert result.created == ["minimax", "deepseek", "debby", "codex", "polly"]
+    assert len(sink.events) == 5
     actions = {ev["action"] for ev in sink.events}
     assert actions == {"agent:seed-default"}
     for ev in sink.events:
@@ -260,7 +263,7 @@ def test_ensure_default_agents_audits_only_created_defaults():
         assert {"key", "name", "harness", "has_api_key"} <= set(ev["metadata"].keys())
         assert set(ev["metadata"].keys()) == {"key", "name", "harness", "has_api_key"}
 
-    # 对已存在代理的第二次补齐不应额外审计（仅首次创建的 4 条）
+    # 对已存在代理的第二次补齐不应额外审计（仅首次创建的 5 条）
     second = ensure_default_agents_for_enterprise(
         ENTA,
         omni_base_url="http://omnigent:8000",
@@ -269,8 +272,8 @@ def test_ensure_default_agents_audits_only_created_defaults():
         audit_writer=audit_writer,
     )
     assert second.created == []
-    assert second.skipped == ["minimax", "debby", "codex", "polly"]
-    assert len(sink.events) == 4
+    assert second.skipped == ["minimax", "deepseek", "debby", "codex", "polly"]
+    assert len(sink.events) == 5
 
 
 # ===== (1) 非 admin 建 → 403,且不打到 omnigent =====

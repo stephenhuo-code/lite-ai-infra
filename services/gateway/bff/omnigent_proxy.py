@@ -79,10 +79,18 @@ DEFAULT_ENTERPRISE_AGENTS: tuple[DefaultAgentTemplate, ...] = (
     DefaultAgentTemplate(
         key="minimax",
         display_name="minimax",  # display-name-ok(default agent UI label)
-        harness="openai-agents",
+        harness="minimax",
         model="MiniMax-Text-01",
-        description="OpenAI 兼容 provider 模板,默认用于 MiniMax。",
-        instructions="你是 minimax 智能体,使用企业配置的 OpenAI 兼容 provider 回答问题。",
+        description="MiniMax 模板,使用企业配置的 MiniMax 凭据(独立凭据槽)。",
+        instructions="你是 minimax 智能体,使用企业配置的 MiniMax provider 回答问题。",
+    ),
+    DefaultAgentTemplate(
+        key="deepseek",
+        display_name="deepseek",  # display-name-ok(default agent UI label)
+        harness="deepseek",
+        model="deepseek-chat",
+        description="DeepSeek 模板,使用企业配置的 DeepSeek 凭据(独立凭据槽)。",
+        instructions="你是 deepseek 智能体,使用企业配置的 DeepSeek provider 回答问题。",
     ),
     DefaultAgentTemplate(
         key="debby",
