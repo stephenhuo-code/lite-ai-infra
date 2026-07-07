@@ -34,9 +34,10 @@ make ws-up
 # 前端不用单独起 —— 网关已在 8090 同源把 build 好的前端发出来了,直接开浏览器即可。
 # (改了前端代码要重新生效:make fe-build 重 build;真·热更新延后,见计划。)
 
-# 关于 AI 模型凭据:omnigent 需要一个「订阅 token」才能让 agent 调用模型。
-# 它放在 secrets/omnigent.token(不进代码仓);ws-up 会自动从这个文件读出来注入,你不用管。
-# 万一报「缺订阅 token」,说明这个文件不在 —— 把你的 claude 订阅 token 放到 secrets/omnigent.token 即可。
+# 关于 AI 模型凭据(ADR-028):不再用平台全局 claude 订阅 token(已彻底移除)。
+# 模型凭据改为**每企业**在「模型配置」页各配(见下方「模型配置」验收段):
+# Anthropic(Claude)/ OpenAI(Codex)/ MiniMax / DeepSeek。写进 secrets/model-config/<企业>.json(不进仓)。
+# 注意:claude 类 agent(debby/polly)需先在「模型配置」里配好本企业的 Anthropic API key 才可用;未配则这些 agent 明确不可用。
 ```
 
 **就绪标志**(ws-up 末尾会打印):
@@ -176,14 +177,55 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8900/v1/agents
 
 ---
 
+# 「模型配置」验收(Plan 9a · 模型配置 / ADR-028)
+
+> **这一段验什么(大白话)**:平台多了一个「模型配置」页 —— 企业管理员在里面为本企业各模型 provider 填凭据(API key / endpoint)。
+> 现在有 **4 个 provider:Anthropic (Claude)、OpenAI (Codex)、MiniMax、DeepSeek**(没有 Gemini)。填好后,对应的智能体就能用这家模型;两个 OpenAI 兼容的 MiniMax 和 DeepSeek 各用各的凭据、**能同时配、互不串号**。
+> Anthropic 现在和别的一样是普通模型(**没有"平台默认"、只有 API key**);平台不再自带 claude 订阅,所以 **claude 类 agent(debby/polly)要先配好本企业 Anthropic API key 才能用**。
+> **前置**:第 0 步环境已起好;`alice`/`alice`(企业管理员)。dev 用你自己的测试凭据(可复用同一份 OpenAI 兼容 key 分别填给 MiniMax/DeepSeek 来演示)。
+
+## 模-1. 看 provider 列表:4 个,无 Gemini,Anthropic 无"平台默认"
+
+**这步在验什么**:配置页展示的 provider 集合正确,Anthropic 是普通"未配置/已配置"、只有 API key 一种。
+
+**你该看到什么**:
+1. 用 `alice`/`alice` 登录,左侧菜单进 **「模型配置」**。
+2. 看到 **Anthropic (Claude)、OpenAI (Codex)、MiniMax、DeepSeek** 四张卡片,**没有 Gemini**。
+3. Anthropic 卡片:徽标是「未配置」(或已配则「本企业已配置」),**没有「平台默认」徽标**;点「配置」弹窗里**只有 API key**(没有"订阅 token"选项、没有凭据类型下拉)。
+
+## 模-2. 同时配 MiniMax 和 DeepSeek,两者都"已配置"、各跑一轮
+
+**对应**:SC-001(两个 OpenAI 兼容 provider 可同时配置并用)、SC-004(不串号)。
+
+**这步在验什么**:MiniMax 和 DeepSeek 能**同时**配好,并且各自的默认智能体都能真的对话(读的是各自的凭据,不互相覆盖)。
+
+**你该看到什么**:
+1. 在「模型配置」给 **MiniMax** 点「配置」→ 填它的 API key + Base URL(如 `https://api.minimaxi.com/v1`)→ 保存 → 卡片变「本企业已配置」。
+2. 再给 **DeepSeek** 点「配置」→ 填它的 API key + Base URL(如 `https://api.deepseek.com`)→ 保存 → 卡片也变「本企业已配置」。**两个同时都是"已配置",互不影响**。
+3. 进 Workspace，用 **minimax** 默认智能体新建会话发一条消息 → 能收到流式回复。
+4. 再用 **deepseek** 默认智能体新建会话发一条消息 → 也能收到流式回复。两者各用各的模型(SC-004:不串号)。
+
+## 模-3. 未配某 provider,其 agent 明确不可用(不误用别家凭据)
+
+**对应**:SC-004、边界(未配不回落)。
+
+**这步在验什么**:只配了一个、没配另一个时,没配的那个的 agent **明确报不可用**,**绝不**偷用别家的 key。
+
+**你该看到什么(可由执行者代跑演示)**:
+1. 只配 MiniMax、**清除 DeepSeek**(卡片点「清除」→ 变「未配置」)。
+2. 用 **deepseek** 默认智能体发消息 → **明确报该 provider 不可用 / agent 起不来**,不会用 MiniMax 的 key 蒙混成功。
+3. 同理:**不配 Anthropic** 时用 **debby**(claude-sdk)→ 明确不可用;在「模型配置」配好本企业 **Anthropic API key** 后再试 → 可用(这就是"平台不再自带 claude 订阅"的迁移影响)。
+
+---
+
 # 「智能体库」验收(Plan 9a · 智能体库 / ADR-027)
 
 > **这一段验什么(大白话)**:平台多了一个「智能体库」页 —— 企业管理员能在里面**自己造一个 AI 角色**(比如"客服助手",给它起名字、写一段它该怎么说话的提示词);
 > 同企业的普通成员进对话窗时能**从库里挑这个角色**来聊,聊起来后**这个会话就锁定用它、中途换不了**;
 > 别的企业的人**既看不到、也用不了**你造的角色;普通成员**根本没有"新建"按钮**,就算他绕过界面直接调接口,服务端也会**拒绝**。
-> 企业默认可见 4 个本企业智能体:minimax、debby、codex、polly；列表不再并列展示"内置"模板卡片。
+> 企业默认可见 5 个本企业智能体:minimax、deepseek、debby、codex、polly；列表不再并列展示"内置"模板卡片。
 >
-> **你该看到什么**:智能体库里有 minimax、debby、codex、polly 四个"本企业"智能体,不再并列展示"内置"模板卡片。管理员能编辑 debby,能删除 polly;刷新后结果保持。普通成员没有编辑/删除入口。
+> **你该看到什么**:智能体库里有 minimax、deepseek、debby、codex、polly 五个"本企业"智能体,不再并列展示"内置"模板卡片。管理员能编辑 debby,能删除 polly;刷新后结果保持。普通成员没有编辑/删除入口。
 >
 > **对应需求**:SC-001 ~ SC-005、FR-001 ~ FR-008、User Story 1/2/3(见 `../2026-06-30-agent-library/spec.md`)。每步标了编号。
 > **前置**:第 0 步那套环境已起好(`make ws-up`,唯一入口 `http://localhost:8090`),`alice`/`alice`(企业管理员)、`bob`/`bob`(普通成员)都在企业 `ent-demo`。
@@ -202,7 +244,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8900/v1/agents
 3. 点「新建智能体」,在弹窗里填:
    - **名字**:`客服助手`
    - **系统提示词**:`你是友好的客服,只用中文简短回答`
-   - 模型留空(用模板默认即可);基底固定是 `claude-native`(平台已注入全局共享订阅,唯一能跑的)。
+   - 模型留空(用模板默认即可);基底 `claude-native`/`claude-sdk` 需先在「模型配置」配好本企业 **Anthropic API key** 才能跑(平台全局订阅已移除,ADR-028)。
 4. 点「创建」。弹窗关掉,**列表里立刻出现「客服助手」这一条,带「本企业」标记**(说明它归 ent-demo、只有本企业可见)。列表中不再并列展示"内置"模板卡片。
 
 > 如果创建报错(比如"重名""无权限""不可用"),那是**明确的中文提示**,不会静默卡住 —— 看到提示按提示处理即可,别当成功。
@@ -286,10 +328,10 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8090/v1/ws/age
 
 **对应**:SC-005、FR-006、FR-001。
 
-**这步在验什么**:企业库展示 minimax、debby、codex、polly 四个默认本企业智能体，不展示内置模板卡片入口；管理员与普通成员的编辑/删除能力按后端授权区分;刷新后默认卡片状态稳定。
+**这步在验什么**:企业库展示 minimax、deepseek、debby、codex、polly 五个默认本企业智能体，不展示内置模板卡片入口；管理员与普通成员的编辑/删除能力按后端授权区分;刷新后默认卡片状态稳定。
 
 **你该看到什么**:
-1. **你该看到什么**:智能体库里有 minimax、debby、codex、polly 四个"本企业"智能体,不再并列展示"内置"模板卡片。管理员能编辑 debby,能删除 polly;刷新后结果保持。普通成员没有编辑/删除入口。
+1. **你该看到什么**:智能体库里有 minimax、deepseek、debby、codex、polly 五个"本企业"智能体,不再并列展示"内置"模板卡片。管理员能编辑 debby,能删除 polly;刷新后结果保持。普通成员没有编辑/删除入口。
 2. 管理员对 debby 执行编辑、对 polly 执行删除后刷新列表;行为仍按策略持续生效，不会被重建流程自动恢复。
 3. non-admin（普通成员）在列表与接口层都看不到编辑/删除入口;服务端拒绝编辑/删除请求。
 
@@ -329,7 +371,7 @@ make ws-down
 
 **测试账号**:`alice` / `alice`(企业管理员)、`bob` / `bob`(普通成员),同属企业 `ent-demo`(邮箱域 `acme.test`)。
 **地址**:**入口/网关 `:8090`(浏览器只开这个)**、Keycloak `:8080`(登录中转)、omnigent `:8900`。(不再有独立的前端 `:5173` —— 网关 8090 同源发前端。)
-**订阅 token**:`secrets/omnigent.token`(不进代码仓;ws-up 自动读出注入为 `CLAUDE_CODE_OAUTH_TOKEN`)。
+**模型凭据(ADR-028)**:每企业在「模型配置」页各配,写 `secrets/model-config/<企业>.json`(不进代码仓)。平台全局 claude 订阅 token 已彻底移除,不再需要 `secrets/omnigent.token`。
 
 > **哪些是 owner 亲自做、哪些执行者代跑**:
 > - **你(owner)亲自做**:第 0 步起栈、第 1~3 步浏览器登录 + 点击 + 双用户隔离(SC-001/002/003 的核心);**智能体库**第 智-1 步(alice 建客服助手)、智-2 步(bob 选用 + 锁定)、智-5 步(企业默认卡片与编辑/删除边界)。
