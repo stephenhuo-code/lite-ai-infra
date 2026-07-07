@@ -1,219 +1,217 @@
 # lite-ai-infra
 
-多企业（multi-enterprise）SaaS 形态的 LLM 基础设施平台。当前处于 **S0 地基**阶段：身份解析（Keycloak token → 带 scope 的 `Context`）、统一授权出入口 `can()`、追加写审计、API 契约 + 代码生成，全部可在本地 Mac 上开发与测试。
+多企业（multi-enterprise）SaaS 形态的 LLM 基础设施平台。已可在本地 Mac 一键起全栈：**统一登录（Keycloak）→ 控制台 → Workspace 里和 AI agent 对话**，每企业自管模型凭据（Anthropic / OpenAI / MiniMax / DeepSeek），身份/授权/审计/隔离全链路打通。
 
 > 架构宪法（必读、不可违反）：[`docs/constitution.md`](docs/constitution.md)
 > 详细设计：[`docs/superpowers/specs/2026-05-08-llm-infra-platform-design.md`](docs/superpowers/specs/2026-05-08-llm-infra-platform-design.md)
-> S0 实现计划与验收 runbook：[`docs/superpowers/plans/2026-06-08-s0-foundation.md`](docs/superpowers/plans/2026-06-08-s0-foundation.md)
+> 手动验收 runbook（照着点，不用读代码）：[`docs/superpowers/plans/2026-06-28-omnigent-integration/RUNBOOK.md`](docs/superpowers/plans/2026-06-28-omnigent-integration/RUNBOOK.md)
 
 ---
 
-## 1. 前置依赖
+## 🚀 快速开始（一键起全栈）
+
+### 0. 前置依赖
 
 | 工具 | 用途 | 安装 |
 |---|---|---|
-| **uv** ≥ 0.9 | Python 环境/依赖管理（环境即工程，宪法 §5.8）| `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| **Docker Desktop**（arm64）| 本地跑 Keycloak + MinIO | https://docker.com |
-| `git` | —  | — |
+| **uv** ≥ 0.9 | Python 环境/依赖（环境即工程，宪法 §5.8）| `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| **Docker Desktop**（arm64，需能跑 docker CLI + 挂 docker.sock）| Keycloak / MinIO / omnigent 沙箱 | https://docker.com |
+| **Node.js** ≥ 18（含 npm）| 前端构建（Vite）| https://nodejs.org |
+| `git` | 拉子模块（omnigent fork）| — |
 
-- **Python 解释器不需要手动装**：基线钉在 `.python-version` = `3.12`，`uv` 会按需自动获取 CPython 3.12 并建独立 `.venv`。系统自带的 python（如 3.9）不参与，命令一律走 `uv run`。
-- **端口要求**：dev 环境占用 **8080**（Keycloak）、**9000/9001**（MinIO）。运行前确保这三个端口空闲（见 §7 排错）。
+- **Python 不用手动装**：基线钉在 `.python-version`=`3.12`，`uv` 会自动获取 CPython 3.12 并建独立 `.venv`；命令一律走 `uv run` / `make`。
+- **要空闲的端口**：**8090**（控制台入口）、**8080**（Keycloak）、**9000/9001**（MinIO）、**8900**（omnigent）。见下方「排错」。
+- **拉子模块**（omnigent 是我们的 fork，作 git submodule）：`git submodule update --init third_party/omnigent`
 
----
-
-## 2. 一次性初始化
+### 1. 一次性初始化
 
 ```bash
-make sync        # = uv sync --extra dev ：按 uv.lock 建/同步 .venv(3.12) 并装依赖（含 dev 工具）
+git submodule update --init third_party/omnigent   # 拉 omnigent fork（首次）
+make sync                                           # 建/同步 .venv(3.12) 并装 Python 依赖
+make fe-install                                     # 装前端依赖（frontend/node_modules；ws-up build 前端需要）
 ```
 
-完成后即可离线复现同一环境（dev / CI / 阿里云三处一致：`.python-version` + `uv.lock`）。
+### 2. 一键起全栈
+
+```bash
+make ws-up       # 起 Keycloak+MinIO → 置备用户/企业 → 自编译并起 omnigent(server+host) → build 前端 → 起网关(8090)
+```
+
+`ws-up` 会按依赖顺序把整套起齐并逐个等就绪（首次要拉/编译镜像，稍慢）。末尾打印**唯一入口**：
+
+```
+┌─ 唯一入口（浏览器开这个）───────────────────────────┐
+│  http://localhost:8090   控制台 + 登录 + Workspace，同源 │
+└──────────────────────────────────────────────────────┘
+```
+
+### 3. 登录 + 配模型 + 对话
+
+1. 浏览器开 **http://localhost:8090** → 未登录会跳 Keycloak，用 **`alice`/`alice`**（企业管理员）或 **`bob`/`bob`**（普通成员）登录。两人同属企业 `ent-demo`。
+2. **先配模型凭据**（否则 agent 起不来）：管理员 `alice` 进左侧 **「模型配置」** → 给要用的 provider 填 key/endpoint（见下方 §模型配置）。
+3. 进 **Workspace** → 新建会话 → 选一个默认智能体发消息，回复会流式冒出来。默认智能体：**minimax、deepseek、debby、codex、polly**。
+
+### 4. 停全栈
+
+```bash
+make ws-down     # 停所有服务 + omnigent + 清理动态拉起的 managed 沙箱容器（Keycloak/MinIO 数据保留）
+```
 
 ---
 
-## 3. 日常开发命令（全部经 `make` / `uv run`）
+## 🔑 模型配置（让 agent 能调模型）
+
+模型凭据**每企业各配**，由企业管理员在控制台「模型配置」页填写（ADR-028）。四个 provider：
+
+| Provider | 凭据类型 | 说明 |
+|---|---|---|
+| **Anthropic (Claude)** | 仅 API key | 驱动 `debby`/`polly`（claude-sdk）；**未配则这些 agent 不可用**（平台不再自带 claude 订阅）|
+| **OpenAI (Codex)** | API key / 订阅 | 真 OpenAI / Codex |
+| **MiniMax** | API key（+ base_url）| OpenAI 兼容；驱动 `minimax` 默认 agent，独立凭据槽 |
+| **DeepSeek** | API key（+ base_url）| OpenAI 兼容；驱动 `deepseek` 默认 agent，独立凭据槽 |
+
+- 值落 **gitignored** 文件 `secrets/model-config/<企业alias>.json`（env 名→字面值），omnigent 只读挂载、按会话企业注入沙箱。**绝不进代码仓、绝不回显**。
+- MiniMax、DeepSeek 各有独立槽（`MINIMAX_*` / `DEEPSEEK_*`），**可同时配、互不串号**。
+- 命令行补种默认 agent（dev/ops）：`make provision-default-agents EID=ent-demo`
+
+---
+
+## 🛠 调试 / 排错
+
+### 看日志
+
+各 uvicorn 服务日志在 `.dev/`（`ws-up` 后台起的）：
+```bash
+tail -f .dev/gateway.log        # 网关（BFF，含 omnigent 反代、model-config、agent 库）
+tail -f .dev/frontend.log       # 前端 build
+tail -f .dev/identity.log       # identity-org
+```
+容器（Keycloak / MinIO / omnigent）日志：
+```bash
+docker compose -f deploy/dev/omnigent/docker-compose.yml logs -f omnigent
+docker compose -f deploy/dev/docker-compose.yml logs -f keycloak
+docker ps --filter name=omnigent-managed-        # 每个活跃用户/会话一个隔离沙箱容器
+```
+
+### 改了 omnigent（fork）代码 → 重编译生效
+
+omnigent 是我们的 fork（`third_party/omnigent`，作 submodule）。改完重编译 + 重起：
+```bash
+scripts/omnigent_build.sh dev                                      # 自编译 server+host:dev 镜像
+docker compose -f deploy/dev/omnigent/docker-compose.yml up -d --force-recreate omnigent
+```
+> 若 docker build 里报 DNS/网络错（沙箱拦了外网），在允许联网的终端里跑该命令。
+
+### 改了前端 → 重 build
+
+前端由网关在 8090 同源发出（非 vite 5173，热更新延后）：
+```bash
+make fe-build     # 重 build frontend/dist，网关自动发新版
+```
+
+### agent 起不来 / 回复报「不可用」
+
+多半是**模型凭据没配**：去「模型配置」把对应 provider 配好（claude 类 agent 需本企业 `ANTHROPIC_API_KEY`）。
+
+### 端口被占（`address already in use`）
+
+```bash
+lsof -nP -iTCP:8090 -sTCP:LISTEN     # 换 8080/9000/9001/8900 逐个查
+```
+停掉占用进程，或 `make ws-down` 清干净再起。
+
+### `uv run pytest` 找不到模块
+
+先 `make sync` 建好 `.venv`；在**仓库根目录**运行（`pyproject.toml` 设了 `pythonpath=["."]`）。
+
+### Keycloak 取 token 报 `Account is not fully set up`
+
+种子用户缺 `firstName`/`lastName`/`emailVerified`（KC 26 声明式 profile 校验）——`realm-lite-ai.json` 已修；自建用户需补齐这三项。
+
+---
+
+## 🧪 开发与测试
 
 | 命令 | 作用 | 期望 |
 |---|---|---|
-| `make test` | 单元测试（零依赖，默认 `-m "not integration"`）| `23 passed` |
-| `make lint` | 分层检查（import-linter）+ 宪法 §8 grep 护栏 | `1 kept, 0 broken` + 护栏 exit 0 |
-| `make gen` | OpenAPI 契约 → Pydantic 模型代码生成 | 生成 `libs/contracts_gen/identity_org_models.py`（确定性、无时间戳）|
-| `make dev-up` | 起本地 Keycloak + MinIO（docker-compose）| 见 §4 |
-| `make dev-down` | 停并清空本地依赖（含数据卷）| — |
-| `make test-integration` | 集成测试（需先 `make dev-up`）| ⚠️ 见 §5（任务 9 待实现）|
+| `make test` | 后端单元测试（零依赖，`-m "not integration"`）| `324 passed` |
+| `make lint` | 分层检查（import-linter）+ 宪法 §8 grep 护栏 | `layering KEPT` + `0 broken` |
+| `make gen` | OpenAPI 契约 → Pydantic 模型代码生成（确定性）| 更新 `libs/contracts_gen/*` |
+| `make fe-test` | 前端单测（vitest）| all passed |
+| `make test-integration` | 集成测试（需先起依赖）| 见 §集成 |
 
-跑单个测试：
-
+跑单个测试 / fork 测试：
 ```bash
-uv run pytest tests/authz/test_can.py -q          # 单文件
-uv run pytest tests/authz/test_can.py::test_can_v1_matrix -q   # 单用例
+uv run pytest tests/gateway/bff/test_model_config.py -q               # 单文件
+uv run pytest tests/authz/test_can.py::test_can_v1_matrix -q          # 单用例
+(cd third_party/omnigent && ./.venv/bin/python -m pytest tests/inner/test_provider_harnesses.py -q)  # fork 单测
 ```
+> 直接敲裸 `pytest`/`lint-imports` 会找不到命令——它们在 uv 管理的 `.venv` 里，必须 `uv run <cmd>` 或 `make <target>`。
 
-> 直接敲裸 `pytest` / `lint-imports` 会找不到命令——它们装在 uv 管理的 `.venv` 里，必须用 `uv run <cmd>` 或 `make <target>`。
+### 单独起某个微服务（前台 + 热重载）
 
----
-
-## 4. 起本地环境（Keycloak + MinIO）
-
-```bash
-make dev-up
-# 首次拉镜像稍慢；Keycloak 导入 realm 约需 ~15s
-```
-
-起来后：
-
-| 服务 | 地址 | 凭据 |
-|---|---|---|
-| **Keycloak** | http://localhost:8080 （Admin Console：`/admin`，`admin` / `admin`）| realm = `lite-ai` |
-| **MinIO API** | http://localhost:9000 | `minio` / `minio123` |
-| **MinIO Console** | http://localhost:9001 | `minio` / `minio123` |
-
-**Seeded realm `lite-ai`**（见 `deploy/dev/keycloak/realm-lite-ai.json`，dev/test 共用同一份）：
-
-- client `gateway`（secret `dev-secret`，开启 direct access grant；`groups` mapper 带全路径）—— ROPC 仅给集成测试/ops 取 token
-- client `lite-ai-web`（secret `dev-web-secret`，**授权码流 + PKCE、禁 ROPC、窄回调 `:8090/auth/callback`**；`groups` mapper 带全路径）—— **BFF（gateway）OIDC 登录专用**（ADR-019 / 复审 C-4）
-- 组织结构：`/platform-admins`、`/e-0001/g-0001/{admins,members}`
-- 种子用户：**`alice` / `alice`**，归属 `/e-0001/g-0001/members`
-
-> **🔴 DoD 硬门（prod realm 另发，不可用 dev 值上线）**：`lite-ai-web` secret 走 secret 管理（**非 `dev-web-secret`**）；`redirectUris`/`webOrigins` 用 prod 域名（非 `localhost:8090`）；`gateway` 客户端 prod **关 ROPC**（`directAccessGrantsEnabled=false`）；BFF 会话 cookie `Secure` 开。dev 用上列固定值。
-
-**验证拿到带 `groups` claim 的 token**（S0 出口 ②）：
-
-```bash
-TOKEN=$(curl -s -d client_id=gateway -d client_secret=dev-secret \
-  -d username=alice -d password=alice -d grant_type=password \
-  http://localhost:8080/realms/lite-ai/protocol/openid-connect/token \
-  | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-uv run python -c "import jwt;print(jwt.decode('$TOKEN',options={'verify_signature':False})['groups'])"
-# 期望：['/e-0001/g-0001/members']
-```
-
-停掉：`make dev-down`。
-
----
-
-## 4.5 微服务本地运行(S1 Plan 3 起,真·多进程)
-
-架构 = 真微服务:每服务独立 uvicorn 进程,gateway 应用内 httpx 反代(非 nginx)。
+架构 = 真微服务，各独立 uvicorn，gateway 应用内 httpx 反代：
 
 | 服务 | 端口 | 启动 |
 |---|---|---|
-| dev Keycloak / MinIO | 8080 / 9000 | `make dev-up` |
-| **api-gateway**(反代壳) | **8090** | `make run-gateway` |
+| api-gateway（BFF / 反代壳）| **8090** | `make run-gateway` |
 | identity-org-service | 8001 | `make run-identity` |
-| metadata-service | 8002 | (Plan 4) |
+| metadata-service | 8002 | `make run-metadata` |
 | data-pipeline-service | 8003 | `make run-data-pipeline` |
+| omnigent（server）| 8900 | `make omnigent-up` |
 
-**一键起停全部(deps 容器 + 全部服务进程):**
-```bash
-make up      # 起 Keycloak/MinIO + identity-org(8001) + gateway(8090)
-make ps      # 看各服务状态
-make down    # 全停
-```
-> 日常只改单个服务时,用 `make run-identity` / `make run-gateway`(前台 + 热重载)。
+`make up` / `make ps` / `make down` 起停/查看 deps + 基础服务进程（不含 omnigent/前端，全栈用 `ws-up`）。
 
-**看 API(两种视图)**:
-- **聚合契约(一个页面看全部服务)**:`make api-docs` → http://localhost:8088 顶部下拉切换(自动发现 `contracts/openapi/*.yaml`,新服务零配置纳入);`make api-docs-down` 关
-- 运行时(每服务自带):gateway `http://localhost:8090/docs`、identity `http://localhost:8001/docs`
-
-**端到端验证**(经 gateway 反代拿到真 token 解析):
-```bash
-TOKEN=$(curl -fsS -d client_id=gateway -d client_secret=dev-secret -d username=alice \
-  -d password=alice -d grant_type=password \
-  http://localhost:8080/realms/lite-ai/protocol/openid-connect/token \
-  | uv run python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-curl -fsS -H "Authorization: Bearer $TOKEN" http://localhost:8090/v1/me/orgs
-# 期望:gateway(8090) 反代到 identity-org(8001) → 返回 alice 的 memberships
-```
-
-> 契约一致性由漂移守卫 CI 保证(运行时路由 ⊆ 契约);新增服务套脚手架 `services/_scaffold` 即自带 /docs + 守卫。
+**看 API 文档**：`make api-docs` → http://localhost:8088（聚合全部契约）；或运行时每服务自带 `/docs`（如 `:8090/docs`）。
 
 ---
 
-## 5. 网关服务 / 集成测试（任务 9，已落地）
+## 🔐 dev Keycloak realm（`lite-ai`）
 
-S0 交付**库 + 网关 + 契约 + 真依赖集成层**。单元层用 `x-test-claims` seam 和内存审计 double（无需真依赖）；集成层打真 Keycloak/MinIO：
+`make ws-up` 内已起并置备。手动看：Admin Console http://localhost:8080/admin（`admin`/`admin`）。
 
-- `services/gateway/main.py` —— 运行时装配（env → boto3(path-style)→MinIO/OSS → ASGI app）
-- `libs/identity/tokens.py` —— Keycloak JWKS 验签（JWKS client 按 url 缓存；`LITEAI_TOKEN_ISSUER`/`LITEAI_TOKEN_AUDIENCE` 给定时强制校验）
-- `tests/integration/` + `tests/conftest.py` —— 真 MinIO 写读 + 真 Keycloak token 验签
+- 企业 = KC Organization（ADR-025）；dev 企业 `ent-demo`，种子用户 `alice`（enterprise-admin）、`bob`（member）。
+- client `lite-ai-web`（授权码 + PKCE，BFF 登录专用）、client `gateway`（ROPC，仅集成测试/ops 取 token）。
 
-跑集成：`make dev-up && make test-integration`（期望 `2 passed`）。
+> **🔴 prod 硬门**：`lite-ai-web` secret 走 secret 管理（非 dev 值）；回调用 prod 域名；`gateway` 关 ROPC；会话 cookie `Secure`。dev 用固定 dev 值。
 
-起真网关（真验签）：
-
-```bash
-LITEAI_JWKS_URL=http://localhost:8080/realms/lite-ai/protocol/openid-connect/certs \
-  OSS_ENDPOINT=http://localhost:9000 OSS_ACCESS_KEY=minio OSS_SECRET_KEY=minio123 \
-  AUDIT_BUCKET=lite-ai uv run uvicorn services.gateway.main:app --port 8000
-```
-
-> 安全：`x-test-claims` 测试 seam **默认关闭**（default-deny）；仅显式 `LITEAI_ALLOW_TEST_CLAIMS=1`（单测/本地调试）才生效，生产装配绝不设置。
+集成测试（真 Keycloak/MinIO）：`make dev-up && make test-integration`。
 
 ---
 
-## 5.5 数据准备一行命令(pipelines/data_prep)
-
-```bash
-# tar 图文包 → DJ+Ray 清洗 → Lance on OSS(企业/组隔离路径),入口经 can()+审计
-OSS_ENDPOINT=… OSS_ACCESS_KEY=… OSS_SECRET_KEY=… DATA_BUCKET=… AUDIT_BUCKET=… \
-DJ_BIN=/path/to/dj-venv/bin/dj-process \
-  uv run python -m pipelines.data_prep --tar-dir ./tars --dataset cc3m
-```
-
-要点:DJ 跑在独立 venv(`DJ_BIN`,Ray 禁瞬态环境);需 Ray head 已起;OSS/MinIO
-寻址与 commit_lock 等兼容性已在 `pipelines/data_prep/lance_writer.py` 内自适应。
-身份:CLI 态走 `LITEAI_SUB`/`LITEAI_GROUPS` env;服务化入口见 S1 Plan 4。
-
----
-
-## 6. 代码结构
+## 📁 代码结构
 
 ```
 lite-ai-infra/
-├── contracts/openapi/identity-org.yaml   # API 契约（API-first 真相源）
+├── contracts/openapi/*.yaml       # API 契约（API-first 真相源）
 ├── libs/
-│   ├── identity/context.py     # Keycloak groups claim → 带 scope 的 Context（role_in 解析）
-│   ├── authz/{types,engine}.py # Resource/Decision + can()：唯一授权出入口（宪法 §2.4）
-│   ├── audit/oss_audit.py      # AuditSink 接口 + 尽力写 AuditWriter（ADR-010/013）
-│   └── contracts_gen/          # 由契约生成的 Pydantic 模型（make gen 产物，已提交）
-├── services/gateway/{app,deps}.py        # FastAPI 网关骨架：token→can()→audit
-├── deploy/dev/                 # 本地 docker-compose（Keycloak 26.6.2 + MinIO）+ seeded realm
-├── scripts/ci_guards.sh        # 宪法 §8 grep 护栏
-├── tests/                      # 单元（零依赖）+ integration/（真 MinIO/Keycloak）
-├── .python-version uv.lock pyproject.toml Makefile .importlinter
-└── .github/workflows/ci.yml    # CI：单元 + lint + 护栏 + oasdiff + codegen freshness
+│   ├── identity/                  # KC token → 带 scope 的 Context
+│   ├── authz/{types,engine}.py    # Resource/Decision + can()：唯一授权出入口（宪法 §2.4）
+│   ├── audit/oss_audit.py         # 追加写审计（ADR-010）
+│   └── contracts_gen/             # 契约生成的 Pydantic 模型（make gen 产物）
+├── services/
+│   ├── gateway/                   # 网关/BFF：登录、反代 omnigent、模型配置、智能体库
+│   ├── identity_org_service/      # 企业/成员
+│   ├── metadata_service/          # 数据集元数据
+│   └── data_pipeline_service/     # 数据管线
+├── frontend/                      # 控制台（TypeScript + Vite；网关同源发 dist）
+├── third_party/omnigent/          # 我们 fork 的 omnigent（submodule，自编译镜像）
+├── deploy/dev/                    # docker-compose（Keycloak/MinIO）+ omnigent compose + seeded realm
+├── scripts/                       # ws_up/ws_down、omnigent_build、provision_* 等
+├── secrets/model-config/          # 每企业模型凭据（gitignored）
+└── tests/                         # 后端单元（零依赖）+ integration/
 ```
 
 分层纪律（宪法 §4.1，import-linter 强制）：`services → libs` 单向，`libs` 不得反向 import `services`。
 
 ---
 
-## 7. 排错
+## 🌐 环境矩阵
 
-**`make dev-up` 报 `port ... 8080: address already in use`**
-说明 8080（或 9000/9001）被别的进程占了。查并处理：
+| 环境 | 位置 | 身份 | 对象存储 | agent 后端 |
+|---|---|---|---|---|
+| dev | 本地 Mac（docker-compose）| Keycloak 26.6.2 容器 | MinIO（S3 兼容）| omnigent 自编译 :dev |
+| test | 阿里云 ACK | ACK 上 Keycloak | 阿里云 OSS | omnigent CI 发布镜像 |
+| CI | GitHub Actions | 容器 Keycloak | 容器 MinIO | — |
 
-```bash
-lsof -nP -iTCP:8080 -sTCP:LISTEN          # 看谁占着
-```
-
-- 若是你自己的另一套服务（本机常驻），先停掉它，或临时改 `deploy/dev/docker-compose.yml` 里 Keycloak 的端口映射（如 `"8081:8080"`，但注意 §4 取 token 的 URL 与计划/测试默认都用 8080，改端口需同步改）。
-
-**`uv run pytest` 报找不到模块**
-先 `make sync` 建好 `.venv`；确认在仓库根目录运行（`pyproject.toml` 设了 `pythonpath=["."]`，`libs.*`/`services.*` 从根 import）。
-
-**Keycloak 取 token 返回 `invalid_grant: Account is not fully set up`**
-种子用户缺 `firstName`/`lastName`/`emailVerified`（Keycloak 26 默认开声明式 user profile 校验）——`realm-lite-ai.json` 已修复；若自建用户也需补齐这三项。
-
----
-
-## 8. 环境矩阵
-
-| 环境 | 位置 | 身份 | 对象存储 |
-|---|---|---|---|
-| dev | 本地 Mac（docker-compose）| Keycloak 26.6.2 容器 | MinIO（S3 兼容）|
-| test | 阿里云 ACK | ACK 上 Keycloak 26.6.2 | 阿里云 OSS |
-| CI | GitHub Actions | 集成 job 用容器 Keycloak | 集成 job 用容器 MinIO |
-
-CI 用 `astral-sh/setup-uv` + `uv sync` + `uv run` 复现同一 3.12 环境，跑单元 + lint + §8 护栏 + 契约 breaking（oasdiff）+ codegen 新鲜度校验。
+CI 用 `astral-sh/setup-uv` + `uv sync` + `uv run` 复现同一 3.12 环境，跑单元 + lint + §8 护栏 + 契约 breaking（oasdiff）+ codegen 新鲜度。
