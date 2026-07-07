@@ -9,8 +9,8 @@
 #                       再起 uvicorn(含 gateway:8090,带 OMNIGENT_BASE_URL=127.0.0.1:8900),等 /healthz
 #   5) 就绪            —— 唯一入口 http://localhost:8090(网关同源发前端 + 登录 + API),不再用 5173
 #
-# omnigent 订阅 token:compose 引用 ${CLAUDE_CODE_OAUTH_TOKEN:?};本脚本从 secrets/omnigent.token 读出导出。
-# 该 token 是 owner 的 claude 订阅 OAuth token(`secrets/omnigent.token`,不入仓);缺则在第 3 步明确报错。
+# 模型凭据:全部经每企业文件 secrets/model-config/<alias>.json 注入(BFF 在「模型配置」页写)。
+# claude 订阅 token 已彻底移除——不再需要 secrets/omnigent.token,claude 类 agent 用企业 ANTHROPIC_API_KEY。
 #
 # 幂等:各步都先查在不在(KC/omnigent/gateway 已起则跳过),可重复跑、可在已起的栈上补齐。
 set -uo pipefail
@@ -40,17 +40,9 @@ uv run python "$ROOT/scripts/provision_orgs.py" || {
   echo "ERROR: 组织置备失败(KC admin 可达?)" >&2; exit 1; }
 
 echo "==> [3/5] omnigent-up(自编译 server+host:dev → 起 omnigent server/postgres)"
-TOKEN_FILE="$ROOT/secrets/omnigent.token"
-if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
-  if [[ -f "$TOKEN_FILE" ]]; then
-    export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '[:space:]' < "$TOKEN_FILE")"
-    echo "  (已从 secrets/omnigent.token 导出 CLAUDE_CODE_OAUTH_TOKEN)"
-  else
-    echo "ERROR: 缺订阅 token —— 既无 \$CLAUDE_CODE_OAUTH_TOKEN,也无 $TOKEN_FILE" >&2
-    echo "       该 token = owner 的 claude 订阅 OAuth token,放 secrets/omnigent.token(不入仓)" >&2
-    exit 1
-  fi
-fi
+# claude 订阅 token 已彻底移除:不再从 secrets/omnigent.token 导出 CLAUDE_CODE_OAUTH_TOKEN,
+# compose 也不再引用它(owner 决策 2026-07-07)。claude 类 agent(debby/polly)需企业配置的
+# ANTHROPIC_API_KEY 才可用——未配则这些 agent 不可用(见 RUNBOOK 迁移说明)。
 $MAKE omnigent-up || exit 1
 _wait "omnigent" "http://127.0.0.1:8900/health" '"ok"' 120 || {
   echo "ERROR: omnigent 未就绪;看 docker compose -f deploy/dev/omnigent/docker-compose.yml logs omnigent" >&2; exit 1; }

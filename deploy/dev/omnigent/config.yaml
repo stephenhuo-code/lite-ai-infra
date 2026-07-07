@@ -22,13 +22,16 @@ sandbox:
     # 否则回退全局 server env;两处都无值的名字**不注入**(不产生空 env)。故这里全列无害:
     # 没配的 provider 自然不注入,配了的按企业注入对应值。
     env:
-      - CLAUDE_CODE_OAUTH_TOKEN   # Anthropic 订阅(claude-native/sdk/debby/polly)
-      - ANTHROPIC_API_KEY         # Anthropic API key(与订阅二选一)
+      # claude 订阅 token 已移除(不用/不注入):claude 类 agent(debby/polly)仅用企业 ANTHROPIC_API_KEY。
+      - ANTHROPIC_API_KEY         # Anthropic API key(claude-sdk/debby/polly,每企业配)
       - ANTHROPIC_BASE_URL        # Anthropic 网关覆盖(可选)
-      - OPENAI_API_KEY            # OpenAI/openai-agents/Qwen key(OpenAI 兼容 provider 如 MiniMax)
-      - OPENAI_BASE_URL           # OpenAI 兼容 endpoint 覆盖(如 https://api.minimaxi.com/v1)
+      - OPENAI_API_KEY            # 真 OpenAI / Codex(openai-agents 走 OPENAI_* 槽)
+      - OPENAI_BASE_URL           # OpenAI 兼容 endpoint 覆盖
       - CODEX_ACCESS_TOKEN        # Codex 订阅(与 OPENAI_API_KEY 二选一)
-      - GEMINI_API_KEY            # Gemini(antigravity)
+      - MINIMAX_API_KEY           # MiniMax(独立 harness=minimax,自己的凭据槽,不抢 OPENAI_*)
+      - MINIMAX_BASE_URL          # MiniMax OpenAI 兼容 endpoint
+      - DEEPSEEK_API_KEY          # DeepSeek(独立 harness=deepseek,自己的凭据槽)
+      - DEEPSEEK_BASE_URL         # DeepSeek OpenAI 兼容 endpoint
       # openai-agents 接 OpenAI 兼容 provider(MiniMax/DeepSeek/vLLM…)的 wire 开关:
       # 这些 provider 只讲 /chat/completions,openai-agents 默认走 /responses 会 404。
       # 值(=0)由 server 全局 env 提供;host 需把它转发给 runner,故一并把转发名单变量列进来。

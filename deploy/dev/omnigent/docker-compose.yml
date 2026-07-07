@@ -33,10 +33,9 @@ services:
       # sandbox=docker：server 用挂进来的 docker.sock 起 managed host 容器（镜像/网络如下）。
       OMNIGENT_DOCKER_HOST_IMAGE: omnigent-host:dev
       OMNIGENT_DOCKER_NETWORK: omnigent-dev_default
-      # 全局回退凭据（无企业文件的企业用）：仅注入订阅 token（apiKeyHelper 走订阅）；
-      # 绝不注入 ANTHROPIC_API_KEY（会破坏订阅 token）。
-      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:?need subscription token (export from secrets/omnigent.token)}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}   # 全局回退；主来源=每企业文件（M1）
+      # claude 订阅 token 已彻底移除（不用、不注入、不打进镜像）：claude 类 agent 仅用
+      # 企业配置的 ANTHROPIC_API_KEY（每企业文件），无平台全局回退（owner 决策 2026-07-07）。
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}   # 全局回退（仅 openai）；主来源=每企业文件（M1）
       # M1 每企业凭据：launcher 按会话 enterprise_id label 读 <dir>/<enterprise_id>.json 取值
       # （文件优先，回退上面的全局 env），跨企业隔离。目录挂载见下方 volumes。
       OMNIGENT_MODEL_CREDENTIALS_DIR: /config/model-credentials
@@ -45,6 +44,8 @@ services:
       # chat/completions(真 OpenAI GPT 也兼容)。该值经 sandbox.docker.env 注入 host 容器,
       # 再由 OMNIGENT_RUNNER_ENV_PASSTHROUGH 让 host 转发给 runner(harness 在 runner 里读它)。
       HARNESS_OPENAI_AGENTS_USE_RESPONSES: "0"
+      # MINIMAX_*/DEEPSEEK_* 由 fork 的 HARNESS_CREDENTIAL_ENV_VARS 一等公民转发 host→runner,
+      # 无需在此 passthrough(minimax/deepseek harness 在 factory 里已固定 use_responses=False)。
       OMNIGENT_RUNNER_ENV_PASSTHROUGH: HARNESS_OPENAI_AGENTS_USE_RESPONSES
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
