@@ -3,7 +3,7 @@ import { createAgent, updateAgent, type LibraryAgent } from '../api/omnigent'
 
 // 新建/编辑智能体弹窗(智能体库 / US2 · ADR-027)。仅企业管理员可见入口;服务端 can() 兜底。
 // 字段:名字(必填)+ 系统提示词(可选)+ 模型(可选)+ harness(基底)。
-// harness ∈ claude-native(默认)| claude-sdk | codex | qwen | pi。
+// harness ∈ claude-sdk(默认)| openai-agents | minimax | deepseek —— 与「模型配置」四个 provider 一一对应。
 // 凭据不再随 agent 走 —— 模型凭据由企业管理员在「模型配置」页统一配(ADR-028),
 // 按 harness 的 provider 自动注入本企业沙箱。故此弹窗无 API Key/Base URL 字段。
 //
@@ -11,16 +11,17 @@ import { createAgent, updateAgent, type LibraryAgent } from '../api/omnigent'
 // 故 edit 为破坏性覆盖 —— 留空的提示词/模型会被清除,需醒目告警。
 // 视觉照 UploadModal(靛蓝 #6366F1)。
 
+// harness 与「模型配置」的四个 provider 一一对应(每个都有本企业凭据槽,选了就能跑)。
+// minimax/deepseek 是各自独立的 harness(读自己的凭据槽,不抢 OPENAI_*),模型有默认、可覆盖。
 const HARNESSES = [
-  { value: 'claude-native', label: 'claude-native(默认)', hint: 'Anthropic 原生基底。模型凭据在「模型配置」页统一管理。' },
-  { value: 'claude-sdk', label: 'claude-sdk', hint: '通过 Anthropic SDK 调用。模型凭据在「模型配置」页统一管理。' },
-  { value: 'openai-agents', label: 'openai-agents(OpenAI 兼容)', hint: 'OpenAI 及兼容 provider(MiniMax / DeepSeek / vLLM 等):在「模型配置」把 OpenAI 配成 API key + base_url,并在下方【模型】填该 provider 的模型名(如 MiniMax-Text-01)。' },
-  { value: 'codex', label: 'codex(ChatGPT 订阅)', hint: 'OpenAI Codex 原生基底。仅认 ChatGPT 订阅登录,不吃 API key;要用 API key 接 OpenAI 兼容 provider 请选 openai-agents。' },
-  { value: 'qwen', label: 'qwen', hint: '通义千问基底。模型凭据在「模型配置」页统一管理。' },
-  { value: 'pi', label: 'pi', hint: 'Pi 基底。模型凭据在「模型配置」页统一管理。' },
+  { value: 'claude-sdk', label: 'claude-sdk(Anthropic)', hint: 'Anthropic Claude。在「模型配置」配 Anthropic (Claude) 的 API key 即可用。模型留空用默认。' },
+  { value: 'openai-agents', label: 'openai-agents(OpenAI)', hint: 'OpenAI / Codex(API key)。在「模型配置」配 OpenAI (Codex),并在下方【模型】填模型名(如 gpt-4o)。' },
+  { value: 'minimax', label: 'minimax(MiniMax)', hint: 'MiniMax。在「模型配置」配 MiniMax;模型默认 MiniMax-Text-01,可在下方覆盖。' },
+  { value: 'deepseek', label: 'deepseek(DeepSeek)', hint: 'DeepSeek。在「模型配置」配 DeepSeek;模型默认 deepseek-chat,可在下方覆盖。' },
 ] as const
 
-// 需要显式填模型名的 harness(多模型基底:openai-agents 接兼容 provider 时模型名必填,否则 model=None 会失败)。
+// 需要显式填模型名的 harness:openai-agents 无默认模型,model=None 会失败;
+// minimax/deepseek/claude-sdk 各有 provider 默认模型,可留空。
 const MODEL_REQUIRED_HARNESSES = new Set(['openai-agents'])
 
 type Props = {
@@ -47,7 +48,7 @@ export function CreateAgentModal({ onClose, onDone, mode = 'create', agent }: Pr
   const [name, setName] = useState(isEdit ? (agent?.name ?? '') : '')
   const [instructions, setInstructions] = useState('')
   const [model, setModel] = useState('')
-  const [harness, setHarness] = useState(isEdit ? (agent?.harness ?? 'claude-native') : 'claude-native')
+  const [harness, setHarness] = useState(isEdit ? (agent?.harness ?? 'claude-sdk') : 'claude-sdk')
   const [phase, setPhase] = useState<Phase>('idle')
   const [err, setErr] = useState('')
 

@@ -26,21 +26,21 @@ it('表单不含 API Key / Base URL 字段(凭据走「模型配置」)', () => 
   expect(screen.queryByLabelText(/Base URL/)).toBeNull()
 })
 
-it('选任一 SDK harness 仍不出现 API Key 字段', () => {
+it('选任一 harness 仍不出现 API Key 字段', () => {
   render(<CreateAgentModal onClose={() => {}} onDone={() => {}} />)
-  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'codex' } })
+  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'minimax' } })
   expect(screen.queryByLabelText('API Key *')).toBeNull()
 })
 
 it('创建:调 createAgent(POST),body 无 api_key/base_url', async () => {
   const onDone = vi.fn()
   render(<CreateAgentModal onClose={() => {}} onDone={onDone} />)
-  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'codex助手' } })
-  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'codex' } })
+  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'minimax助手' } })
+  fireEvent.change(screen.getByLabelText('基底 harness'), { target: { value: 'minimax' } })
   fireEvent.click(screen.getByText('创建'))
   await waitFor(() => expect(onDone).toHaveBeenCalled())
   expect(lastMethod).toBe('POST')
-  expect(lastBody.harness).toBe('codex')
+  expect(lastBody.harness).toBe('minimax')
   expect('api_key' in lastBody).toBe(false)
   expect('base_url' in lastBody).toBe(false)
 })
@@ -79,13 +79,13 @@ it('名字为空:创建按钮禁用,点击不发请求', async () => {
   expect(lastBody).toBeNull()
 })
 
-it('claude-native:提交 body 无 api_key', async () => {
+it('默认 harness=claude-sdk:提交 body 无 api_key', async () => {
   const onDone = vi.fn()
   render(<CreateAgentModal onClose={() => {}} onDone={onDone} />)
-  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: '原生助手' } })
+  fireEvent.change(screen.getByLabelText('名字 *'), { target: { value: 'Claude 助手' } })
   fireEvent.click(screen.getByText('创建'))
   await waitFor(() => expect(onDone).toHaveBeenCalled())
-  expect(lastBody.harness).toBe('claude-native')
+  expect(lastBody.harness).toBe('claude-sdk')
   expect('api_key' in lastBody).toBe(false)
 })
 
@@ -93,14 +93,14 @@ it('编辑模式:标题「编辑智能体」+ 预填 name/harness + 破坏性覆
   render(
     <CreateAgentModal
       mode="edit"
-      agent={{ id: 'ag1', name: '客服助手', harness: 'codex', enterprise_owned: true }}
+      agent={{ id: 'ag1', name: '客服助手', harness: 'claude-sdk', enterprise_owned: true }}
       onClose={() => {}}
       onDone={() => {}}
     />,
   )
   expect(screen.getByText('编辑智能体')).toBeTruthy()
   expect((screen.getByLabelText('名字 *') as HTMLInputElement).value).toBe('客服助手')
-  expect((screen.getByLabelText('基底 harness') as HTMLSelectElement).value).toBe('codex')
+  expect((screen.getByLabelText('基底 harness') as HTMLSelectElement).value).toBe('claude-sdk')
   expect(screen.getByText(/整体覆盖/)).toBeTruthy()
   expect(screen.getByText(/将被清除/)).toBeTruthy()
 })

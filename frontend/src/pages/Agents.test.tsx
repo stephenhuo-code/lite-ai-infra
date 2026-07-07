@@ -13,7 +13,7 @@ let lastDeleteId: string | null = null
 beforeEach(() => { lastDeleteId = null; vi.restoreAllMocks() })
 afterEach(() => { vi.restoreAllMocks() })
 
-const OWNED = { id: 'ag_owned', name: '客服助手', harness: 'claude-native', description: '只答产品问题', builtin: false, enterprise_owned: true }
+const OWNED = { id: 'ag_owned', name: '客服助手', harness: 'claude-sdk', description: '只答产品问题', builtin: false, enterprise_owned: true }
 
 // role: 'enterprise-admin' | 'member' —— 控制 /v1/me/orgs 返回的角色。
 // createdAgents: 初次列表;创建成功后会被追加(模拟刷新)。
@@ -31,7 +31,7 @@ function mockApis(role: string) {
     }
     if (u === '/v1/ws/agents' && init?.method === 'POST') {
       lastCreateBody = JSON.parse(init.body)
-      const obj = { id: 'ag_new', name: lastCreateBody.name, harness: 'claude-native', description: '', builtin: false, enterprise_owned: true }
+      const obj = { id: 'ag_new', name: lastCreateBody.name, harness: 'claude-sdk', description: '', builtin: false, enterprise_owned: true }
       created.push(obj)
       return new Response(JSON.stringify(obj), { status: 200 })
     }
@@ -75,7 +75,7 @@ it('普通成员【不见】「新建智能体」入口', async () => {
   expect(screen.queryByText('新建智能体')).toBeNull()
 })
 
-it('管理员提交创建 → POST body 正确(harness=claude-native)且刷新列表', async () => {
+it('管理员提交创建 → POST body 正确(harness=claude-sdk 默认)且刷新列表', async () => {
   mockApis('enterprise-admin')
   render(<Agents />)
   await waitFor(() => expect(screen.getByText('新建智能体')).toBeTruthy())
@@ -95,7 +95,7 @@ it('管理员提交创建 → POST body 正确(harness=claude-native)且刷新�
   expect(lastCreateBody.name).toBe('销售助手')
   expect(lastCreateBody.instructions).toBe('你是销售助手')
   expect(lastCreateBody.model).toBe('claude-sonnet')
-  expect(lastCreateBody.harness).toBe('claude-native') // 红线:仅 claude-native
+  expect(lastCreateBody.harness).toBe('claude-sdk') // 默认基底 = claude-sdk（与「模型配置」Anthropic 对应）
   // 9b 范围字段不得出现(无 MCP/工具/数据/凭据)
   expect('mcp' in lastCreateBody).toBe(false)
   expect('credentials' in lastCreateBody).toBe(false)
