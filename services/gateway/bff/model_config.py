@@ -30,20 +30,26 @@ from services.gateway.bff.omnigent_proxy import _ENV_REF_RE, _resolve_ctx
 # ── Provider 定义表 ──────────────────────────────────────────────────────────
 # 每 provider:auth 选项(auth_type → 注入的 env 变量名)+ 可选 base_url env 变量名。
 # 这些 env 名字**正是** M1 fork 白名单注入沙箱的名字(sandbox.docker.env 名单)。
-# 每 provider 的多个 auth 选项**互斥**(只写一个;写一个即删另一个),因为它们冲突
-# (如 claude 的订阅 CLAUDE_CODE_OAUTH_TOKEN 与 ANTHROPIC_API_KEY 同注会冲突)。
+# 每 provider 的多个 auth 选项**互斥**(只写一个;写一个即删另一个),因为它们冲突。
+# MiniMax / DeepSeek 各有**独立凭据槽**(MINIMAX_* / DEEPSEEK_*),互不重叠、也不与 OPENAI_* 重叠,
+# 故两个 OpenAI 兼容 provider 可同时配置并各自生效(fork 侧各有独立 harness 读自己的槽)。
+# Anthropic **仅 api_key**(去订阅态);平台不再提供 claude 订阅全局回退。
 _PROVIDERS: dict[str, dict] = {
     "anthropic": {
-        "auth": {"subscription": "CLAUDE_CODE_OAUTH_TOKEN", "api_key": "ANTHROPIC_API_KEY"},
+        "auth": {"api_key": "ANTHROPIC_API_KEY"},
         "base_url_env": "ANTHROPIC_BASE_URL",
     },
     "openai": {
         "auth": {"api_key": "OPENAI_API_KEY", "subscription": "CODEX_ACCESS_TOKEN"},
         "base_url_env": "OPENAI_BASE_URL",
     },
-    "gemini": {
-        "auth": {"api_key": "GEMINI_API_KEY"},
-        "base_url_env": None,
+    "minimax": {
+        "auth": {"api_key": "MINIMAX_API_KEY"},
+        "base_url_env": "MINIMAX_BASE_URL",
+    },
+    "deepseek": {
+        "auth": {"api_key": "DEEPSEEK_API_KEY"},
+        "base_url_env": "DEEPSEEK_BASE_URL",
     },
 }
 
@@ -102,30 +108,12 @@ def _write_creds(alias: str, creds: dict[str, str]) -> None:
     os.replace(tmp, p)
 
 
-def _platform_default_auth(provider: str) -> str | None:
-    """平台级**全局回退**凭据是否存在 → 返回其 auth_type,否则 None(绝不返回值)。
-    唯一的全局默认 = 平台 claude 订阅:omnigent compose 注入的全局 `CLAUDE_CODE_OAUTH_TOKEN`,
-    其来源 = 宿主 gitignored 文件 `secrets/omnigent.token`。故此处以该文件存在且非空为准
-    (**不**读网关自身进程 env —— 那里可能有用户 shell 里与 omnigent 无关的 ANTHROPIC_API_KEY,会误判)。
-    其它 provider 无平台默认(每企业各配)。测试可用 PLATFORM_ANTHROPIC_TOKEN_FILE 指向临时文件。"""
-    if provider != "anthropic":
-        return None
-    tok = Path(os.getenv("PLATFORM_ANTHROPIC_TOKEN_FILE", "secrets/omnigent.token"))
-    try:
-        if tok.exists() and tok.read_text().strip():
-            return "subscription"
-    except Exception:
-        return None
-    return None
-
-
 def _provider_status(provider: str, creds: dict[str, str]) -> dict:
     """据 env-map 算某 provider 的**状态**(绝不含值):
       - configured:**本企业**是否单独配置(有企业凭据文件对应 env)。
       - auth_type:本企业配的类型(未配 = None)。
-      - platform_default:本企业未配、但**平台有全局默认**(如 claude 订阅)可用 → agent 仍能跑。
-      - platform_auth_type:平台默认的类型(如 subscription),仅供展示。
-    三态:本企业已配 > 平台默认 > 未配置。"""
+      - has_base_url:是否设了 base_url。
+    二态:本企业已配 / 未配置。**无平台默认**——所有 provider(含 anthropic)一律每企业各配。"""
     p = _PROVIDERS[provider]
     auth_type = None
     for at, env_name in p["auth"].items():
@@ -134,12 +122,8 @@ def _provider_status(provider: str, creds: dict[str, str]) -> dict:
             break
     base_url_env = p["base_url_env"]
     has_base_url = bool(base_url_env and creds.get(base_url_env))
-    # 平台默认只在本企业未配时才相关(企业配置覆盖平台默认)。
-    platform_auth = None if auth_type else _platform_default_auth(provider)
     return {"provider": provider, "configured": auth_type is not None,
-            "auth_type": auth_type, "has_base_url": has_base_url,
-            "platform_default": platform_auth is not None,
-            "platform_auth_type": platform_auth}
+            "auth_type": auth_type, "has_base_url": has_base_url}
 
 
 def _all_status(creds: dict[str, str]) -> list[dict]:

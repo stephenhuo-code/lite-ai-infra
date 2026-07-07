@@ -30,9 +30,6 @@ def _env(monkeypatch, store_dir):
     monkeypatch.setenv("BFF_REDIRECT_URI", "http://gw/auth/callback")
     # ★ 文件存储指向临时目录 —— 绝不碰真 secrets/。
     monkeypatch.setenv("MODEL_CONFIG_DIR", str(store_dir))
-    # 平台默认(claude 全局订阅)探测指向不存在的路径 → 默认 platform_default=False,测试确定性;
-    # 需要平台默认的用例自行覆盖此 env 指向真文件(绝不读仓库真 secrets/omnigent.token)。
-    monkeypatch.setenv("PLATFORM_ANTHROPIC_TOKEN_FILE", str(store_dir / "no-platform-token"))
 
 
 def _claims_for(*, sub, org, roles):
@@ -154,14 +151,42 @@ def test_put_mutually_exclusive_auth_removes_other_env(monkeypatch, tmp_path):
     assert "CODEX_ACCESS_TOKEN" not in creds
 
 
-def test_put_anthropic_subscription_writes_oauth_token(monkeypatch, tmp_path):
+def test_put_anthropic_api_key_writes_env(monkeypatch, tmp_path):
+    # anthropic 仅 api_key（去订阅态）：写 ANTHROPIC_API_KEY，绝不出现订阅 token env。
+    c = TestClient(_app(monkeypatch, tmp_path, claims_fn=ADMIN_A))
+    r = c.put("/v1/ws/model-config/anthropic", cookies=_ck(), headers=_hdr(),
+              json={"auth_type": "api_key", "value": "sk-ant-key"})
+    assert r.status_code == 200, r.text
+    creds = json.loads(_file(tmp_path, ENTA).read_text())
+    assert creds["ANTHROPIC_API_KEY"] == "sk-ant-key"
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in creds
+
+
+def test_put_anthropic_subscription_rejected_400(monkeypatch, tmp_path):
+    # 去订阅态：anthropic 不再支持 subscription → 400，绝不写订阅 token。
     c = TestClient(_app(monkeypatch, tmp_path, claims_fn=ADMIN_A))
     r = c.put("/v1/ws/model-config/anthropic", cookies=_ck(), headers=_hdr(),
               json={"auth_type": "subscription", "value": "oauth-tok"})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 400, r.text
+    assert not _file(tmp_path, ENTA).exists()
+
+
+def test_put_minimax_and_deepseek_write_own_slots(monkeypatch, tmp_path):
+    # MiniMax / DeepSeek 各写自己的独立槽，互不覆盖，也不碰 OPENAI_*。
+    c = TestClient(_app(monkeypatch, tmp_path, claims_fn=ADMIN_A))
+    r1 = c.put("/v1/ws/model-config/minimax", cookies=_ck(), headers=_hdr(),
+               json={"auth_type": "api_key", "value": "sk-mm",
+                     "base_url": "https://api.minimaxi.com/v1"})
+    r2 = c.put("/v1/ws/model-config/deepseek", cookies=_ck(), headers=_hdr(),
+               json={"auth_type": "api_key", "value": "sk-ds",
+                     "base_url": "https://api.deepseek.com"})
+    assert r1.status_code == 200 and r2.status_code == 200, (r1.text, r2.text)
     creds = json.loads(_file(tmp_path, ENTA).read_text())
-    assert creds["CLAUDE_CODE_OAUTH_TOKEN"] == "oauth-tok"
-    assert "ANTHROPIC_API_KEY" not in creds
+    assert creds["MINIMAX_API_KEY"] == "sk-mm"
+    assert creds["MINIMAX_BASE_URL"] == "https://api.minimaxi.com/v1"
+    assert creds["DEEPSEEK_API_KEY"] == "sk-ds"
+    assert creds["DEEPSEEK_BASE_URL"] == "https://api.deepseek.com"
+    assert "OPENAI_API_KEY" not in creds
 
 
 def test_put_rejects_env_ref_value_400_no_write(monkeypatch, tmp_path):
@@ -181,9 +206,9 @@ def test_put_rejects_unknown_provider(monkeypatch, tmp_path):
 
 
 def test_put_rejects_unsupported_auth_type(monkeypatch, tmp_path):
-    # gemini 只有 api_key;subscription 不支持 → 400
+    # minimax 只有 api_key;subscription 不支持 → 400
     c = TestClient(_app(monkeypatch, tmp_path, claims_fn=ADMIN_A))
-    r = c.put("/v1/ws/model-config/gemini", cookies=_ck(), headers=_hdr(),
+    r = c.put("/v1/ws/model-config/minimax", cookies=_ck(), headers=_hdr(),
               json={"auth_type": "subscription", "value": "x"})
     assert r.status_code == 400, r.text
 
@@ -203,63 +228,27 @@ def test_get_returns_status_no_secrets(monkeypatch, tmp_path):
     SECRET = "sk-do-not-leak-987"
     c.put("/v1/ws/model-config/openai", cookies=_ck(), headers=_hdr(),
           json={"auth_type": "api_key", "value": SECRET})
-    c.put("/v1/ws/model-config/gemini", cookies=_ck(), headers=_hdr(),
-          json={"auth_type": "api_key", "value": "gem-key"})
+    c.put("/v1/ws/model-config/minimax", cookies=_ck(), headers=_hdr(),
+          json={"auth_type": "api_key", "value": "mm-key"})
     r = c.get("/v1/ws/model-config", cookies=_ck())
     assert r.status_code == 200, r.text
     # 绝无密钥值
     assert SECRET not in r.text
-    assert "gem-key" not in r.text
+    assert "mm-key" not in r.text
     by = {p["provider"]: p for p in r.json()["providers"]}
+    # provider 集合 = anthropic / openai / minimax / deepseek（无 gemini）
+    assert set(by.keys()) == {"anthropic", "openai", "minimax", "deepseek"}
     assert by["openai"]["configured"] is True
     assert by["openai"]["auth_type"] == "api_key"
     assert by["openai"]["has_base_url"] is False
-    assert by["gemini"]["configured"] is True
+    assert by["minimax"]["configured"] is True
     # 未配的 provider
     assert by["anthropic"]["configured"] is False
     assert by["anthropic"]["auth_type"] is None
-    # 状态字段里不含 value / 任何密钥字段(仅状态/元数据,无密钥值)
+    assert by["deepseek"]["configured"] is False
+    # 状态字段 = 二态（去 platform_default/platform_auth_type），无密钥值
     for st in r.json()["providers"]:
-        assert set(st.keys()) == {"provider", "configured", "auth_type",
-                                  "has_base_url", "platform_default", "platform_auth_type"}
-
-
-# ===== (3b) 平台默认(claude 全局订阅)状态 =====
-
-def test_anthropic_platform_default_when_token_file_present(monkeypatch, tmp_path):
-    # 本企业未配 anthropic,但平台有全局订阅(token 文件存在非空)→ platform_default=True(agent 可跑)。
-    tok = tmp_path / "platform.token"
-    tok.write_text("sk-ant-oat-platform\n")
-    c = TestClient(_app(monkeypatch, tmp_path, claims_fn=ADMIN_A))
-    # 在 _app(内含 _env,会重设该 env)之后再指向真 token 文件;状态在请求时实时读取。
-    monkeypatch.setenv("PLATFORM_ANTHROPIC_TOKEN_FILE", str(tok))
-    r = c.get("/v1/ws/model-config", cookies=_ck())
-    assert r.status_code == 200, r.text
-    by = {p["provider"]: p for p in r.json()["providers"]}
-    an = by["anthropic"]
-    assert an["configured"] is False           # 本企业未单独配
-    assert an["platform_default"] is True       # 但平台默认可用
-    assert an["platform_auth_type"] == "subscription"
-    # 平台 token 值绝不外泄到响应
-    assert "sk-ant-oat-platform" not in r.text
-    # 其它 provider 无平台默认
-    assert by["openai"]["platform_default"] is False
-    assert by["gemini"]["platform_default"] is False
-
-
-def test_enterprise_config_overrides_platform_default(monkeypatch, tmp_path):
-    # 平台有全局订阅,但本企业配了自己的 anthropic → configured=True 覆盖,platform_default 归 False。
-    tok = tmp_path / "platform.token"
-    tok.write_text("sk-ant-oat-platform")
-    c = TestClient(_app(monkeypatch, tmp_path, claims_fn=ADMIN_A))
-    monkeypatch.setenv("PLATFORM_ANTHROPIC_TOKEN_FILE", str(tok))
-    c.put("/v1/ws/model-config/anthropic", cookies=_ck(), headers=_hdr(),
-          json={"auth_type": "api_key", "value": "sk-entA-own"})
-    r = c.get("/v1/ws/model-config", cookies=_ck())
-    an = {p["provider"]: p for p in r.json()["providers"]}["anthropic"]
-    assert an["configured"] is True
-    assert an["platform_default"] is False       # 企业配置覆盖平台默认
-    assert an["auth_type"] == "api_key"
+        assert set(st.keys()) == {"provider", "configured", "auth_type", "has_base_url"}
 
 
 # ===== (4) 跨企业:只碰自己 alias.json =====
