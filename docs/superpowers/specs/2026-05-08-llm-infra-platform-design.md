@@ -4,7 +4,8 @@
 > **作者**：平台团队(原按 3 人编制;**2026-06 起实际为一人 + Claude**,见文末修订记录)
 > **日期**：2026-05-08(修订 2026-06-12)
 > **目标上线**：v1 原 ≈2026-07-11(**将后移**,S2 计划时走 ADR 重排,宪法 §7.4);GA 原 ≈2026-11-28
-> **执行现状**:S0 已关闭(ADR-014 carry-over);S1——出口①②③ 已验收,**出口⑤ 已关闭**(2026-06-24,真 GUI 经 BFF 全链路调通;Plan 8 前端 + catalog-driven + owner 模型合并 main)—— 见 §5.3 各 sprint 修订块、S1 design §9.3 计划序与文末"修订记录"
+> **执行现状**:S0 已关闭(ADR-014 carry-over);S1——出口①②③ 已验收,**出口⑤ 已关闭**(2026-06-24,真 GUI 经 BFF 全链路调通;Plan 8 前端 + catalog-driven + owner 模型合并 main);**出口④ 由 Plan 9a 部分达成**(2026-07-08,omnigent 集成 + Workspace 对话窗多用户/隔离/fork 自编译已合并 main;9b dev workspace 全貌推迟)—— 见 §5.3 各 sprint 修订块、S1 design §9.3 计划序与文末"修订记录"
+> **v2 Agent 平台首片已落(2026-07-08,随 9a 提前)**:统一对话 Workspace(omnigent 自托管多用户,[ADR-026](../../adr/ADR-026-omnigent-integration.md))+ **智能体库**(每企业 admin 建/编辑/删,[ADR-027](../../adr/ADR-027-agent-library.md))+ **每企业模型配置 · 每 provider 独立 harness**([ADR-028](../../adr/ADR-028-per-enterprise-model-credentials.md))均**已合并 main + 真机验证**。四 provider = **Anthropic(仅 API key)/ OpenAI / MiniMax / DeepSeek**;MiniMax/DeepSeek 各有独立 harness+凭据槽(可同时配、不串号);**平台 claude 订阅 token 已彻底移除**(claude 类 agent 改用企业 `ANTHROPIC_API_KEY`)。新企业默认得 5 个本企业 agent(minimax/deepseek/debby/codex/polly)。**统一 LLM Gateway / 按 token 计量 / Agentic Search / 数据工具 can() 承重墙**仍属 v2/v3 后续(9b+)。
 
 > **as-built 修订(2026-06-24,以 ADR 为准)**:本文为全平台**愿景**(含 Workspace/配额/Cerbos/CLI 等尚未建部分),下述**已实现并合并 main**的部分,口径已被后续 ADR 收敛:
 > - **数据集归属 = owner(上传用户 sub),非 group**([ADR-024](../../adr/ADR-024-owner-based-dataset-ownership.md),amend ADR-010/011/016)。**数据集** OSS 路径 = `e-XXXX/{user}/{raw,processed}/…`(不再 `e-0001/g-0001/…`)。**group 退为访问/审计维度**(跨用户分享/group 访问 → Cerbos v2);企业仍硬隔离。
