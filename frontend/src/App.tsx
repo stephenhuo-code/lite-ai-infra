@@ -14,7 +14,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Shell />}>
-        <Route index element={<Navigate to="/datasets" replace />} />
+        <Route index element={<Navigate to="/workspace" replace />} />
         <Route path="/datasets" element={<Datasets />} />
         <Route path="/catalog" element={<Catalog />} />
         <Route path="/pipelines" element={<Pipelines />} />
@@ -23,7 +23,7 @@ export default function App() {
         <Route path="/model-config" element={<ModelConfig />} />
         <Route path="/workspace" element={<Workspace />} />
         <Route path="/account" element={<Account />} />
-        <Route path="*" element={<Navigate to="/datasets" replace />} />
+        <Route path="*" element={<Navigate to="/workspace" replace />} />
       </Route>
     </Routes>
   )

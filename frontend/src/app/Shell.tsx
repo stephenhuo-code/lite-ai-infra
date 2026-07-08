@@ -1,43 +1,42 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useOrgs } from '../auth/useOrgs'
 
-// 可折叠应用外壳(US1 鉴权壳):侧栏 w-64↔w-16、顶栏(登出)、<Outlet/>。
-// 视觉照高保真原型 docs/superpowers/prototypes/2026-06-22-data-domain-hifi.html(靛蓝 #6366F1)。
-// 顶栏不显示企业名:后端无 enterprise_name 字段(vN+ 缺口),不假装显示企业名,
-// 也不保留死 prop。折叠/登出/导航行为保持不动。
+// 两栏应用外壳:最左窄「图标栏」(大图标+小字的一级菜单)+ 可折叠「二级面板」(列当前一级项的子页)。
+// 一级 = 任务 / 智能体 / 数据 / 工作台 + 底部「我的账户」;任务/账户无子页(全宽渲染)。
+// 视觉沿用全站靛蓝 #6366F1;登出/无企业引导行为不变。
 
-type NavItem = { to: string; label: string; group?: string; icon: React.ReactNode; adminOnly?: boolean }
+type SubItem = { to: string; label: string; adminOnly?: boolean }
+type Section = { key: string; label: string; icon: React.ReactNode; to?: string; children?: SubItem[] }
 
-const NAV: NavItem[] = [
-  { to: '/workspace', label: '任务', group: '智能体', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+const SECTIONS: Section[] = [
+  { key: 'tasks', label: '任务', to: '/workspace', icon: (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
   ) },
-  { to: '/agents', label: '智能体库', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 7V5a3 3 0 016 0v2M9 13h.01M15 13h.01"/></svg>
-  ) },
-  { to: '/model-config', label: '模型配置', adminOnly: true, icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H2a2 2 0 010-4h.09A1.65 1.65 0 004.6 8a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 3.6h.09A1.65 1.65 0 0011 2.09V2a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0021.9 8h.01a1.65 1.65 0 001.5 1H23a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-  ) },
-  { to: '/datasets', label: '数据集', group: '数据', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-  ) },
-  { to: '/catalog', label: '数据目录', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
-  ) },
-  { to: '/pipelines', label: '数据管线', group: '作业', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a2 2 0 012 2v1.5M8.5 18H14a2 2 0 002-2v-1.5"/></svg>
-  ) },
-  { to: '/create', label: '创建作业', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
-  ) },
-  { to: '/account', label: '我的账户', group: '账户', icon: (
-    <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>
-  ) },
+  { key: 'agents', label: '智能体', icon: (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M9 7V5a3 3 0 016 0v2M9 13h.01M15 13h.01"/></svg>
+  ), children: [
+    { to: '/agents', label: '智能体库' },
+    { to: '/model-config', label: '模型配置', adminOnly: true },
+  ] },
+  { key: 'data', label: '数据', icon: (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+  ), children: [
+    { to: '/catalog', label: '数据目录' },
+    { to: '/datasets', label: '数据集' },
+  ] },
+  { key: 'work', label: '工作台', icon: (
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 6H14a2 2 0 012 2v1.5M8.5 18H14a2 2 0 002-2v-1.5"/></svg>
+  ), children: [
+    { to: '/create', label: '创建作业' },
+    { to: '/pipelines', label: '数据管线' },
+  ] },
 ]
 
-const navItemBase = 'nav-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] transition-colors'
+const ACCOUNT: Section = { key: 'account', label: '我的账户', to: '/account', icon: (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/></svg>
+) }
 
 async function logout() {
   // RP-initiated logout:POST 清本地会话(CSRF 保护)→ 整页跳 BFF 返回的 KC end_session(结束 SSO,无缝回登录页)
@@ -69,70 +68,113 @@ function NoEnterpriseNotice() {
   )
 }
 
+// 图标栏一级项:大图标 + 小字,竖排,不缩进。
+function RailItem({ section, active, onClick }: { section: Section; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title={section.label}
+      aria-label={section.label}
+      className={
+        'flex flex-col items-center gap-1 w-full py-2.5 rounded-xl text-[11px] font-medium transition-colors ' +
+        (active ? 'bg-[#EEF0FF] text-[#4F46E5]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700')
+      }
+    >
+      {section.icon}
+      <span>{section.label}</span>
+    </button>
+  )
+}
+
 export function Shell() {
   const [collapsed, setCollapsed] = useState(false)
-  const asideWidth = collapsed ? 'w-16' : 'w-64'
   const { orgs, loading } = useOrgs()
   const location = useLocation()
+  const navigate = useNavigate()
   // 已加载且无企业成员且非平台管理员 → 待分配态(数据页拦截,/account 放行)。
   const noEnterprise = !loading && !!orgs && (orgs.memberships?.length ?? 0) === 0 && !orgs.is_platform_admin
-  // 企业管理员:任一 membership.role === 'enterprise-admin'。adminOnly 导航项(模型配置)仅其可见(仅 UX 门,服务端独立强制)。
+  // 企业管理员:任一 membership.role === 'enterprise-admin'。adminOnly 子页(模型配置)仅其可见(仅 UX 门,服务端独立强制)。
   const isEnterpriseAdmin = !!orgs?.memberships?.some(m => m.role === 'enterprise-admin')
-  const navItems = NAV.filter(item => !item.adminOnly || isEnterpriseAdmin)
+
+  const visibleChildren = (s: Section): SubItem[] =>
+    (s.children ?? []).filter(c => !c.adminOnly || isEnterpriseAdmin)
+
+  // 当前路由归属哪个一级项(图标栏高亮 + 决定二级面板)。
+  const pathname = location.pathname
+  const matchSection = (s: Section) => s.to === pathname || (s.children ?? []).some(c => c.to === pathname)
+  const activeSection: Section =
+    [...SECTIONS, ACCOUNT].find(matchSection) ?? SECTIONS[0]
+
+  const railTarget = (s: Section) => s.to ?? visibleChildren(s)[0]?.to ?? '/'
+  const secondaryItems = visibleChildren(activeSection)
+  const showSecondary = secondaryItems.length > 0 && !collapsed
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-800">
-      <aside className={`${asideWidth} shrink-0 h-screen sticky top-0 bg-white border-r border-slate-200/70 flex flex-col transition-[width] duration-150`}>
-        <div className="h-16 flex items-center px-4 border-b border-slate-100">
-          {!collapsed && (
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-xl grid place-items-center text-white shrink-0 shadow-sm" style={{ background: 'linear-gradient(to bottom right, #6366F1, #d946ef)' }}>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M12 3l1.9 4.8L18.8 9.7l-4.9 1.5L12 16l-1.9-4.8L5.2 9.7l4.9-1.9z"/></svg>
-              </div>
-              <span className="font-semibold tracking-tight text-base">Lite-AI</span>
-            </div>
-          )}
-          {/* 折叠/展开按钮:标题栏右上方(展开时靠右,收起时居中) */}
-          <button
-            onClick={() => setCollapsed(c => !c)}
-            aria-label={collapsed ? '展开侧栏' : '折叠侧栏'}
-            title={collapsed ? '展开' : '折叠'}
-            className={`${collapsed ? 'mx-auto' : 'ml-auto'} p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 shrink-0`}
-          >
-            <svg className={`w-5 h-5 ${collapsed ? 'scale-x-[-1]' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M14 9l-2 3 2 3"/></svg>
-          </button>
+      {/* 图标栏(一级菜单):大图标+小字,竖排,不缩进 */}
+      <aside className="w-20 shrink-0 h-screen sticky top-0 bg-white border-r border-slate-200/70 flex flex-col">
+        <div className="h-16 flex items-center justify-center border-b border-slate-100">
+          <div className="h-9 w-9 rounded-xl grid place-items-center text-white shrink-0 shadow-sm" style={{ background: 'linear-gradient(to bottom right, #6366F1, #d946ef)' }} title="Lite-AI">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.7" viewBox="0 0 24 24"><path d="M12 3l1.9 4.8L18.8 9.7l-4.9 1.5L12 16l-1.9-4.8L5.2 9.7l4.9-1.9z"/></svg>
+          </div>
         </div>
-
-        <nav className="p-3.5 space-y-1 flex-1">
-          {navItems.map(item => (
-            <div key={item.to}>
-              {item.group && !collapsed && (
-                <p className="px-3 pt-4 pb-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider first:pt-2">{item.group}</p>
-              )}
-              <NavLink
-                to={item.to}
-                title={item.label}
-                className={({ isActive }) =>
-                  `${navItemBase} ${collapsed ? 'justify-center px-2' : ''} ` +
-                  (isActive
-                    ? 'bg-[#EEF0FF] text-[#4F46E5] font-semibold'
-                    : 'text-slate-600 hover:bg-slate-50')
-                }
-              >
-                {item.icon}
-                {!collapsed && <span>{item.label}</span>}
-              </NavLink>
-            </div>
+        <nav className="flex-1 p-2 space-y-1">
+          {SECTIONS.map(s => (
+            <RailItem key={s.key} section={s} active={activeSection.key === s.key} onClick={() => navigate(railTarget(s))} />
           ))}
         </nav>
-
-        <div className="p-3 border-t border-slate-100 h-12 flex items-center">
-          {!collapsed && <span className="text-[11px] text-slate-400">v0.1 · 数据域</span>}
+        <div className="p-2 border-t border-slate-100">
+          <RailItem section={ACCOUNT} active={activeSection.key === ACCOUNT.key} onClick={() => navigate(railTarget(ACCOUNT))} />
         </div>
       </aside>
 
+      {/* 二级面板:仅含子页的一级项显示;列该节子页 */}
+      {showSecondary && (
+        <aside data-testid="secondary-nav" className="w-52 shrink-0 h-screen sticky top-0 bg-white border-r border-slate-200/70 flex flex-col">
+          <div className="h-16 flex items-center gap-2 px-4 border-b border-slate-100">
+            <span className="font-semibold text-[15px] text-slate-800">{activeSection.label}</span>
+            <button
+              onClick={() => setCollapsed(true)}
+              aria-label="折叠面板"
+              title="折叠"
+              className="ml-auto p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 shrink-0"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M14 9l-2 3 2 3"/></svg>
+            </button>
+          </div>
+          <nav className="p-3 space-y-1 flex-1">
+            {secondaryItems.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  'flex items-center px-3 py-2.5 rounded-xl text-[15px] transition-colors ' +
+                  (isActive ? 'bg-[#EEF0FF] text-[#4F46E5] font-semibold' : 'text-slate-600 hover:bg-slate-50')
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+          <div className="p-3 border-t border-slate-100 h-12 flex items-center">
+            <span className="text-[11px] text-slate-400">v0.1 · 数据域</span>
+          </div>
+        </aside>
+      )}
+
       <main className="flex-1 min-w-0">
         <header className="h-16 sticky top-0 z-20 bg-white/85 backdrop-blur border-b border-slate-200/70 flex items-center gap-3 px-7">
+          {/* 面板折叠时:在顶栏左侧给一个展开入口(仅当前一级项有子页时) */}
+          {secondaryItems.length > 0 && collapsed && (
+            <button
+              onClick={() => setCollapsed(false)}
+              aria-label="展开面板"
+              title="展开"
+              className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <svg className="w-5 h-5 scale-x-[-1]" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M14 9l-2 3 2 3"/></svg>
+            </button>
+          )}
           <div className="ml-auto flex items-center gap-3">
             <button
               onClick={logout}

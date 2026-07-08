@@ -2,12 +2,14 @@ import { it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Shell } from './Shell'
-it('侧栏可折叠', () => {
-  render(<MemoryRouter><Shell /></MemoryRouter>)
-  const aside = document.querySelector('aside')!
-  expect(aside.className).toContain('w-64')
-  fireEvent.click(screen.getByLabelText('折叠侧栏'))
-  expect(aside.className).toContain('w-16')
+it('二级面板可折叠(含子页的一级项)', () => {
+  // 智能体一级项有子页 → 二级面板显示;折叠隐藏、展开恢复(图标栏常驻)。
+  render(<MemoryRouter initialEntries={['/agents']}><Shell /></MemoryRouter>)
+  expect(screen.queryByTestId('secondary-nav')).toBeTruthy()
+  fireEvent.click(screen.getByLabelText('折叠面板'))
+  expect(screen.queryByTestId('secondary-nav')).toBeNull()
+  fireEvent.click(screen.getByLabelText('展开面板'))
+  expect(screen.queryByTestId('secondary-nav')).toBeTruthy()
 })
 
 it('无企业账号在数据页显示「待分配」引导,而非 403(FR-003)', async () => {
