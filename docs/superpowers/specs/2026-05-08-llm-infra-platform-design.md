@@ -1449,7 +1449,7 @@ Lineage 边（v1 手工）：
 
 ---
 
-#### Sprint 1(06-12 → ≈07-01,14 个工作日,🔄 进行中):数据管线 + 元数据 + 服务化
+#### Sprint 1(06-12 → 07-08,✅ **已关闭 closed with carry-over**):数据管线 + 元数据 + 服务化 + (随 9a 落地 v2 Agent 平台首片)
 
 > 当前版计划真相源:[`2026-06-11-s1-data-pipeline-design.md`](2026-06-11-s1-data-pipeline-design.md)。一人 + Claude;数据规模 1GB 档(规模验证 → S2a);原 3 人版任务表见 git 历史,逐项去向见文末修订记录。
 
@@ -1460,14 +1460,15 @@ Lineage 边（v1 手工）：
 | Plan 3:脚手架 + identity-org-service + gateway 反代壳 | 统一 FastAPI 模板(/docs)+ `make api-docs` + 漂移守卫 CI;identity-org 迁出独立;gateway 改纯反代壳 | swagger 能力 + 服务化① | ✅ 已合并 |
 | Plan 4:metadata-service | `metadata.yaml` 契约先行 + Gravitino docker 后端 + 注册/查询 + 集成 | **②** | ✅ **已合并**(层级 API/can() 过滤/fileset→Dataset;80 单元+7 集成;人工 runbook 验收)|
 | Plan 5:data-pipeline-service | `data-pipeline.yaml` 契约先行 + 包 `run_prepare`(submit→job_id+查状态) | 服务化 | ✅ **已合并**(异步作业薄壳 ADR-018;JobRunner seam/单槽串行/PID 看门狗;102 单元+8 集成;独立 review;真 DJ 端到端验收)|
-| Plan 6:BFF 后端 | gateway OIDC 登录/会话/登出(无状态加密 cookie,access TTL≤5min)+ CSRF + `GET /v1/data/jobs`(can()+分页);realm 加固 | **⑤**(GUI 前置) | ✅ **已合并**(全绿+一键验收 7/7+隔离评审;BFF 后端就绪,待 Plan 7 前端)|
-| Plan 7:React/Vite 前端 | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户),调 BFF;gateway serve `dist` | **⑤** | ⏳ |
-| Plan 8:Dev Workspace | docker code-server 半天版(Pod 版 → S2) | ④(降级) | ⏳ 不阻塞 DoD |
+| Plan 6:BFF 后端 | gateway OIDC 登录/会话/登出(无状态加密 cookie,access TTL≤5min)+ CSRF + `GET /v1/data/jobs`(can()+分页);realm 加固 | **⑤**(GUI 前置) | ✅ **已合并**(全绿+一键验收 7/7+隔离评审)|
+| Plan 7:数据上传后端(presigned 直传 OSS,ADR-020) | 请求上传/complete/列原始数据 + RawDataset 状态机 + can()+审计 | **⑤** 前置 | ✅ **已合并**(2026-06-21;真阿里云 OSS R1–R10 10/10)|
+| Plan 8:React/Vite 前端(原 Plan 7) | 数据域控制台(登录跳转 + 数据目录/数据管线/作业/我的账户 + 上传页),调 BFF;gateway serve `dist`;+ catalog-driven + owner 模型 | **⑤** | ✅ **已合并(2026-06-24,⑤ 关闭)**——真 GUI 经 BFF 全链路 |
+| Plan 9:拆为 9a + 9b(原 Dev Workspace) | **9a** = omnigent 集成 + Workspace 对话窗 + 智能体库(ADR-027)+ 每企业模型配置·每 provider harness(ADR-028)· **9b** = dev workspace 全貌(推迟) | ④(超额) | ✅ **9a 及续做已合并 main + 真机验证**;**9b ⏳** |
 | ~~Plan 6(原):生成式 SDK/CLI `laictl`~~ | ⏸ 推迟,**文档已删**(后续 ops/CI 工具,日后重写;commit 9a70c18 留底) | — | ADR-019 |
 
-> **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。编号以实际计划文档为准(owner 06-14 口径 A):Plan 3=脚手架+identity-org+反代壳、Plan 4=metadata、Plan 5=data-pipeline。**出口⑤ 重定义(2026-06-18,ADR-019):CLI→真 GUI;owner 直接延长 S1(GUI 并入,工期顺延),Plan 6=BFF/7=前端/8=DevWorkspace,CLI 推迟。**
+> **拆解原则(owner 06-13 确认)**:按服务拆 + 每服务契约优先(§3.0.1/§3.0.2);单位是服务不是技术组件。详见 S1 设计 spec §9。编号以实际计划文档为准(owner 06-14 口径 A):Plan 3=脚手架+identity-org+反代壳、Plan 4=metadata、Plan 5=data-pipeline。**出口⑤ 重定义(2026-06-18,ADR-019):CLI→真 GUI;owner 直接延长 S1(GUI 并入,工期顺延),Plan 6=BFF/7=前端/8=DevWorkspace,CLI 推迟。**(**注:此为 06-18 口径;ADR-020(06-21)插入 Plan 7=数据上传后端,前端顺延 Plan 8、Dev Workspace 顺延 Plan 9——以上表为准。**)
 
-**出口(当前版)**:① 一行命令清洗→Lance ✅;② Gravitino 元数据可查 ✅(metadata-service,Plan 4 已合并);③ 薄 can() 企业隔离 ✅(S0 交付,管线已接入);服务化 ✅(metadata Plan 4 + data-pipeline Plan 5,契约先行,经 gateway can()+audit);⑤ **真 GUI 经 API 调通** ⏳(BFF Plan 6 后端 ✅ 已合并 + 前端 Plan 7 ⏳,ADR-019;原 SDK/CLI 推迟);DoD 含 code review + CI 绿 + go/no-go 签字(S1 设计 spec §7)。**S1 进度:出口①②③ + 服务化 ✅,⑤ 进展:Plan 6 BFF 后端 ✅ 已合并(全绿+一键验收 7/7+隔离评审),余 Plan 7 前端关⑤;④ Dev Workspace(Plan 8);owner 直接延长 S1。**
+**出口(最终)**:① 一行命令清洗→Lance ✅(1GB 档;100GB 边界 → S2a);② Gravitino 元数据可查 ✅;③ 薄 can() 企业隔离 ✅;服务化 ✅(Plan 3/4/5 契约先行,经 gateway can()+audit);⑤ **真 GUI 经 API 调通 ✅ 已关闭**(2026-06-24,Plan 6 BFF + Plan 7 上传 + Plan 8 前端全链路;原 SDK/CLI 推迟);④ Dev Workspace **由 9a 超额**(omnigent 对话 + 智能体库 + 模型配置/每 provider harness),9b 推迟。**S1 已关闭(2026-07-08,closed with carry-over,见 [`plans/2026-07-08-s1-dod-status.md`](../plans/2026-07-08-s1-dod-status.md))**;**carry-over → S2 = 集成测试对齐 ADR-024/025 + CI 远端复绿**(build 已修;红的是测试期望非产品)。**v2 Agent 平台首片随 9a 提前落地。**
 
 ---
 
