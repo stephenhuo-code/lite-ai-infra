@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import tempfile
 
 from scripts import provision_default_agents as p
 
@@ -39,7 +40,9 @@ def test_main_calls_seed_with_enterprise(monkeypatch, capsys):
 
 def test_script_help_runs_as_direct_cli():
     env = os.environ.copy()
-    env["UV_CACHE_DIR"] = "/private/tmp/uv-cache"
+    # 用可移植的临时目录做 uv cache(此前硬编 /private/tmp/uv-cache 是 macOS 专有路径,
+    # Linux CI 上 Permission denied → 让整条 CI 变红)。
+    env["UV_CACHE_DIR"] = tempfile.mkdtemp(prefix="uv-cache-")
 
     result = subprocess.run(
         [
