@@ -111,12 +111,14 @@ SDK(生成) ──┘        │
 
 ## 7. DoD(S1 签收门禁)
 
-- [ ] ADR-014 门禁关闭(数据 Spike 1/2 结论 + Spike A 复验/C 回写)
-- [ ] 出口①②⑤ + 服务化验收命令实测通过(贴输出)
-- [ ] 单元 + 集成全绿;import-linter(含 pipelines 层)+ §8 护栏 + codegen freshness 绿
-- [ ] code review 过
-- [ ] CI 远端绿
-- [ ] go/no-go 签字
+> **✅ S1 已 closed with carry-over(2026-07-08)**。阻塞性出口 ①②③⑤ + 服务化全部达成、合并 main、各自 live 验收;出口④ 由 Plan 9a **超额**交付(9b 推迟)。**唯一未清项 = 集成测试套件对齐 ADR-024/025(owner 模型 / KC Organizations)+ CI 远端复绿 → carry-over 到 S2**(红的是测试期望非产品,GUI/omnigent live 验收均过)。证据底稿与 go/no-go:[`2026-07-08-s1-dod-status.md`](../plans/2026-07-08-s1-dod-status.md)。
+
+- [x] ADR-014 门禁关闭(数据 Spike 1/2 结论 + Spike A 复验/C 回写)—— 2026-06-12 GO
+- [x] 出口①②⑤ + 服务化验收命令实测通过 —— Plan 3–8 合并 + live 验收(§9.3)
+- [~] 单元 + 集成全绿;import-linter + §8 护栏 + codegen 绿 —— 单元/lint/codegen ✅;**集成 carry-over S2**
+- [x] code review 过 —— Plan 3–8 各有独立评审(0 Crit)
+- [~] CI 远端绿 —— build 已修(可移植 UV_CACHE_DIR);**integration carry-over S2**
+- [x] go/no-go 签字 —— owner 签认 carry-over 关闭(2026-07-08)
 
 ## 8. 补遗:用户自定义管线的三层开放路线(2026-06-12,owner 问答沉淀)
 
@@ -173,5 +175,6 @@ S2 spec 编写时:层级 2 的 IO 契约与 `custom_step` API 形态进 S2a 范�
 > **出口⑤ 重定义(2026-06-18,ADR-019)**:由"SDK/CLI 可调"改为**真 GUI 经 API 调通**——owner 终态是 GUI,GUI/CLI 同为 API 客户端,跳过 CLI 直接做 GUI(BFF + React/Vite)。CLI 推迟为 ops 工具。**owner 决:直接延长 S1**(GUI 并入 S1、工期顺延),S2a/S2b 顺延到 GUI 之后。§9.1 BFF 定义随之修订(加 OIDC 会话终结)。会话=无状态加密 cookie(access TTL≤5min,吊销窗口登记风险)。
 > **计划重排(2026-06-21,ADR-020)**:owner 决"#11 数据集上传纳入本轮",上传后端拆为**独立 Plan 7(先行,已合并)**,原 Plan 7 前端顺延 **Plan 8**、原 Plan 8 Dev Workspace 顺延 **Plan 9**。上传机制=presigned 直传 OSS(详见 ADR-020)。
 > **当前进度(2026-06-21)**:Plan 3/4/5/6/7 ✅ 已合并;**出口①②③⑤前置 + 服务化均达成**;出口⑤ 待 Plan 8 前端关闭;出口④ 待 Plan 9(降级形态)。
+> **✅ S1 关闭(2026-07-08,closed with carry-over,见 [`2026-07-08-s1-dod-status.md`](../plans/2026-07-08-s1-dod-status.md))**:出口①②③⑤ + 服务化达成并合并 main;出口④ 由 9a 超额、9b 推迟;**carry-over 到 S2 = 集成测试套件对齐 ADR-024/025 + CI 远端复绿**(build 已修)。
 > **当前进度(2026-07-08)**:S1 出口①②③⑤ + 服务化**全部达成并合并 main**;**出口④ 由 Plan 9a 部分达成**——omnigent 集成 + Workspace 对话窗(多用户/隔离/fork 自编译,ADR-026)已合并;其上续做**智能体库(ADR-027)+ 每企业模型配置 · 每 provider 独立 harness(ADR-028,四 provider = Anthropic/OpenAI/MiniMax/DeepSeek,MiniMax/DeepSeek 各独立 harness+凭据槽,**去平台 claude 订阅 token**)**亦已合并 main + 真机验证(minimax/deepseek 真 key 流式通)。**9b(dev workspace 全貌)推迟**。这几片实为 **v2 Agent 平台**地基,随 9a 提前落地;S2 排期走 ADR。
 > 手写 `python -m pipelines.data_prep` 仍为 ops 后门(标注非产品入口)。
