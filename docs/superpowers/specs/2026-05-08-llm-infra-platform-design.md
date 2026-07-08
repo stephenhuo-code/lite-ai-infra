@@ -1,17 +1,21 @@
 # Lite AI Infra Platform 设计文档
 
-> **状态**：Draft（多公司 SaaS 架构；v1 起多企业 + 版本递增 v1/v2/v4)
+> **状态**：**v1 数据域已交付(S1 于 2026-07-08 关闭)· v2 Agent 平台首片已落(9a)**;多公司 SaaS,版本递增 **v1→v5**
 > **作者**：平台团队(原按 3 人编制;**2026-06 起实际为一人 + Claude**,见文末修订记录)
-> **日期**：2026-05-08(修订 2026-06-12)
-> **目标上线**：v1 原 ≈2026-07-11(**将后移**,S2 计划时走 ADR 重排,宪法 §7.4);GA 原 ≈2026-11-28
+> **日期**：2026-05-08(最后修订 2026-07-08)
+> **目标上线**：**v1 已交付(2026-07-08)**;**v2 补全(9b + LLM Gateway + S1 carry-over)→ S2**;GA 原 ≈2026-11-28(S2 起走 ADR 重排,宪法 §7.4)
 > **执行现状**:S0 已关闭(ADR-014 carry-over);**S1 已关闭**(2026-07-08,**closed with carry-over**,见 [`plans/2026-07-08-s1-dod-status.md`](../plans/2026-07-08-s1-dod-status.md))——出口①②③⑤ + 服务化达成并合并 main、各自 live 验收;**出口④ 由 Plan 9a 超额交付**(omnigent 集成 + Workspace 对话窗多用户/隔离/fork 自编译已合并;9b dev workspace 全貌推迟);**carry-over 到 S2 = 集成测试套件对齐 ADR-024/025 + CI 远端复绿**(红的是测试期望非产品)—— 见 §5.3 各 sprint 修订块、S1 design §9.3 计划序与文末"修订记录"
 > **v2 Agent 平台首片已落(2026-07-08,随 9a 提前)**:统一对话 Workspace(omnigent 自托管多用户,[ADR-026](../../adr/ADR-026-omnigent-integration.md))+ **智能体库**(每企业 admin 建/编辑/删,[ADR-027](../../adr/ADR-027-agent-library.md))+ **每企业模型配置 · 每 provider 独立 harness**([ADR-028](../../adr/ADR-028-per-enterprise-model-credentials.md))均**已合并 main + 真机验证**。四 provider = **Anthropic(仅 API key)/ OpenAI / MiniMax / DeepSeek**;MiniMax/DeepSeek 各有独立 harness+凭据槽(可同时配、不串号);**平台 claude 订阅 token 已彻底移除**(claude 类 agent 改用企业 `ANTHROPIC_API_KEY`)。新企业默认得 5 个本企业 agent(minimax/deepseek/debby/codex/polly)。**统一 LLM Gateway / 按 token 计量 / Agentic Search / 数据工具 can() 承重墙**仍属 v2/v3 后续(9b+)。
 
 > **as-built 修订(2026-06-24,以 ADR 为准)**:本文为全平台**愿景**(含 Workspace/配额/Cerbos/CLI 等尚未建部分),下述**已实现并合并 main**的部分,口径已被后续 ADR 收敛:
 > - **数据集归属 = owner(上传用户 sub),非 group**([ADR-024](../../adr/ADR-024-owner-based-dataset-ownership.md),amend ADR-010/011/016)。**数据集** OSS 路径 = `e-XXXX/{user}/{raw,processed}/…`(不再 `e-0001/g-0001/…`)。**group 退为访问/审计维度**(跨用户分享/group 访问 → Cerbos v2);企业仍硬隔离。
 > - **Gravitino 映射 = metalake `e_XXXX` / catalog `data` / schema `datasets`,每数据集 = 一个 fileset**([ADR-016](../../adr/ADR-016-gravitino-tenancy-mapping.md)),**非** `e_0001_g_0001` schema。catalog 为数据集位置真相源,管线按名查 catalog 拿 location([ADR-023](../../adr/ADR-023-catalog-driven-datasets.md));location 记 `s3a://`(HCFS),lance 读写用 `s3://`。
-> - **仍成立(本次未改)**:K8s/Kueue 命名空间、配额、Keycloak `/e-XXXX/g-YYYY/{admins,members}` 结构、Cerbos+STS 路径级访问控制、group-admin 角色 —— 这些是 group 维度的**访问/计算/组织**用途,与"数据集归属"正交。
+> - **⚠️ 用户组层已移除(ADR-025,见下方 callout)**:身份降为两级(平台→企业→用户),**不再有** `group_id`/`g-YYYY`/Group 子组/group-admin。原"group 维度"用途中:**per-group 授权 → vN+(Cerbos)**;K8s/Kueue 命名空间与配额改按**企业**维度(Cohort=企业)。下文残留的 group 写法一律按 ADR-025 作废。
 > - **v1 已实现**:数据管线(DJ→Lance)+ 元数据(Gravitino)+ BFF + React 控制台 + catalog-driven + owner 模型;全链路 live 验收通过。下文凡涉数据集归属/Gravitino schema 的旧写法,以本 callout + 对应 ADR 为准。
+
+> **as-built 修订(2026-06-25,[ADR-025](../../adr/ADR-025-keycloak-organizations-as-enterprise.md) · 企业化 + 身份降两级)**:企业 = **KC Organization 的不透明 alias**(如 `ent-demo`,**非** `e-0001`);**用户组层已移除**——身份 = **平台 → 企业 → 用户**两级,角色 = `member` / `enterprise-admin`(经 realm role / org 属性表达,不再用 Group 子组路径编码);企业归属随 token 的 **`organization` claim**;自助注册按邮箱域自动归企业 + 邀请。**全文凡 `group_id` / `用户组` / `Group 子组` / `g-XXXX` / `/e-x/g-y/…` / 三级"平台→企业→用户组→用户" 一律作废,以本 callout 为准**;per-group 授权与 per-group 计算/命名空间收敛为**企业**维度或推迟 vN+(Cerbos)。
+
+> **as-built 修订(2026-07-08,[ADR-026](../../adr/ADR-026-omnigent-integration.md)/[ADR-027](../../adr/ADR-027-agent-library.md)/[ADR-028](../../adr/ADR-028-per-enterprise-model-credentials.md) · v2 Agent 平台首片)**:统一对话 **Workspace**(omnigent 自托管多用户,fork 自编译)+ **智能体库**(每企业 admin 建/编辑/删)+ **每企业模型配置 · 每 provider 独立 harness**(四 provider = Anthropic 仅 api-key / OpenAI / MiniMax / DeepSeek,各独立凭据槽;平台 claude 订阅已移除)**均已合并 main + 真机验证**。下文凡把"Agent 平台 / 统一对话 / 模型接入"标为"⏳ / v2 未建 / 自研待做"的,首片已交付,以本 callout + 对应 ADR 为准;**统一 LLM Gateway ⑮(计量/限流/路由)、9b 数据工具 can() 承重墙、Cerbos、Agentic Search 仍未建**(→ S2/v3)。
 
 ---
 
@@ -22,12 +26,12 @@
 
 ### 核心架构原则（写进 constitution）
 
-> ⚠️ **模型已升级为多企业 SaaS（2026-06-04，见 [ADR-010](../../adr/ADR-010-multi-enterprise-tenancy-model.md) / [ADR-011](../../adr/ADR-011-authorization-pdp-cerbos.md)）。** 原扁平 `enterprise_id` 升级为 **`enterprise_id` + `group_id` 两级**；以下及全文残留的 `enterprise_id` 表述为历史单层模型，映射关系见 ADR-010，术语全面替换为后续工作。
+> ⚠️ **模型已升级为多企业 SaaS（2026-06-04，见 [ADR-010](../../adr/ADR-010-multi-enterprise-tenancy-model.md) / [ADR-011](../../adr/ADR-011-authorization-pdp-cerbos.md)）。** 原扁平 `enterprise_id` 曾升级为 `enterprise_id` + `group_id` 两级；**此两级模型已被 [ADR-025](../../adr/ADR-025-keycloak-organizations-as-enterprise.md) 再次收敛为"平台→企业→用户"两级(用户组层移除,见顶部 ADR-025 callout)**。以下及全文残留的 `group_id`/单层 `enterprise_id` 表述为历史,以 ADR-025 为准。
 
 > **资源标识用不透明的 `enterprise_id`（+ 私有资源 `group_id`），公司名/组名只是 Keycloak Organization/Group 里的 `display_name`。**
 > 所有 OSS 路径、K8s namespace、Gravitino schema、模型 URI 一律使用 `enterprise_id`/`group_id`；`display_name` 仅出现在 UI、日志、文档中。
 
-> **层级**：平台 → 企业 → 用户组 → 用户。**身份+组织+成员+角色** = Keycloak 单一 realm（企业=**Organization**；用户组+角色=**Group 子组** `/e-x/g-y/{admins|members}`，随 token 的 `groups` claim 带出）；**授权** = **Cerbos** PDP（principal 来自 token，resource 属性来自资源自身：OSS 路径/K8s label/MLflow tag/Gravitino schema）；**审计** = 只追加写 OSS（v1）；**预算 / 中央元数据(PG) v1 推迟，需要时引入**；**企业硬隔离**落在资源命名 + 授权层。
+> **层级（ADR-025 已降两级）**：平台 → 企业 → 用户（~~用户组~~ 层移除）。**身份+组织+成员+角色** = Keycloak 单一 realm（企业=**Organization** 不透明 alias；角色 = `member`/`enterprise-admin` 经 realm role/org 属性，随 token 的 **`organization` claim** 带出；~~Group 子组 `/e-x/g-y/…`、`groups` claim~~ 已弃）；**授权** = **Cerbos** PDP（principal 来自 token，resource 属性来自资源自身：OSS 路径/K8s label/MLflow tag/Gravitino schema）；**审计** = 只追加写 OSS（v1）；**预算 / 中央元数据(PG) v1 推迟，需要时引入**；**企业硬隔离**落在资源命名 + 授权层。
 
 ### 核心约束
 - **3 人**，**~25 周**（2026-06-06 → ≈2026-11-28）；版本递增交付（v1→v5），每版本可独立上线
@@ -127,8 +131,8 @@
 | Ⓒ | 日志 | 集中日志查询 | OpenSearch **3 节点 cluster（v1）+ security plugin + ILM**（见 §3.16.1）+ Fluent Bit 采集 + Grafana 可视化（详见 ADR-005） |
 | **⑫** | **Admission Pipeline** | **准入中间件链：① PolicyEngine（`can(ctx, action, resource)` → 调 **Cerbos**，ADR-011）→ ② ~~QuotaService~~（**v1 推迟**，无 PG 预算账本，仅 Kueue 静态配额）→ ③ Audit（**v1 追加写 OSS**）+ 外部副作用 **reconcile**（v1 走声明式 reconcile；PG 回归后单服务内 outbox + 跨服务 saga，ADR-013）；**禁止**把 Kueue/Argo/Volcano/Gravitino/OSS 调用纳入同步链路；详见 §3.9/§3.11** | **Platform API 中间件链 + Cerbos sidecar + OSS audit + reconcile controller；v1 无 PG（配额账本/同事务审计/outbox 推迟，ADR-013）** |
 | **⑬** | **Enterprise Provisioner** | **开通/暂停/归档企业时 reconcile：Keycloak Organization + Group 子组骨架（含角色）/ Kueue LocalQueue+Cohort / OSS prefix + RAM/STS / Gravitino schema / MLflow experiment / Grafana org / OpenSearch index template（v1 推迟：PG 元数据/配额账本）** | **controller-runtime 风格 reconciler，幂等；经 Keycloak Admin API 建 Org/Group** |
-| **⑮** | **统一 LLM 接入服务（LLM Gateway）** | **对所有第三方/自托管模型的统一 API（chat/completion/embedding）：模型路由、API key 管理、限流、按 enterprise/group 计量、回退**；接 **Claude / Codex / Minimax API（按 token 计费）** 等 | **LiteLLM 待选型（候选）；独立微服务；策略经 §3.2 授权** |
-| **⑯** | **Agent 平台 + 统一对话交互** | **Agent 开发框架 + 运行时 + 统一 chat UI**；内置 agent 用于**模型开发 / 管线开发 / 数据探查**（复用第三方模型，经 ⑮）；工具调用走 Platform API 契约 | **自研（v2）；前端统一对话入口 + 后端 agent 运行时** |
+| **⑮** | **统一 LLM 接入服务（LLM Gateway）** | **统一 API（chat/completion/embedding）：模型路由、API key 管理、限流、按 enterprise 计量、回退**；接 Claude / OpenAI / MiniMax / DeepSeek 等 | **⏳ → S2**。**现状(ADR-028)**:尚无统一网关,每企业模型凭据**直注沙箱**(四 provider,各独立凭据槽);**统一 API / 按 token 计量 / 限流 / 路由 → S2**(LiteLLM 待选型) |
+| **⑯** | **Agent 平台 + 统一对话交互** | **Agent 开发框架 + 运行时 + 统一 chat UI**；内置 agent 用于**模型开发 / 管线开发 / 数据探查**（复用第三方模型，经 ⑮）；工具调用走 Platform API 契约 | **✅ 首片已交付(9a)**:omnigent 自托管多用户对话 Workspace + 智能体库 + 每企业模型配置(ADR-026/027/028);**余 → S2**:9b 数据工具 + `can()` 承重墙(agent 接企业数据)+ 内置 agent 完成真实任务 |
 | **⑰** | **Agentic Search** | **一个 agent 对集成的多源多模态数据（OSS/Lance/Gravitino/MLflow…）做统一检索**：规划→多模态检索→综合→引用 | **自研（v3）；复用 ⑮ LLM + v1 数据/向量** |
 
 ### 1.3 三人分工
@@ -193,12 +197,14 @@
 
 **v2：Agent 开发平台 + 统一 LLM 接入 + 统一对话交互**
 
-| 子系统 | 验收点 |
-|---|---|
-| **统一 LLM 接入服务（LLM Gateway，⑮）** | 统一 API（chat/completion/embedding）接 **Claude / Codex / Minimax API（按 token 计费）**；模型路由 + API key 管理 + 限流 + 按 enterprise/group 计量；**LiteLLM 待选型**（spike 选定，见 §6/ADR） |
-| **Agent 平台 + 统一对话交互（⑯）** | Agent 框架 + 运行时 + **统一 chat UI**；内置 agent：**模型开发 / 管线开发 / 数据探查**（复用第三方模型 + 工具调用走 Platform API 契约） |
-| **Cerbos PDP（授权升级）** | 细粒度 ABAC / derived role **替换薄 can()**，43 条 AC 全过；agent/LLM 访问数据/模型按 enterprise/group scope 受控；handler 零改（seam，ADR-011） |
-| **前端（Agent/对话域）** | 统一对话界面 + agent 任务/会话管理 + LLM 用量/模型管理页 |
+> **首片随 9a 提前交付(2026-07-08,ADR-026/027/028)**:⑯ 统一对话 Workspace + 智能体库 + 每企业模型配置(四 provider,凭据直注)已合并 main。**余项(⑮ LLM Gateway 计量/限流、9b 数据工具 can() 承重墙、Cerbos)→ S2**。
+
+| 子系统 | 验收点 | 状态 |
+|---|---|---|
+| **Agent 平台 + 统一对话交互（⑯）** | Agent 框架 + 运行时 + **统一 chat UI**;内置 agent 复用第三方模型 + 工具走 Platform API 契约 | ✅ **首片(9a)**:omnigent 对话 + 智能体库;**余**:9b 数据工具/承重墙 + 内置 agent 完成真实任务 → S2 |
+| **统一 LLM 接入服务（LLM Gateway，⑮）** | 统一 API（chat/completion/embedding）+ 模型路由 + API key 管理 + 限流 + 按 **enterprise** 计量 | ⏳ **→ S2**。现状:凭据**直注沙箱**(ADR-028,四 provider);统一网关/计量/限流 待做(LiteLLM 待选型) |
+| **Cerbos PDP（授权升级）** | 细粒度 ABAC / derived role **替换薄 can()**,43 条 AC 全过;agent/LLM 访问数据/模型按 **enterprise** scope 受控;handler 零改(seam,ADR-011) | ⏳ **→ S2/vN+**(仍薄 can()) |
+| **前端（Agent/对话域）** | 统一对话界面 + agent 会话管理 + 模型管理页 + LLM 用量页 | 🟡 对话界面 + 智能体库 + 模型配置页 ✅;**LLM 用量页 → S2**(依赖 ⑮ 计量) |
 
 **v3：Agentic Search（多源多模态统一检索）**
 
@@ -319,18 +325,18 @@ lite-ai-infra/
 │   ├── identity_org_service/       # ✅ Plan 3（/v1/me/orgs 从 gateway 迁出，独立）
 │   ├── data_pipeline_service/      # ✅ Plan 5（包 pipelines/data_prep；异步作业薄壳）
 │   ├── metadata_service/           # ✅ Plan 4（Gravitino 后端）
-│   ├── llm_gateway_service/        # ⏳ v2：统一 LLM 接入（LiteLLM 待选型）
-│   ├── agent_platform_service/     # ⏳ v2：Agent 框架/运行时 + 统一对话后端
+│   ├── llm_gateway_service/        # ⏳ → S2：统一 LLM 接入 + 计量/限流（LiteLLM 待选型；现状=凭据直注沙箱 ADR-028）
+│   ├── (agent 平台)                 # ✅ 首片(9a)：third_party/omnigent fork 自编译（server+host 多用户对话）+ gateway BFF 反代/智能体库/模型配置；非独立 _service
 │   ├── agentic_search_service/     # ⏳ v3：多源多模态统一检索 agent
 │   ├── training_service/           # ⏳ v4 微调 / v5 1B
 │   ├── inference_service/          # ⏳ v4
-│   ├── workspace/                  # ⏳ S2c：Go operator（非 Python，无 _service 后缀）
+│   ├── workspace/                  # ⏳ → S2（9b 数据工作台：MCP 数据工具 + can() 承重墙 + 文件/终端）
 │   └── provisioner/                # ⏳ S2c：Go controller（同上）
 ├── pipelines/                      # ✅ 实现层：批处理逻辑（服务背后；非常驻服务）
 │   └── data_prep/                  # ✅ tar→DJ/Ray→Lance（data_pipeline_service 的内部实现）
 ├── libs/                           # ✅ 共享层：identity / authz / audit / contracts_gen
 ├── authz/                          # ⏳ v2：Cerbos 策略（YAML, in git；现暂存 spikes/cerbos_seam/）
-├── frontend/                       # ⏳ S1 Plan 8(ADR-019 提前)：React + Vite 数据域控制台（gateway serve dist;含上传页消费 Plan 7 契约）
+├── frontend/                       # ✅ Plan 8：React + Vite 控制台（gateway serve dist）——数据域 + 智能体库/模型配置/Workspace 对话页(9a)；⏳ LLM 用量页 → S2
 ├── sdk/  cli/                      # ⏸ 推迟为 ops 工具（ADR-019;原 Plan 6 laictl 文档已删,日后重写）。上传后端=data_pipeline_service(Plan 7 ✅ presigned 直传,ADR-020)
 ├── deploy/                         # ✅ dev compose + test IaC（Helm/ArgoCD → S2a）
 │   ├── dev/                        # ✅ docker-compose（Keycloak + MinIO）
@@ -415,9 +421,10 @@ group_id：      g-XXXX   (如 g-0001，企业内唯一)
 首个客户 = enterprise_id "e-0001"，其下用户组 g-0001…；display_name "X-user"
 ```
 
-> **as-built 修订(ADR-016/023/024)**:上表中**数据集相关**两项已变更——
-> ① **数据集 OSS 路径**按 owner:`.../e-0001/{user}/{raw,processed}/...`(不再 `.../e-0001/g-0001/...`;ADR-024)。② **Gravitino**:metalake `e_XXXX` / catalog `data` / schema `datasets`,每数据集 = fileset(不再 `e_0001_g_0001` schema;ADR-016)。
-> 其余项(K8s/Kueue 路径与命名空间、MLflow tag、Keycloak Org/Group 子组、display_name)**不变**——group 仍是访问/计算/组织维度。**非数据集资源**(Workspace/作业/推理)的 group 路径属未建愿景,按本表愿景值理解。
+> **as-built 修订(ADR-016/023/024 + ⚠️ ADR-025)**:本 §3.2 全表为**历史三级模型**,以下更正为准:
+> - **⚠️ 用户组层已移除(ADR-025)**:企业 = KC Organization 不透明 alias(`ent-demo`,非 `e-0001`);身份 = 平台→企业→用户两级;**`group_id`/`g-XXXX`/`/e-x/g-y/…`/Group 子组/`groups` claim/group-admin 全部作废**,角色 = member/enterprise-admin 随 **`organization` claim** 带出。本表所有 `g-0001`/用户组写法按此作废。
+> - ① **数据集 OSS 路径**按 owner:`e-XXXX/{user}/{raw,processed}/…`(ADR-024)。② **Gravitino**:metalake `e_XXXX`/catalog `data`/schema `datasets`,每数据集 = fileset(ADR-016)。
+> - K8s/Kueue 命名空间与配额、MLflow tag 等改按**企业**维度(不再 per-group);per-group 授权 → vN+(Cerbos)。**非数据集资源**(Workspace/作业/推理)属未建愿景,按企业维度理解。
 
 #### 组织 / 成员 API（Platform API 薄层封装 Keycloak Admin API）
 
@@ -1406,7 +1413,7 @@ Lineage 边（v1 手工）：
 - **终点（GA，v5 完成）：≈ 2026-11-28**（按合理工时顺延 v3/v4/v5 后估算，约 **25 周 / ~6 个月**）
 - Sprint：S0 = 1 周；其余 2 周/sprint，共 S0–S12（13 个）
 - 缓冲：最后一个 sprint（S12）不写新 feature，仅硬化/上线
-- **递增交付**：每个版本完成即可独立上线（v1≈07-11 / v2≈08-22 / v3≈09-19 / v4≈10-17 / v5≈11-14）
+- **递增交付**：每个版本完成即可独立上线（**v1 已交付 2026-07-08**；v2 补全 → S2；v3/v4/v5 顺延,具体日期随 S2 重排 ADR 更新）
 
 > 上线节奏可灵活：v1/v2 完成即对客户开放（数据域 + Agent/LLM 应用），v3–v5 随后滚动发布。
 
@@ -1422,8 +1429,8 @@ Lineage 边（v1 手工）：
 | 版本 | Sprint | 周 | 日期 | 交付 |
 |---|---|---|---|---|
 | 基础设施 | S0 | W1 | 06-06→06-13 | 地基 + Spike + Keycloak/Org + API 契约 |
-| **v1 数据域** | S1–S2 | W2–5 | 06-14→07-11 | 数据管线 + 多模态处理 + 元数据 + 向量 + Dev Workspace + 数据域前端 |
-| **v2 Agent + 统一 LLM** | S3–S5 | W6–11 | 07-12→08-22 | LLM Gateway（LiteLLM 选型）+ Agent 平台/对话 + 模型/管线/数据探查 agent + Cerbos |
+| **v1 数据域** | S1 | W2–5 | 06-14→**07-08 ✅ 关闭** | ✅ 数据管线 + 元数据 + BFF + 数据域前端 + catalog-driven + owner 模型(**向量/Dev Workspace/10TB 放大 推迟**,见 Sprint 2 硬化表 / 9b) |
+| **v2 Agent + 统一 LLM** | S1(首片,9a)→ **S2** | — | — | 🟡 **首片已交付(9a)**:对话 Workspace + 智能体库 + 模型配置;**余 → S2**:9b 数据工具/承重墙 + LLM Gateway 计量 + Cerbos |
 | **v3 Agentic Search** | S6–S7 | W12–15 | 08-23→09-19 | 多源多模态统一检索 agent + 搜索前端 |
 | **v4 微调** | S8–S9 | W16–19 | 09-20→10-17 | SFT/LoRA + Checkpoint/容错 + 自托管推理 + 作业/模型前端 |
 | **v5 1B 预训练** | S10–S11 | W20–23 | 10-18→11-14 | 8 卡 DDP 1B baseline + 24h soak + kill drill |
@@ -1472,9 +1479,14 @@ Lineage 边（v1 手工）：
 
 ---
 
-#### Sprint 2(三阶段,时间线草案见 §5.4;**S2 spec/ADR 时定稿**):**v1 交付**
+#### Sprint 2(**补全 v2 Agent 平台**;三阶段草案见下,**最终以 S2 spec + 重排 ADR 为准**)
 
-> 分阶段依据:S1 设计 spec §6/§8;每阶段独立验收。下表为当前版任务分配(原 3 人单 sprint 版见 git 历史)。S2 brainstorm 开场 = 数据域前端**低保真原型**(visual companion)。
+> **⚠️ 重定位(2026-07-08)**:v1 数据域已交付(S1 关闭)、v2 首片(agent 对话 / 智能体库 / 模型配置)随 **9a** 提前落地——故 **S2 主题 = 补全 v2**,不再是原"v1 交付"。**S2 三条主线**:
+> 1. **S1 carry-over**(首周先清):集成测试对齐 ADR-024/025 + CI 远端复绿。
+> 2. **9b · agent 接平台数据**(主体):dev workspace 数据工具(MCP)+ **`can()` 承重墙**(agent 只能碰本企业数据)+ 文件/终端 + OSS 工作目录持久化;内置 agent 完成一次真实"数据探查/管线开发"。
+> 3. **⑮ 统一 LLM Gateway**:统一 API + 按 enterprise **计量**(token)+ 限流 + 路由(现状=凭据直注沙箱,ADR-028)。
+>
+> **下面 S2a/S2b/S2c 三表 = "推迟的 v1 硬化/放大项"**(10TB 放大、ACK/Argo/K8s、Gravitino HA、向量层、Provisioner)——**仍需但非 S2 主题**,是否并入 S2 及排期待 S2 spec/ADR 定;其中 **数据域前端(原 S2c)已由 Plan 8 交付 ✅**,**Dev Workspace 完整 = 9b(已归 S2 主线 2)**。原 3 人单 sprint 版见 git 历史。
 
 **S2a:10TB 放大 + 基础设施(≈2 周)**
 
@@ -1498,36 +1510,34 @@ Lineage 边（v1 手工）：
 
 | 任务 | 备注 |
 |---|---|
-| **前端 v1(数据域完整页面)**:数据集管理/管线提交监控/元数据浏览/实验对比 | 低保真原型已先行;OSS 静态托管 + CDN 部署;经 Gateway 走 OpenAPI 契约 |
-| **Enterprise Provisioner**:`laictl --admin enterprise create` 幂等建 Org/Group/OSS 前缀/RAM-STS/Gravitino schema | 幂等跑 3 次一致 |
-| **Dev Workspace 完整**(OIDC ingress + SSH + code-server 鉴权) | S1 降级版的补全 |
-| URI 解析器(`gravitino://my|shared/...`)+ CLI data 命令(--dry-run/--force) | |
+| ~~**前端 v1(数据域完整页面)**~~ | ✅ **已由 Plan 8 交付**(数据集/管线/作业/元数据 + 上传页;gateway serve dist) |
+| **Enterprise Provisioner**:`enterprise create` 幂等建 Org(KC Organization)/OSS 前缀/RAM-STS/Gravitino schema(**去 Group**,ADR-025) | ⏳ 仍待;幂等跑 3 次一致 |
+| ~~**Dev Workspace 完整**~~ | **= 9b(已归 S2 主线 2:数据工具 + can() 承重墙)** |
+| URI 解析器(`gravitino://my|shared/...`)+ CLI data 命令 | ⏳ ops 工具,vN+ |
 
 > **砍到 vN+(未来)**:DeepSpeed 镜像(v1 用 PyTorch DDP 已能跑 1B)。
 
-**出口(= v1 交付)**:10TB raw → 一行命令 → Lance + Gravitino schema 可查;Embedding → ANN 可用(或 V8 决策);数据域前端完整可用;监控看板可见;`enterprise create` 幂等;Gravitino 降级可读;OSS 审计可查。
+**出口(推迟的 v1 硬化/放大)**:10TB raw → 一行命令 → Lance + Gravitino 可查;Embedding → ANN 可用(或 V8 决策);监控看板可见;`enterprise create` 幂等;Gravitino 降级可读;OSS 审计可查。(数据域前端已交付;Dev Workspace → 9b。**是否/何时并入 S2 待 S2 spec/ADR 定**。)
 
 ---
 
-### v2 Agent 平台 + 统一 LLM 接入（S3–S5，W6–11，07-12 → 08-22）
+### v2 Agent 平台 + 统一 LLM 接入（首片随 9a 已交付;余项 → S2）
 
-> 目标：用第三方 LLM（Claude/Codex/Minimax，API key 按 token 计费）+ Agent 快速交付应用价值；授权升级到 Cerbos。详见 **ADR-012**。
+> 目标:用第三方 LLM(Claude/OpenAI/MiniMax/DeepSeek,API key 按 token 计费)+ Agent 快速交付价值;授权升级到 Cerbos。详见 **ADR-012**。**下述原 S3–S5 排期已被 9a 提前打乱**,现按"已交付 / → S2"标注。
 
-**S3（W6-7）LLM Gateway + 授权升级**
-- **LiteLLM 选型 spike 落定** → 部署 **LLM Gateway**（统一 chat/completion/embedding API）
-- 接 **Claude / Codex / Minimax**（API key 计费）+ 模型路由 + 密钥/凭证管理 + 限流 + 按 enterprise/group 用量统计
-- **Cerbos PDP 上线**，替换薄 `can()`（**AC-1~43 全过**）；LLM/数据访问按 scope 受控
-- 出口：经 Gateway 用三家模型发起对话；调用按企业计量 + 授权；Cerbos 全 AC 过
+**Agent 框架 + 运行时 + 统一对话** — ✅ **已交付(9a,ADR-026/027/028)**
+- omnigent 自托管多用户对话 Workspace(fork 自编译,隔离沙箱)+ 智能体库(每企业 admin 建/编辑/删)+ 每企业模型配置(四 provider,凭据直注)
+- **余 → S2**:agent **工具走 Platform API 契约 + `can()` 承重墙**(9b:agent 接本企业数据)
 
-**S4（W8-9）Agent 框架 + 运行时 + 统一对话**
-- Agent 框架 + 运行时（规划 / 工具调用 / 多轮）；**工具走 Platform API 契约**
-- **统一 chat UI**（前端）+ 会话/任务管理
-- 出口：统一对话界面可用；agent 能多轮调用平台工具完成任务
+**LLM Gateway + 授权升级** — ⏳ **→ S2**
+- **现状(ADR-028)**:每企业模型凭据**直注沙箱**(Anthropic/OpenAI/MiniMax/DeepSeek);**尚无统一网关**
+- **→ S2**:LiteLLM 选型 → 部署 **LLM Gateway**(统一 chat/completion/embedding API)+ 模型路由 + 密钥管理 + 限流 + 按 **enterprise** 用量计量(token)
+- **Cerbos PDP**(替换薄 `can()`,AC-1~43 全过;按 **enterprise** scope 受控)→ **S2/vN+**
 
-**S5（W10-11）内置 agent + 前端 + 硬化**
-- 内置 agent：**模型开发 / 管线开发 / 数据探查**（复用第三方模型）
-- 前端 Agent/对话域完整 + LLM 用量/模型管理页；v2 预演 + 硬化
-- **出口：v2 交付**——三类 agent 各完成一次真实任务；**验收 10 过**
+**内置 agent + 用量页** — 🟡 部分
+- 内置默认 agent(minimax/deepseek/debby/codex/polly)✅ 已随 9a 每企业种入
+- **→ S2**:内置 agent 完成一次真实"数据探查/管线开发"任务(依赖 9b 数据工具);LLM 用量页(依赖 Gateway 计量)
+- **v2 交付判据**:agent 能多轮调用平台数据工具、在 `can()` 承重墙内完成一次真实任务;**验收 10 过**
 
 ---
 
@@ -1589,16 +1599,16 @@ Lineage 边（v1 手工）：
 
 ### 5.4 Hard Deadlines
 
-> 当前版时间线(2026-06-12)。S0/S1 为事实;**S2 起为草案,S2 spec 编写时以 ADR 定稿**(宪法 §7.4);v2 及以后待 v1 交付后重排,原 5 月版日期在"原计划"列保留参照。
+> 当前版时间线(**2026-07-08 修订**)。S0/S1 为事实(均已关闭);**S2 = 补全 v2**(carry-over + 9b + LLM Gateway),下面 S2a/b/c 三行 = **推迟的 v1 硬化/放大项**(仍需但非 S2 主题,排期与并入方式待 **S2 spec + 重排 ADR** 定稿,宪法 §7.4);v3 及以后待 S2 后重排,原 5 月版日期在"原计划"列参照。
 
-| 当前日期(草案) | 原计划 | Sprint | 版本里程碑 | 不达标后果 |
+| 当前日期 | 原计划 | Sprint | 版本里程碑 | 不达标后果 |
 |---|---|---|---|---|
 | ✅ 06-11 已关闭 | 06-13 | S0 | 出口②③④ PASS;出口① carry-over 并于 06-12 关闭(GO,1GB 档)——ADR-014 | (已落定) |
-| **≈07-01** | 06-27 | S1 | 1GB 档数据管线(✅ 已验收)+ Gravitino 可查 + 服务化 + 契约 SDK + Dev Workspace(降级) | 砍范围 / 顺延,记录进 DoD |
-| ≈07-15(草案) | — | S2a | 10TB 管线 PASS + Lance 多写者 + ACK/Argo + Gravitino HA + 监控 | 砍数据集量 |
-| ≈07-29(草案) | — | S2b | Embedding/ANN + V8 1TB 斜率(不达标当场决策) | V8 砍 10% |
-| **≈08-12(草案,= v1 交付)** | 07-11 | S2c | 数据域前端完整 + Provisioner 幂等 + Dev Workspace 完整 | 前端降级 |
-| 待重排 | 08-22 | S3–S5 | 【v2】LLM Gateway + Agent 平台 + Cerbos 43 AC | (v1 交付后 ADR 重排) |
+| **✅ 07-08 关闭(carry-over)** | 06-27 | S1 | v1 数据域(①②③⑤+服务化)交付 + **v2 首片(9a:对话/智能体库/模型配置)**;carry-over=集成测试+CI → S2 | (已落定) |
+| ⏳ 待 S2 spec | — | (v1 硬化)a | 10TB 管线 + Lance 多写者 + ACK/Argo + Gravitino HA + 监控(**推迟的 v1 放大**) | 砍数据集量 |
+| ⏳ 待 S2 spec | — | (v1 硬化)b | Embedding/ANN + V8 1TB 斜率(**推迟的 v1 向量层**) | V8 砍 10% |
+| 🟡 部分已交付 | 07-11 | (v1 硬化)c | 数据域前端 **✅ 已交付(Plan 8)**;Provisioner 幂等 ⏳;Dev Workspace 完整 = **9b(→ S2)** | — |
+| **S2(主线)** | 08-22 | S2 | 【v2 补全】carry-over 清账 + **9b agent 接数据(can() 承重墙)** + LLM Gateway 计量 + (Cerbos) | S2 spec/ADR 定稿 |
 | 待重排 | 09-19 | S6–S7 | 【v3】Agentic Search | 同上 |
 | 待重排 | 10-17 | S8–S9 | 【v4】SFT/LoRA 全链路 | 同上 |
 | 待重排 | 11-14 | S10–S11 | 【v5】1B 预训练 + soak | 同上 |
@@ -2078,8 +2088,14 @@ $ make prod-deploy TAG=v1.2.3   # 必须有 staging 通过的 commit
 | 测试环境形态:最小云档(单 ECS+OSS),ACK 推 S2a | `deploy/test/` + `docs/ops/2026-06-09-…md` | 生效 |
 
 | §5.3/§5.4 正文重写为当前版(S0 关闭摘要 / S1 五计划表 / S2 三阶段表 / 时间线草案列) | 本次提交(06-12);原 3 人版见 git 历史 | 生效 |
-| v1 交付日草案 ≈08-12(S2a/b/c 各约 2 周) | §5.4 草案列;**S2 ADR 定稿** | 草案 |
+| ~~v1 交付日草案 ≈08-12~~ → **v1 实际 2026-07-08 交付(S1 关闭)**;原 S2a/b/c(10TB/向量/前端)重定位为"推迟的 v1 硬化项" | §5.4;S2 spec/ADR 定稿 | 已更新 |
 | API 优先纠偏:S1 剩余按「服务 + 契约优先」重拆为 Plan 3–7(脚手架 / identity-org / metadata / data-pipeline / SDK);Plan 2 库+CLI 先行序为偏差,代码作服务内部实现复用(非返工) | S1 设计 spec §9(owner 06-13) | 生效 |
 | identity-org-service 严格独立拆分(不折叠 gateway);手写 CLI 降级 ops 后门,产品 CLI 契约生成 | S1 设计 spec §9.1 | 生效 |
 | 计划编号统一口径 A:以实际计划文档为准(Plan 3=脚手架+identity-org+反代壳、4=metadata、5=data-pipeline、6=SDK);早先草拟的 5 计划序中 Plan 3+4 被实际 Plan 3 文档合并交付,整体回退一位 | S1 设计 spec §9.3(owner 06-14) | 生效 |
 | §3.0.4 目录树补全:加 `libs/`/`pipelines/` 实现层 + `spikes/`;服务目录命名改下划线 `_service`(Python 包约束);各目录标 ✅/⏳ 与建于哪个 Plan | §3.0.4(06-13) | 生效 |
+| **企业化 + 身份降两级(ADR-025)**:企业=KC Organization 不透明 alias(`ent-demo`);**移除用户组层**——身份=平台→企业→用户,角色 member/enterprise-admin(随 `organization` claim);自助注册按邮箱域 + 邀请。全文 `group_id`/用户组/`g-XXXX`/三级层级作废(顶部 ADR-025 callout) | [ADR-025](../../adr/ADR-025-keycloak-organizations-as-enterprise.md)(06-25) | 生效 |
+| **数据集归属=owner + catalog-driven**:归属=上传用户 sub(非 group),OSS 路径 `e-XXXX/{user}/…`;Gravitino metalake `e_XXXX`/catalog `data`/schema `datasets`,fileset=数据集;管线按名查 catalog 拿 location | [ADR-024](../../adr/ADR-024-owner-based-dataset-ownership.md)/[ADR-016](../../adr/ADR-016-gravitino-tenancy-mapping.md)/[ADR-023](../../adr/ADR-023-catalog-driven-datasets.md)(06-24) | 生效 |
+| **出口⑤ GUI 化 + 上传纳入**:CLI→真 GUI(owner 延长 S1);presigned 直传 OSS;Plan 重排 6=BFF/7=上传/8=前端/9=Dev Workspace | [ADR-019](../../adr/ADR-019-exit5-gui-bff-resequence.md)/[ADR-020](../../adr/ADR-020-dataset-upload-mechanism.md)(06-18/06-21) | 生效 |
+| **v2 Agent 平台首片(随 9a 提前)**:omnigent 自托管多用户对话 Workspace + 智能体库(每企业 admin CRUD)+ 每企业模型配置·每 provider 独立 harness(四 provider,凭据直注,去平台 claude 订阅)+ 5 默认 agent;合并 main + 真机验证 | [ADR-026](../../adr/ADR-026-omnigent-integration.md)/[ADR-027](../../adr/ADR-027-agent-library.md)/[ADR-028](../../adr/ADR-028-per-enterprise-model-credentials.md)(07-08) | 生效 |
+| **S1 关闭(closed with carry-over)**:出口①②③⑤+服务化交付;出口④ 由 9a 超额;carry-over=集成测试对齐 ADR-024/025 + CI 远端复绿 → S2 | [`plans/2026-07-08-s1-dod-status.md`](../plans/2026-07-08-s1-dod-status.md)(07-08) | 生效 |
+| **S2 重定位 = 补全 v2**:S2 三主线=carry-over 清账 + 9b(agent 接数据/can() 承重墙)+ LLM Gateway 计量;原 S2a/b/c(v1 硬化/放大)排期待 S2 spec/ADR | §5.3/§5.4(07-08);**S2 spec/ADR 定稿** | 草案 |
